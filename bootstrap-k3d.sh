@@ -12,7 +12,12 @@ sudo apt-get install -y curl wget gnupg lsb-release software-properties-common a
 curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 
 # Install kubectl
-curl -LO "https://dl.k8s.io/release/$(curl -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+# - Download latest version tag
+KUBECTL_VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
+
+# - Download the binary
+curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+
 chmod +x kubectl
 sudo mv kubectl /usr/local/bin/
 
