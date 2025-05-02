@@ -1,0 +1,26 @@
+package graph
+
+import (
+	"github.com/krzachariassen/ZTDP/internal/contracts"
+)
+
+type Node struct {
+	ID       string
+	Kind     string
+	Metadata contracts.Metadata
+	Spec     interface{}
+}
+
+// ResolveContract turns a validated contract into a graph node
+func ResolveContract(c contracts.Contract) (*Node, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+
+	return &Node{
+		ID:       c.ID(),
+		Kind:     c.Kind(),
+		Metadata: c.GetMetadata(), // no hardcoded type casting
+		Spec:     c,
+	}, nil
+}
