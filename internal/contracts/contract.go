@@ -12,3 +12,7 @@ type Metadata struct {
 	Environment string `json:"environment"`
 	Owner       string `json:"owner"`
 }
+
+type LifecycleDefinition struct {
+	Gates []string `json:"gates"`
+}

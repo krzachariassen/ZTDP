@@ -5,7 +5,7 @@ import "fmt"
 type ServiceContract struct {
 	Metadata Metadata `json:"metadata"`
 	Spec     struct {
-		Application string `json:"application"` // Link to application
+		Application string `json:"application"`
 		Port        int    `json:"port"`
 		Public      bool   `json:"public"`
 	} `json:"spec"`
@@ -18,6 +18,9 @@ func (s ServiceContract) GetMetadata() Metadata { return s.Metadata }
 func (s ServiceContract) Validate() error {
 	if s.Metadata.Name == "" {
 		return fmt.Errorf("service name is required")
+	}
+	if s.Metadata.Environment == "" {
+		return fmt.Errorf("service environment must be specified")
 	}
 	if s.Spec.Application == "" {
 		return fmt.Errorf("linked application is required")

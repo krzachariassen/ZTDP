@@ -23,6 +23,8 @@ sudo mv kubectl /usr/local/bin/
 
 # Install Helm
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+mkdir -p ~/.docker
+echo '{}' > ~/.docker/config.json
 
 # Create k3d cluster
 echo "Creating k3d cluster 'ztdp'..."
