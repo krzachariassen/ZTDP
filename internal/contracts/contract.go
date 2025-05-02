@@ -8,9 +8,8 @@ type Contract interface {
 }
 
 type Metadata struct {
-	Name        string `json:"name"`
-	Environment string `json:"environment"`
-	Owner       string `json:"owner"`
+	Name  string `json:"name"`
+	Owner string `json:"owner"`
 }
 
 type LifecycleDefinition struct {

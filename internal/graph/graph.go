@@ -7,7 +7,7 @@ import (
 
 type Graph struct {
 	Nodes map[string]*Node
-	Edges map[string][]string // from -> [to...]
+	Edges map[string][]string
 }
 
 func NewGraph() *Graph {
@@ -26,8 +26,8 @@ func (g *Graph) AddNode(n *Node) error {
 }
 
 func (g *Graph) GetNode(id string) (*Node, error) {
-	n, exists := g.Nodes[id]
-	if !exists {
+	n, ok := g.Nodes[id]
+	if !ok {
 		return nil, fmt.Errorf("node with ID %s not found", id)
 	}
 	return n, nil
@@ -40,15 +40,11 @@ func (g *Graph) AddEdge(fromID, toID string) error {
 	if _, ok := g.Nodes[toID]; !ok {
 		return fmt.Errorf("target node %s does not exist", toID)
 	}
-
-	// Prevent duplicate edges
 	for _, existing := range g.Edges[fromID] {
 		if existing == toID {
 			return errors.New("edge already exists")
 		}
 	}
-
-	// Add directed edge
 	g.Edges[fromID] = append(g.Edges[fromID], toID)
 	return nil
 }

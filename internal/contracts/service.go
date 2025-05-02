@@ -11,16 +11,13 @@ type ServiceContract struct {
 	} `json:"spec"`
 }
 
-func (s ServiceContract) ID() string            { return s.Metadata.Name }
-func (s ServiceContract) Kind() string          { return "service" }
-func (s ServiceContract) GetMetadata() Metadata { return s.Metadata }
+func (s ServiceContract) ID() string              { return s.Metadata.Name }
+func (s ServiceContract) Kind() string            { return "service" }
+func (s ServiceContract) GetMetadata() Metadata   { return s.Metadata }
 
 func (s ServiceContract) Validate() error {
 	if s.Metadata.Name == "" {
 		return fmt.Errorf("service name is required")
-	}
-	if s.Metadata.Environment == "" {
-		return fmt.Errorf("service environment must be specified")
 	}
 	if s.Spec.Application == "" {
 		return fmt.Errorf("linked application is required")
