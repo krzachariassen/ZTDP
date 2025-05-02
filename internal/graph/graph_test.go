@@ -13,16 +13,11 @@ func TestGraph_AddAndGetNode(t *testing.T) {
 		ID:   "checkout-api",
 		Kind: "service",
 		Metadata: contracts.Metadata{
-			Name:        "checkout-api",
-			Environment: "dev",
-			Owner:       "team-x",
+			Name:  "checkout-api",
+			Owner: "team-x",
 		},
 		Spec: contracts.ServiceContract{
-			Metadata: contracts.Metadata{
-				Name:        "checkout-api",
-				Environment: "dev",
-				Owner:       "team-x",
-			},
+			Metadata: contracts.Metadata{Name: "checkout-api", Owner: "team-x"},
 			Spec: struct {
 				Application string `json:"application"`
 				Port        int    `json:"port"`
@@ -57,19 +52,16 @@ func TestGraph_AddEdge(t *testing.T) {
 		ID:   "checkout",
 		Kind: "application",
 		Metadata: contracts.Metadata{
-			Name:        "checkout",
-			Environment: "dev",
-			Owner:       "team-x",
+			Name:  "checkout",
+			Owner: "team-x",
 		},
 	}
-
 	svc := &Node{
 		ID:   "checkout-api",
 		Kind: "service",
 		Metadata: contracts.Metadata{
-			Name:        "checkout-api",
-			Environment: "dev",
-			Owner:       "team-x",
+			Name:  "checkout-api",
+			Owner: "team-x",
 		},
 	}
 
