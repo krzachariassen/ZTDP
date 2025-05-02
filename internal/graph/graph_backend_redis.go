@@ -49,7 +49,6 @@ func (r *redisGraph) AddEdge(env, fromID, toID string) error {
 }
 
 func (r *redisGraph) GetAll(env string) (*Graph, error) {
-	// Simple scan implementation to fetch all nodes and edges
 	ctx := context.Background()
 	graph := NewGraph()
 
@@ -76,4 +75,25 @@ func (r *redisGraph) GetAll(env string) (*Graph, error) {
 	}
 
 	return graph, nil
+}
+
+// Global graph persistence
+func (r *redisGraph) SaveGlobal(g *Graph) error {
+	data, err := json.Marshal(g)
+	if err != nil {
+		return fmt.Errorf("marshal global graph: %w", err)
+	}
+	return r.client.Set(context.Background(), "ztgp:graph:global", data, 0).Err()
+}
+
+func (r *redisGraph) LoadGlobal() (*Graph, error) {
+	data, err := r.client.Get(context.Background(), "ztgp:graph:global").Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("get global graph: %w", err)
+	}
+	var graph Graph
+	if err := json.Unmarshal(data, &graph); err != nil {
+		return nil, fmt.Errorf("unmarshal global graph: %w", err)
+	}
+	return &graph, nil
 }

@@ -7,11 +7,13 @@ import (
 
 type memoryGraph struct {
 	Graphs map[string]*Graph
+	Global *Graph
 }
 
 func NewMemoryGraph() GraphBackend {
 	return &memoryGraph{
 		Graphs: make(map[string]*Graph),
+		Global: NewGraph(),
 	}
 }
 
@@ -45,4 +47,16 @@ func (m *memoryGraph) GetAll(env string) (*Graph, error) {
 		return nil, fmt.Errorf("graph for env %s not found", env)
 	}
 	return g, nil
+}
+
+func (m *memoryGraph) SaveGlobal(g *Graph) error {
+	m.Global = g
+	return nil
+}
+
+func (m *memoryGraph) LoadGlobal() (*Graph, error) {
+	if m.Global == nil {
+		return nil, fmt.Errorf("no global graph stored")
+	}
+	return m.Global, nil
 }
