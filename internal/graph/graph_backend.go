@@ -5,4 +5,7 @@ type GraphBackend interface {
 	AddEdge(env string, fromID, toID string) error
 	GetNode(env, id string) (*Node, error)
 	GetAll(env string) (*Graph, error)
+
+	SaveGlobal(g *Graph) error
+	LoadGlobal() (*Graph, error)
 }

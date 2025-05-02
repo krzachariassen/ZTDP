@@ -4,47 +4,47 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/redis/go-redis/v9"
-
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
 	var backend graph.GraphBackend
 	switch os.Getenv("ZTDP_GRAPH_BACKEND") {
 	case "redis":
+		fmt.Println("⚙️  Using backend: Redis")
 		rdb := redis.NewClient(&redis.Options{
-			Addr:     os.Getenv("REDIS_HOST"), // or your in-cluster Redis DNS
+			Addr:     os.Getenv("REDIS_HOST"),
 			Password: os.Getenv("REDIS_PASSWORD"),
 		})
 		backend = graph.NewRedisGraph(rdb)
 	default:
+		fmt.Println("⚙️  Using backend: Memory")
 		backend = graph.NewMemoryGraph()
 	}
-	store := graph.NewGraphStore(backend)
 
-	envs := []string{"dev", "qa"}
+	global := graph.NewGlobalGraph(backend)
 
-	app := contracts.ApplicationContract{
-		Metadata: contracts.Metadata{
-			Name:  "checkout",
-			Owner: "team-x",
-		},
-		Spec: contracts.ApplicationSpec{
-			Description:  "Handles checkout flows",
-			Tags:         []string{"payments"},
-			Environments: envs,
-			Lifecycle:    map[string]contracts.LifecycleDefinition{},
-		},
-	}
-
-	// Create app and service per env
-	for _, env := range envs {
-		appNode, _ := graph.ResolveContract(app)
-		if err := store.AddNode(env, appNode); err != nil {
-			fmt.Printf("Failed to add node [%s]: %v\n", appNode.ID, err)
+	// Try loading from backend
+	if err := global.Load(); err != nil {
+		fmt.Println("🔄 No existing global graph found, creating new one")
+		// Setup global graph for first time
+		app := contracts.ApplicationContract{
+			Metadata: contracts.Metadata{
+				Name:  "checkout",
+				Owner: "team-x",
+			},
+			Spec: contracts.ApplicationSpec{
+				Description:  "Handles checkout flows",
+				Tags:         []string{"payments"},
+				Environments: []string{"dev", "qa"},
+				Lifecycle:    map[string]contracts.LifecycleDefinition{},
+			},
 		}
+
+		appNode, _ := graph.ResolveContract(app)
+		global.AddNode(appNode)
 
 		svc := contracts.ServiceContract{
 			Metadata: contracts.Metadata{
@@ -63,19 +63,20 @@ func main() {
 		}
 
 		svcNode, _ := graph.ResolveContract(svc)
-		if err := store.AddNode(env, svcNode); err != nil {
-			fmt.Printf("Failed to add node [%s]: %v\n", appNode.ID, err)
-		}
+		global.AddNode(svcNode)
+		global.AddEdge("checkout-api", "checkout")
 
-		if err := store.AddEdge(env, "checkout-api", "checkout"); err != nil {
-			fmt.Printf("Failed to add edge: %v\n", err)
+		// Save it
+		if err := global.Save(); err != nil {
+			fmt.Printf("❌ Failed to save global graph: %v\n", err)
 		}
+	} else {
+		fmt.Println("✅ Loaded global graph from backend")
 	}
 
-	// Print results
-	for _, env := range envs {
-		fmt.Printf("\n📦 Env: %s\n", env)
-		g, _ := store.GetGraph(env)
+	for _, env := range []string{"dev", "qa"} {
+		fmt.Printf("\n🌐 GlobalGraph applied to [%s]\n", env)
+		g, _ := global.Apply(env)
 
 		fmt.Println("  Nodes:")
 		for id, n := range g.Nodes {
