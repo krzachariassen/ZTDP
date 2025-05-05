@@ -49,7 +49,7 @@ ZTDP uses **Docker Compose** for local development.
 
 ### 🔧 Setup
 
-docker-compose.yaml
+#Create the docker-compose.yaml file
 ```yaml
 services:
   redis:
@@ -60,11 +60,10 @@ services:
       - REDIS_PASSWORD=BVogb1sEPqA
     command: ["redis-server", "--requirepass", "BVogb1sEPqA"]
 ```
-
-```bash
 # Start Redis for backend storage
 docker-compose up -d
 
+```bash
 # Set environment variables
 export ZTDP_GRAPH_BACKEND=redis
 export REDIS_HOST=localhost:6379
