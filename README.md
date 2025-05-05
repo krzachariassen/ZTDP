@@ -49,7 +49,7 @@ ZTDP uses **Docker Compose** for local development.
 
 ### 🔧 Setup
 
-#Create the docker-compose.yaml file
+# Create the docker-compose.yaml file
 ```yaml
 services:
   redis:
