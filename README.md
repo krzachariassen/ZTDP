@@ -67,7 +67,7 @@ docker-compose up -d
 # Set environment variables
 export ZTDP_GRAPH_BACKEND=redis
 export REDIS_HOST=localhost:6379
-export REDIS_PASSWORD=yourpassword  # matches docker-compose.yaml
+export REDIS_PASSWORD=BVogb1sEPqA  # matches docker-compose.yaml
 
 # Run a control plane demo
 go run ./test/controlplane/graph_demo.go
