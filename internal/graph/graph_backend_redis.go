@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -12,8 +14,39 @@ type redisGraph struct {
 	client *redis.Client
 }
 
-func NewRedisGraph(client *redis.Client) GraphBackend {
-	return &redisGraph{client: client}
+type RedisGraphConfig struct {
+	Addr     string
+	Password string
+}
+
+func NewRedisGraph(cfg RedisGraphConfig) GraphBackend {
+	addr := cfg.Addr
+	if addr == "" {
+		addr = os.Getenv("REDIS_HOST")
+	}
+
+	password := cfg.Password
+	if password == "" {
+		password = os.Getenv("REDIS_PASSWORD")
+	}
+
+	client := redis.NewClient(&redis.Options{
+		Addr:     addr,
+		Password: password,
+	})
+
+	ctx := context.Background()
+	var err error
+	fmt.Println("⚙️  Using Redis Backend:", client.Options().Addr)
+	for i := 0; i < 3; i++ {
+		err = client.Ping(ctx).Err()
+		if err == nil {
+			return &redisGraph{client: client}
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	panic(fmt.Errorf("failed to connect to Redis after 3 attempts: %w", err))
 }
 
 func redisKeyNode(env, id string) string {

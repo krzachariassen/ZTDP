@@ -1,52 +1,134 @@
 # Zero Touch Developer Platform (ZTDP)
 
-ZTDP is a next-generation internal developer platform designed for autonomous, declarative, AI-native infrastructure and application orchestration. It replaces traditional YAML and GitOps models with contract-based execution, graph-oriented orchestration, and natural language input.
+ZTDP is a next-generation internal developer platform built around **declarative contracts**, **graph-based orchestration**, and **extensible resource providers**. It enables zero-touch infrastructure and application delivery with APIs, automation, and AI-native architecture at its core.
 
-## 🏗️ Project Structure
+## 🧠 Key Concepts
+
+- **Contract-Driven**: Define apps and services declaratively, no YAML or Helm.
+- **Graph Engine**: Converts contracts into a DAG (Directed Acyclic Graph) of platform intent.
+- **Environment-Aware**: Apply the same graph to multiple environments (dev, qa, prod).
+- **Resource Providers**: Extensible backend modules (e.g. Kubernetes, Postgres).
+- **API-First + TDD**: Everything is API-driven and tested from day one.
+- **Redis-Backed**: Control plane stores the graph DAG persistently in Redis.
+
+---
+
+## 🗂️ Project Structure
 
 ```text
 ZTDP/
-├── bootstrap-k3d.sh        # Local dev bootstrap: k3d + Redis, Postgres, NATS
-├── cmd/                    # Application entrypoints (main.go)
-├── internal/               # Core platform components
-│   ├── contracts/          # Contract types: app, service, db, etc.
-│   ├── graph/              # DAG assembly and query engine
-│   ├── planner/            # Execution planning logic
-│   ├── lifecycle/          # Gate enforcement and promotion
-│   ├── state/              # Redis integration and state store
-│   ├── events/             # NATS integration and event model
-│   └── reconcile/          # Drift detection and reconciliation loop
-├── rps/                    # Resource Providers
-│   ├── kubernetes/         # Handles deployments
-│   └── postgres/           # Handles database provisioning
-├── adapters/               # Infrastructure interfaces (e.g., k8s, redis)
-├── api/                    # API server logic (contract submission)
-├── docs/                   # Architecture diagrams and planning docs
-└── go.mod / go.sum         # Go module setup
+├── api/                      # API server logic (handlers, routes)
+│   ├── handlers/             # HTTP handler logic
+│   └── server/               # API routing setup
+├── cmd/                      # Entrypoint: main.go
+├── internal/                 # Core architecture
+│   ├── contracts/            # Contract types: Application, Service, etc.
+│   ├── graph/                # Graph engine, backend, resolver
+│   └── state/                # State store abstraction (future)
+├── rps/                      # Resource Providers (Kubernetes, Postgres, etc.)
+├── test/
+│   ├── api/                  # End-to-end API tests
+│   └── controlplane/         # Control plane validation demos
+├── charts/                   # Helm charts (e.g., redis)
+├── docker-compose.yaml       # Local services: Redis
+├── .env                      # Environment configuration
+└── go.mod / go.sum           # Go dependencies
 ```
 
-## 🚀 Local Setup
+---
 
-1. Ensure Docker Desktop is running with WSL2 integration enabled
-2. Run the setup script:
+## ⚙️ Local Development Setup
+
+ZTDP uses **Docker Compose** for local development.
+
+### ✅ Prerequisites
+
+- Docker
+- Docker-Compose
+- Go 1.22+
+
+### 🔧 Setup
+
+docker-compose.yaml
+```yaml
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=BVogb1sEPqA
+    command: ["redis-server", "--requirepass", "BVogb1sEPqA"]
+```
 
 ```bash
-chmod +x bootstrap-k3d.sh
-./bootstrap-k3d.sh
+# Start Redis for backend storage
+docker-compose up -d
+
+# Set environment variables
+export ZTDP_GRAPH_BACKEND=redis
+export REDIS_HOST=localhost:6379
+export REDIS_PASSWORD=yourpassword  # matches docker-compose.yaml
+
+# Run a control plane demo
+go run ./test/controlplane/graph_demo.go
 ```
 
-This provisions a local `k3d` cluster with Redis, Postgres, and NATS under the `ztdp` namespace.
+---
 
-## 🧱 MVP Progress
+## 🧪 Testing Strategy
 
-The MVP is being developed in phases:
+We follow **TDD** and **API-first** development:
 
-- ✅ Local Kubernetes environment
-- 🔄 In progress: Contract schema, API scaffolding
-- ⏳ Next: Graph engine, planner, event orchestration
+- ✅ Each feature begins with a test
+- ✅ Logic and contracts are test-covered (`go test ./...`)
+- ✅ APIs are tested with HTTP assertions
+- ✅ Redis-backed graph is tested for both in-memory and persistence
 
-See [`docs/ZTDP – MVP v1 Development Plan`](docs/ZTDP%20–%20MVP%20v1%20Development%20Plan.md) for full details.
+```bash
+# Run all tests
+go test ./...
+```
+
+---
+
+## 🌐 API Endpoints
+
+| Method | Endpoint         | Purpose                             |
+|--------|------------------|-------------------------------------|
+| POST   | `/contracts`     | Submit new contract (app/service)   |
+| POST   | `/apply/{env}`   | Apply global graph to an environment |
+| GET    | `/graph/{env}`   | View environment-specific DAG       |
+| GET    | `/healthz`       | Health check                        |
+
+APIs are public and MCP-compatible.
+
+---
+
+## 📍 MVP Progress
+
+| Phase                | Status     |
+|----------------------|------------|
+| Contract schema      | ✅ Complete |
+| Graph Engine         | ✅ Complete |
+| Redis graph backend  | ✅ Complete |
+| Control plane demo   | ✅ Complete |
+| API-first server     | ✅ In progress |
+| Resource Providers   | ⏳ Coming up |
+| Event orchestration  | ⏳ Coming up |
+| Reconciliation loop  | ⏳ Coming up |
+
+See: [`docs/ZTDP – MVP v1 Development Plan`](docs/ZTDP%20–%20MVP%20v1%20Development%20Plan.md)
+
+---
+
+## 🔐 Secrets & State (Planned)
+
+- Secrets will be stored per environment and injected at runtime.
+- State (events, node status) will be tracked in Redis initially.
+
+---
 
 ## 📌 License
 
-TBD — initial development is private. License will be defined before public release.
+TBD — Project is in private development. License terms will be clarified before any public release.

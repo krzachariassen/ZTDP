@@ -6,19 +6,13 @@ import (
 
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/graph"
-	"github.com/redis/go-redis/v9"
 )
 
 func main() {
 	var backend graph.GraphBackend
 	switch os.Getenv("ZTDP_GRAPH_BACKEND") {
 	case "redis":
-		fmt.Println("⚙️  Using backend: Redis")
-		rdb := redis.NewClient(&redis.Options{
-			Addr:     os.Getenv("REDIS_HOST"),
-			Password: os.Getenv("REDIS_PASSWORD"),
-		})
-		backend = graph.NewRedisGraph(rdb)
+		backend = graph.NewRedisGraph(graph.RedisGraphConfig{})
 	default:
 		fmt.Println("⚙️  Using backend: Memory")
 		backend = graph.NewMemoryGraph()
@@ -66,9 +60,30 @@ func main() {
 		global.AddNode(svcNode)
 		global.AddEdge("checkout-api", "checkout")
 
+		svc2 := contracts.ServiceContract{
+			Metadata: contracts.Metadata{
+				Name:  "checkout-api-v2",
+				Owner: "team-x",
+			},
+			Spec: struct {
+				Application string `json:"application"`
+				Port        int    `json:"port"`
+				Public      bool   `json:"public"`
+			}{
+				Application: "checkout",
+				Port:        8080,
+				Public:      true,
+			},
+		}
+
+		svcNode2, _ := graph.ResolveContract(svc2)
+		global.AddNode(svcNode2)
+		global.AddEdge("checkout-api-v2", "checkout")
+
 		// Save it
 		if err := global.Save(); err != nil {
 			fmt.Printf("❌ Failed to save global graph: %v\n", err)
+			os.Exit(1)
 		}
 	} else {
 		fmt.Println("✅ Loaded global graph from backend")
