@@ -10,16 +10,26 @@ import (
 
 var GlobalGraph *graph.GlobalGraph // Injected from main
 
+// SubmitContract godoc
+// @Summary      Submit a contract
+// @Description  Submit an application or service contract to the platform
+// @Tags         contracts
+// @Accept       json
+// @Produce      json
+// @Param        contract  body      object  true  "Contract payload"
+// @Success      201       {object}  map[string]interface{}
+// @Failure      400       {object}  map[string]string
+// @Router       /v1/contracts [post]
 func SubmitContract(w http.ResponseWriter, r *http.Request) {
 	var raw map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
 	kind, ok := raw["kind"].(string)
 	if !ok {
-		http.Error(w, "Missing kind", http.StatusBadRequest)
+		WriteJSONError(w, "Missing kind", http.StatusBadRequest)
 		return
 	}
 
@@ -30,7 +40,7 @@ func SubmitContract(w http.ResponseWriter, r *http.Request) {
 	case "application":
 		var c contracts.ApplicationContract
 		if err := decodeAndValidate(raw, &c); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			WriteJSONError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		node, err = graph.ResolveContract(c)
@@ -38,18 +48,18 @@ func SubmitContract(w http.ResponseWriter, r *http.Request) {
 	case "service":
 		var c contracts.ServiceContract
 		if err := decodeAndValidate(raw, &c); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			WriteJSONError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		node, err = graph.ResolveContract(c)
 
 	default:
-		http.Error(w, "Unknown kind: "+kind, http.StatusBadRequest)
+		WriteJSONError(w, "Unknown kind: "+kind, http.StatusBadRequest)
 		return
 	}
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

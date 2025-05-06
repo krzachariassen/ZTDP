@@ -1,12 +1,13 @@
 package graph
 
 import (
-	"fmt"
+	"sync"
 )
 
 type GlobalGraph struct {
 	Graph   *Graph
 	Backend GraphBackend
+	mu      sync.Mutex
 }
 
 func NewGlobalGraph(backend GraphBackend) *GlobalGraph {
@@ -16,11 +17,10 @@ func NewGlobalGraph(backend GraphBackend) *GlobalGraph {
 	}
 }
 
-func (gg *GlobalGraph) AddNode(node *Node) error {
-	if node == nil {
-		return fmt.Errorf("nil node")
-	}
-	return gg.Graph.AddNode(node)
+func (gg *GlobalGraph) AddNode(node *Node) {
+	gg.mu.Lock()
+	defer gg.mu.Unlock()
+	gg.Graph.Nodes[node.ID] = node
 }
 
 func (gg *GlobalGraph) AddEdge(fromID, toID string) error {

@@ -1,0 +1,107 @@
+info:
+  contact: {}
+paths:
+  /v1/apply:
+    post:
+      description: Applies the current dependency graph for the given environment
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Graph applied
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Apply the dependency graph
+      tags:
+      - graph
+  /v1/contracts:
+    post:
+      consumes:
+      - application/json
+      description: Submit an application or service contract to the platform
+      parameters:
+      - description: Contract payload
+        in: body
+        name: contract
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Submit a contract
+      tags:
+      - contracts
+  /v1/contracts/schema:
+    get:
+      description: Returns example schemas for supported contract kinds
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get contract schemas
+      tags:
+      - contracts
+  /v1/graph:
+    get:
+      description: Returns the current dependency graph
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get the current graph
+      tags:
+      - graph
+  /v1/healthz:
+    get:
+      description: Returns 200 if the service is healthy
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+      summary: Health check
+      tags:
+      - health
+  /v1/status:
+    get:
+      description: Returns high-level platform status and graph node count
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get platform status
+      tags:
+      - status
+swagger: "2.0"
