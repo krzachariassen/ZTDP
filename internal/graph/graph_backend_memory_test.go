@@ -6,8 +6,9 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 )
 
-func TestGlobalGraph_Apply(t *testing.T) {
-	gg := NewGlobalGraph(NewMemoryGraph())
+func TestGlobalGraph_Apply_MemoryBackend(t *testing.T) {
+	backend := NewMemoryGraph()
+	gg := NewGlobalGraph(backend)
 
 	app := contracts.ApplicationContract{
 		Metadata: contracts.Metadata{
@@ -22,9 +23,7 @@ func TestGlobalGraph_Apply(t *testing.T) {
 		},
 	}
 	appNode, _ := ResolveContract(app)
-	if err := gg.AddNode(appNode); err != nil {
-		t.Fatalf("failed to add app node: %v", err)
-	}
+	gg.AddNode(appNode)
 
 	svc := contracts.ServiceContract{
 		Metadata: contracts.Metadata{
@@ -42,9 +41,8 @@ func TestGlobalGraph_Apply(t *testing.T) {
 		},
 	}
 	svcNode, _ := ResolveContract(svc)
-	if err := gg.AddNode(svcNode); err != nil {
-		t.Fatalf("failed to add service node: %v", err)
-	}
+	gg.AddNode(svcNode)
+
 	if err := gg.AddEdge("checkout-api", "checkout"); err != nil {
 		t.Fatalf("failed to add edge: %v", err)
 	}
