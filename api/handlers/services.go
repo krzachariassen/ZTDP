@@ -60,7 +60,10 @@ func ListServices(w http.ResponseWriter, r *http.Request) {
 	services := []contracts.ServiceContract{}
 	for _, node := range GlobalGraph.Graph.Nodes {
 		if node.Kind == "service" {
-			contract, err := graph.LoadNode(node.Kind, node.Spec, node.Metadata)
+			contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+				Name:  node.Metadata["name"].(string),
+				Owner: node.Metadata["owner"].(string),
+			})
 			if err == nil {
 				if svc, ok := contract.(*contracts.ServiceContract); ok && svc.Spec.Application == appName {
 					services = append(services, *svc)
@@ -90,7 +93,10 @@ func GetService(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Service not found", http.StatusNotFound)
 		return
 	}
-	contract, err := graph.LoadNode(node.Kind, node.Spec, node.Metadata)
+	contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+		Name:  node.Metadata["name"].(string),
+		Owner: node.Metadata["owner"].(string),
+	})
 	if err != nil {
 		WriteJSONError(w, "Invalid service contract", http.StatusInternalServerError)
 		return

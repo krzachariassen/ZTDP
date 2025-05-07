@@ -13,10 +13,9 @@ func TestResolveContract_Application(t *testing.T) {
 			Owner: "team-x",
 		},
 		Spec: contracts.ApplicationSpec{
-			Description:  "Handles checkout flows",
-			Tags:         []string{"payments", "frontend"},
-			Environments: []string{"dev", "qa"},
-			Lifecycle:    map[string]contracts.LifecycleDefinition{},
+			Description: "Handles checkout flows",
+			Tags:        []string{"payments", "frontend"},
+			Lifecycle:   map[string]contracts.LifecycleDefinition{},
 		},
 	}
 

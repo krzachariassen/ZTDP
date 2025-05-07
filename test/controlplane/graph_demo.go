@@ -8,6 +8,13 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/graph"
 )
 
+func MapToMetadata(m map[string]interface{}) contracts.Metadata {
+	return contracts.Metadata{
+		Name:  m["name"].(string),
+		Owner: m["owner"].(string),
+	}
+}
+
 func main() {
 	var backend graph.GraphBackend
 	switch os.Getenv("ZTDP_GRAPH_BACKEND") {
@@ -25,16 +32,16 @@ func main() {
 	if err := global.Load(); err != nil {
 		fmt.Println("🔄 No existing global graph found, creating new one")
 		// Setup global graph for first time
+		// Remove Environments from ApplicationSpec and use only the graph for environment relationships
 		app = contracts.ApplicationContract{
 			Metadata: contracts.Metadata{
 				Name:  "checkout",
 				Owner: "team-x",
 			},
 			Spec: contracts.ApplicationSpec{
-				Description:  "Handles checkout flows",
-				Tags:         []string{"payments"},
-				Environments: []string{"dev", "qa"},
-				Lifecycle:    map[string]contracts.LifecycleDefinition{},
+				Description: "Handles checkout flows",
+				Tags:        []string{"payments"},
+				Lifecycle:   map[string]contracts.LifecycleDefinition{},
 			},
 		}
 
@@ -57,6 +64,51 @@ func main() {
 		global.AddNode(svcNode)
 		global.AddEdge(app.Metadata.Name, svc.Metadata.Name, "owns")
 
+		// Add environment nodes
+		envDev := contracts.EnvironmentContract{
+			Metadata: contracts.Metadata{
+				Name:  "dev",
+				Owner: "platform-team",
+			},
+			Spec: contracts.EnvironmentSpec{
+				Description: "Development environment",
+			},
+		}
+		envProd := contracts.EnvironmentContract{
+			Metadata: contracts.Metadata{
+				Name:  "prod",
+				Owner: "platform-team",
+			},
+			Spec: contracts.EnvironmentSpec{
+				Description: "Production environment",
+			},
+		}
+		envDevNode, _ := graph.ResolveContract(envDev)
+		global.AddNode(envDevNode)
+		envProdNode, _ := graph.ResolveContract(envProd)
+		global.AddNode(envProdNode)
+
+		// Add second service
+		workerSvc := contracts.ServiceContract{
+			Metadata: contracts.Metadata{
+				Name:  "checkout-worker",
+				Owner: "team-x",
+			},
+			Spec: contracts.ServiceSpec{
+				Application: "checkout",
+				Port:        9090,
+				Public:      false,
+			},
+		}
+		workerSvcNode, _ := graph.ResolveContract(workerSvc)
+		global.AddNode(workerSvcNode)
+		global.AddEdge(app.Metadata.Name, workerSvc.Metadata.Name, "owns")
+
+		// Link services to environments (deployed_in)
+		global.AddEdge(svc.Metadata.Name, envDev.Metadata.Name, "deployed_in")
+		global.AddEdge(workerSvc.Metadata.Name, envDev.Metadata.Name, "deployed_in")
+		global.AddEdge(svc.Metadata.Name, envProd.Metadata.Name, "deployed_in")
+
 		// Save it
 		if err := global.Save(); err != nil {
 			fmt.Printf("❌ Failed to save global graph: %v\n", err)
@@ -67,7 +119,7 @@ func main() {
 		// Find the application node in the loaded graph
 		if n, ok := global.Graph.Nodes["checkout"]; ok {
 			// Unmarshal node.Spec into app
-			contract, err := graph.LoadNode(n.Kind, n.Spec, n.Metadata)
+			contract, err := graph.LoadNode(n.Kind, n.Spec, MapToMetadata(n.Metadata))
 			if err == nil {
 				if loadedApp, ok := contract.(*contracts.ApplicationContract); ok {
 					app = *loadedApp
@@ -76,21 +128,23 @@ func main() {
 		}
 	}
 
-	for _, env := range app.Spec.Environments {
-		fmt.Printf("\n🌐 GlobalGraph applied to [%s]\n", env)
-		g, _ := global.Apply(env)
-
-		fmt.Println("  Nodes:")
-		for id, n := range g.Nodes {
+	fmt.Println("\nGlobal Nodes:")
+	if len(global.Graph.Nodes) == 0 {
+		fmt.Println("   (none)")
+	} else {
+		for id, n := range global.Graph.Nodes {
 			fmt.Printf("   - [%s] %s\n", n.Kind, id)
 		}
 	}
-
-	// Print global edges once
 	fmt.Println("\nGlobal Edges:")
+	empty := true
 	for from, edgeList := range global.Graph.Edges {
 		for _, edge := range edgeList {
 			fmt.Printf("   - {%s} -%s-> {%s}\n", from, edge.Type, edge.To)
+			empty = false
 		}
+	}
+	if empty {
+		fmt.Println("   (none)")
 	}
 }

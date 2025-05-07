@@ -87,41 +87,51 @@ go test ./...
 
 ## 🌐 API Endpoints
 
-| Method | Endpoint                | Purpose                                 |
-|--------|-------------------------|-----------------------------------------|
-| POST   | `/v1/applications`         | Submit new application                  |
-| GET    | `/v1/applications`         | List all applications                   |
-| GET    | `/v1/applications/{app}`   | Get a specific application              |
-| PUT    | `/v1/applications/{app}`   | Update an application                   |
-| GET    | `/v1/applications/schema`  | Get application contract schema         |
-| POST   | `/v1/applications/{app}/services` | Add a service to an application   |
-| GET    | `/v1/applications/{app}/services` | List services for an application  |
-| GET    | `/v1/applications/{app}/services/{service}` | Get a specific service      |
-| GET    | `/v1/services/schema`      | Get service contract schema             |
-| POST   | `/v1/apply`                | Apply global graph to an environment    |
-| GET    | `/v1/graph`                | View current global DAG                 |
-| GET    | `/v1/status`               | Platform status                         |
-| GET    | `/v1/healthz`              | Health check                            |
+| Method | Endpoint                                                        | Purpose                                         |
+|--------|-----------------------------------------------------------------|-------------------------------------------------|
+| POST   | `/v1/applications`                                              | Submit new application                          |
+| GET    | `/v1/applications`                                              | List all applications                           |
+| GET    | `/v1/applications/{app}`                                        | Get a specific application                      |
+| PUT    | `/v1/applications/{app}`                                        | Update an application                           |
+| GET    | `/v1/applications/schema`                                       | Get application contract schema                 |
+| POST   | `/v1/applications/{app}/services`                               | Add a service to an application                 |
+| GET    | `/v1/applications/{app}/services`                               | List services for an application                |
+| GET    | `/v1/applications/{app}/services/{service}`                     | Get a specific service                          |
+| GET    | `/v1/applications/{app}/services/schema`                        | Get service contract schema                     |
+| POST   | `/v1/environments`                                              | Create a new environment                        |
+| GET    | `/v1/environments`                                              | List all environments                           |
+| POST   | `/v1/applications/{app}/environments/{env}/allowed`             | Allow an application to deploy to an environment|
+| GET    | `/v1/applications/{app}/environments/allowed`                   | List allowed environments for an application    |
+| POST   | `/v1/applications/{app}/services/{service}/environments/{env}`  | Deploy a service to an environment              |
+| GET    | `/v1/graph`                                                     | View current global DAG                         |
+| GET    | `/v1/status`                                                    | Platform status                                 |
+| GET    | `/v1/healthz`                                                   | Health check                                    |
 
 - **Swagger/OpenAPI docs:** [http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)
 
 ---
 
-## 🏗️ Generating Sample Data
+## 🏗️ Example API Usage (with curl)
 
-You can pre-populate the platform with sample data in two ways:
-
-### 1. **Run the Demo Script**
-
+### 1. Create Environments
 ```bash
-go run ./test/controlplane/graph_demo.go
+curl -X POST http://localhost:8080/v1/environments \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "dev", "owner": "platform-team" },
+    "spec": { "description": "Development environment" }
+  }'
+
+curl -X POST http://localhost:8080/v1/environments \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "prod", "owner": "platform-team" },
+    "spec": { "description": "Production environment" }
+  }'
 ```
-This will create a sample application (`checkout`) and a service (`checkout-api`) in the graph and persist them to Redis (if configured).
 
-### 2. **Use the API (curl examples)**
-
+### 2. Create Application
 ```bash
-# Create the "checkout" application
 curl -X POST http://localhost:8080/v1/applications \
   -H "Content-Type: application/json" \
   -d '{
@@ -129,12 +139,24 @@ curl -X POST http://localhost:8080/v1/applications \
     "spec": {
       "description": "Handles checkout flows",
       "tags": ["payments", "frontend"],
-      "environments": ["dev", "qa"],
       "lifecycle": {}
     }
   }'
+```
 
-# Create the "checkout-api" service under "checkout"
+### 3. Allow Application to Deploy to Environments
+```bash
+# Allow checkout app to deploy to dev
+dev_env="dev"
+curl -X POST http://localhost:8080/v1/applications/checkout/environments/$dev_env/allowed
+
+# Allow checkout app to deploy to prod
+prod_env="prod"
+curl -X POST http://localhost:8080/v1/applications/checkout/environments/$prod_env/allowed
+```
+
+### 4. Create Services for the Application
+```bash
 curl -X POST http://localhost:8080/v1/applications/checkout/services \
   -H "Content-Type: application/json" \
   -d '{
@@ -146,7 +168,6 @@ curl -X POST http://localhost:8080/v1/applications/checkout/services \
     }
   }'
 
-# Create another service, e.g., "checkout-worker" under "checkout"
 curl -X POST http://localhost:8080/v1/applications/checkout/services \
   -H "Content-Type: application/json" \
   -d '{
@@ -157,6 +178,33 @@ curl -X POST http://localhost:8080/v1/applications/checkout/services \
       "public": false
     }
   }'
+```
+
+### 5. Deploy Services to Environments
+```bash
+# Deploy checkout-api to dev
+deploy_service="checkout-api"
+deploy_env="dev"
+curl -X POST http://localhost:8080/v1/applications/checkout/services/$deploy_service/environments/$deploy_env
+
+# Deploy checkout-api to prod
+prod_env="prod"
+curl -X POST http://localhost:8080/v1/applications/checkout/services/$deploy_service/environments/$prod_env
+
+# Deploy checkout-worker to dev
+worker_service="checkout-worker"
+curl -X POST http://localhost:8080/v1/applications/checkout/services/$worker_service/environments/$deploy_env
+```
+
+### 6. Attempt to Deploy Service to Not-Allowed Environment (Should Fail)
+```bash
+# Remove prod from allowed environments for checkout (replace allowed list with only dev)
+curl -X PUT http://localhost:8080/v1/applications/checkout/environments/allowed \
+  -H "Content-Type: application/json" \
+  -d '["dev"]'
+
+# Try to deploy checkout-worker to prod (should fail with 403)
+curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-worker/environments/prod -v
 ```
 
 ---

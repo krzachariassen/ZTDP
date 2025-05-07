@@ -6,11 +6,11 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 )
 
-type Node struct {
-	ID       string                 `json:"id"`
-	Kind     string                 `json:"kind"`
-	Metadata contracts.Metadata     `json:"metadata"`
-	Spec     map[string]interface{} `json:"spec"`
+func StructToMap(v interface{}) map[string]interface{} {
+	b, _ := json.Marshal(v)
+	var m map[string]interface{}
+	_ = json.Unmarshal(b, &m)
+	return m
 }
 
 func ResolveContract(c contracts.Contract) (*Node, error) {
@@ -18,7 +18,8 @@ func ResolveContract(c contracts.Contract) (*Node, error) {
 		return nil, err
 	}
 	md := c.GetMetadata()
-	// Marshal contract, then extract the spec as a map
+	mdMap := StructToMap(md)
+	// Marshal contract, then unmarshal only the spec field into a map
 	data, _ := json.Marshal(c)
 	var contractMap map[string]interface{}
 	_ = json.Unmarshal(data, &contractMap)
@@ -26,7 +27,7 @@ func ResolveContract(c contracts.Contract) (*Node, error) {
 	return &Node{
 		ID:       c.ID(),
 		Kind:     c.Kind(),
-		Metadata: md,
+		Metadata: mdMap,
 		Spec:     spec,
 	}, nil
 }

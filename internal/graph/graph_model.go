@@ -6,8 +6,16 @@ import (
 )
 
 type Edge struct {
-	To   string `json:"to"`
-	Type string `json:"type"`
+	To       string                 `json:"to"`
+	Type     string                 `json:"type"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+}
+
+type Node struct {
+	ID       string                 `json:"id"`
+	Kind     string                 `json:"kind"`
+	Metadata map[string]interface{} `json:"metadata"`
+	Spec     map[string]interface{} `json:"spec"`
 }
 
 type Graph struct {
@@ -38,7 +46,7 @@ func (g *Graph) GetNode(id string) (*Node, error) {
 	return n, nil
 }
 
-func (g *Graph) AddEdge(fromID, toID, relType string) error {
+func (g *Graph) AddEdge(fromID, toID, relType string, metadata ...map[string]interface{}) error {
 	if _, ok := g.Nodes[fromID]; !ok {
 		return fmt.Errorf("source node %s does not exist", fromID)
 	}
@@ -50,6 +58,10 @@ func (g *Graph) AddEdge(fromID, toID, relType string) error {
 			return errors.New("edge already exists")
 		}
 	}
-	g.Edges[fromID] = append(g.Edges[fromID], Edge{To: toID, Type: relType})
+	var meta map[string]interface{}
+	if len(metadata) > 0 {
+		meta = metadata[0]
+	}
+	g.Edges[fromID] = append(g.Edges[fromID], Edge{To: toID, Type: relType, Metadata: meta})
 	return nil
 }

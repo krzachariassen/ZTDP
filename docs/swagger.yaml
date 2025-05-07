@@ -10,10 +10,6 @@ definitions:
     properties:
       description:
         type: string
-      environments:
-        items:
-          type: string
-        type: array
       lifecycle:
         additionalProperties:
           $ref: '#/definitions/contracts.LifecycleDefinition'
@@ -22,6 +18,18 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  contracts.EnvironmentContract:
+    properties:
+      metadata:
+        $ref: '#/definitions/contracts.Metadata'
+      spec:
+        $ref: '#/definitions/contracts.EnvironmentSpec'
+    type: object
+  contracts.EnvironmentSpec:
+    properties:
+      description:
+        type: string
     type: object
   contracts.LifecycleDefinition:
     properties:
@@ -42,14 +50,16 @@ definitions:
       metadata:
         $ref: '#/definitions/contracts.Metadata'
       spec:
-        properties:
-          application:
-            type: string
-          port:
-            type: integer
-          public:
-            type: boolean
-        type: object
+        $ref: '#/definitions/contracts.ServiceSpec'
+    type: object
+  contracts.ServiceSpec:
+    properties:
+      application:
+        type: string
+      port:
+        type: integer
+      public:
+        type: boolean
     type: object
 info:
   contact: {}
@@ -153,6 +163,139 @@ paths:
       summary: Update an application
       tags:
       - applications
+  /v1/applications/{app_name}/environments/{env_name}/allowed:
+    post:
+      description: Creates an 'allowed_in' policy edge from an application to an environment
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: Environment name
+        in: path
+        name: env_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Add an allowed_in policy edge from an application to an environment
+      tags:
+      - environments
+  /v1/applications/{app_name}/environments/allowed:
+    get:
+      description: Returns all environments the application is allowed to deploy to
+        (policy)
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/contracts.EnvironmentContract'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List allowed environments for an application
+      tags:
+      - environments
+    post:
+      consumes:
+      - application/json
+      description: Adds allowed_in policy edges for an application (does not remove
+        existing)
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: List of environment names
+        in: body
+        name: envs
+        required: true
+        schema:
+          items:
+            type: string
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Add allowed environments for an application
+      tags:
+      - environments
+    put:
+      consumes:
+      - application/json
+      description: Replaces the allowed_in policy edges for an application
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: List of environment names
+        in: body
+        name: envs
+        required: true
+        schema:
+          items:
+            type: string
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Replace allowed environments for an application
+      tags:
+      - environments
   /v1/applications/{app_name}/services:
     get:
       description: Returns all services linked to an application
@@ -236,6 +379,64 @@ paths:
       summary: Get a service for an application
       tags:
       - services
+  /v1/applications/{app_name}/services/{service_name}/environments/{env_name}:
+    post:
+      description: Creates a 'deployed_in' edge from a service to an environment,
+        ensuring the service belongs to the specified application
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: Service name
+        in: path
+        name: service_name
+        required: true
+        type: string
+      - description: Environment name
+        in: path
+        name: env_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Link a service to an environment
+      tags:
+      - environments
+  /v1/applications/{app_name}/services/schema:
+    get:
+      description: Returns the JSON schema for the service contract
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get service contract schema
+      tags:
+      - services
   /v1/applications/schema:
     get:
       description: Returns example schema for application contract
@@ -283,6 +484,48 @@ paths:
       summary: Get contract schemas
       tags:
       - contracts
+  /v1/environments:
+    get:
+      description: Returns all environment nodes
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/contracts.EnvironmentContract'
+            type: array
+      summary: List all environments
+      tags:
+      - environments
+    post:
+      consumes:
+      - application/json
+      description: Creates a new environment node
+      parameters:
+      - description: Environment payload
+        in: body
+        name: environment
+        required: true
+        schema:
+          $ref: '#/definitions/contracts.EnvironmentContract'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/contracts.EnvironmentContract'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new environment
+      tags:
+      - environments
   /v1/graph:
     get:
       description: Loads the latest graph from the backend and returns it as JSON
@@ -321,20 +564,6 @@ paths:
       summary: Health check
       tags:
       - health
-  /v1/services/schema:
-    get:
-      description: Returns example schema for service contract
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get service contract schema
-      tags:
-      - services
   /v1/status:
     get:
       description: Returns high-level platform status and graph node count
