@@ -11,6 +11,7 @@ import (
 var ResourceRegistry = map[string]func() contracts.Contract{
 	"application": func() contracts.Contract { return &contracts.ApplicationContract{} },
 	"service":     func() contracts.Contract { return &contracts.ServiceContract{} },
+	"environment": func() contracts.Contract { return &contracts.EnvironmentContract{} },
 }
 
 // LoadNode hydrates a contract from kind and spec

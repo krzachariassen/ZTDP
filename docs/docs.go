@@ -186,6 +186,203 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/applications/{app_name}/environments/allowed": {
+            "get": {
+                "description": "Returns all environments the application is allowed to deploy to (policy)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "List allowed environments for an application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/contracts.EnvironmentContract"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Replaces the allowed_in policy edges for an application",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Replace allowed environments for an application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "List of environment names",
+                        "name": "envs",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Adds allowed_in policy edges for an application (does not remove existing)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Add allowed environments for an application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "List of environment names",
+                        "name": "envs",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{app_name}/environments/{env_name}/allowed": {
+            "post": {
+                "description": "Creates an 'allowed_in' policy edge from an application to an environment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Add an allowed_in policy edge from an application to an environment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Environment name",
+                        "name": "env_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/applications/{app_name}/services": {
             "get": {
                 "description": "Returns all services linked to an application",
@@ -266,6 +463,36 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/applications/{app_name}/services/schema": {
+            "get": {
+                "description": "Returns the JSON schema for the service contract",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "services"
+                ],
+                "summary": "Get service contract schema",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/applications/{app_name}/services/{service_name}": {
             "get": {
                 "description": "Returns a specific service by name for an application",
@@ -297,6 +524,61 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/contracts.ServiceContract"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{app_name}/services/{service_name}/environments/{env_name}": {
+            "post": {
+                "description": "Creates a 'deployed_in' edge from a service to an environment, ensuring the service belongs to the specified application",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Link a service to an environment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Service name",
+                        "name": "service_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Environment name",
+                        "name": "env_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
                     "404": {
@@ -361,6 +643,70 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/environments": {
+            "get": {
+                "description": "Returns all environment nodes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "List all environments",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/contracts.EnvironmentContract"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new environment node",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Create a new environment",
+                "parameters": [
+                    {
+                        "description": "Environment payload",
+                        "name": "environment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.EnvironmentContract"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/contracts.EnvironmentContract"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/graph": {
             "get": {
                 "description": "Loads the latest graph from the backend and returns it as JSON",
@@ -419,27 +765,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/services/schema": {
-            "get": {
-                "description": "Returns example schema for service contract",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "services"
-                ],
-                "summary": "Get service contract schema",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v1/status": {
             "get": {
                 "description": "Returns high-level platform status and graph node count",
@@ -480,12 +805,6 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
-                "environments": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "lifecycle": {
                     "type": "object",
                     "additionalProperties": {
@@ -497,6 +816,25 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "contracts.EnvironmentContract": {
+            "type": "object",
+            "properties": {
+                "metadata": {
+                    "$ref": "#/definitions/contracts.Metadata"
+                },
+                "spec": {
+                    "$ref": "#/definitions/contracts.EnvironmentSpec"
+                }
+            }
+        },
+        "contracts.EnvironmentSpec": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
                 }
             }
         },
@@ -529,18 +867,21 @@ const docTemplate = `{
                     "$ref": "#/definitions/contracts.Metadata"
                 },
                 "spec": {
-                    "type": "object",
-                    "properties": {
-                        "application": {
-                            "type": "string"
-                        },
-                        "port": {
-                            "type": "integer"
-                        },
-                        "public": {
-                            "type": "boolean"
-                        }
-                    }
+                    "$ref": "#/definitions/contracts.ServiceSpec"
+                }
+            }
+        },
+        "contracts.ServiceSpec": {
+            "type": "object",
+            "properties": {
+                "application": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "public": {
+                    "type": "boolean"
                 }
             }
         }

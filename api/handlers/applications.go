@@ -50,7 +50,10 @@ func ListApplications(w http.ResponseWriter, r *http.Request) {
 	apps := []contracts.ApplicationContract{}
 	for _, node := range GlobalGraph.Graph.Nodes {
 		if node.Kind == "application" {
-			contract, err := graph.LoadNode(node.Kind, node.Spec, node.Metadata)
+			contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+				Name:  node.Metadata["name"].(string),
+				Owner: node.Metadata["owner"].(string),
+			})
 			if err == nil {
 				if app, ok := contract.(*contracts.ApplicationContract); ok {
 					apps = append(apps, *app)
@@ -78,7 +81,10 @@ func GetApplication(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Application not found", http.StatusNotFound)
 		return
 	}
-	contract, err := graph.LoadNode(node.Kind, node.Spec, node.Metadata)
+	contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+		Name:  node.Metadata["name"].(string),
+		Owner: node.Metadata["owner"].(string),
+	})
 	if err != nil {
 		WriteJSONError(w, "Invalid application contract", http.StatusInternalServerError)
 		return

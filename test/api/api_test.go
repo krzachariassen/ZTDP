@@ -34,10 +34,9 @@ func createApplication(t *testing.T, router http.Handler, name string) {
 			"owner": "team-x",
 		},
 		"spec": map[string]interface{}{
-			"description":  "Handles " + name + " flows",
-			"tags":         []string{"payments", "frontend"},
-			"environments": []string{"dev", "qa"},
-			"lifecycle":    map[string]interface{}{},
+			"description": "Handles " + name + " flows",
+			"tags":        []string{"payments", "frontend"},
+			"lifecycle":   map[string]interface{}{},
 		},
 	}
 	body, _ := json.Marshal(app)
@@ -72,9 +71,67 @@ func createService(t *testing.T, router http.Handler, appName, svcName string) {
 	}
 }
 
+func createEnvironment(t *testing.T, router http.Handler, name string) {
+	env := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"name":  name,
+			"owner": "platform-team",
+		},
+		"spec": map[string]interface{}{
+			"description": "Test environment: " + name,
+		},
+	}
+	body, _ := json.Marshal(env)
+	req := httptest.NewRequest("POST", "/v1/environments", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("failed to create environment: %s, status: %d", name, resp.Code)
+	}
+}
+
+func linkServiceToEnvironment(t *testing.T, router http.Handler, appName, svcName, envName string) {
+	url := fmt.Sprintf("/v1/applications/%s/services/%s/environments/%s", appName, svcName, envName)
+	req := httptest.NewRequest("POST", url, nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("failed to link service %s to environment %s, status: %d", svcName, envName, resp.Code)
+	}
+}
+
+func linkAppAllowedInEnvironment(t *testing.T, router http.Handler, appName, envName string) {
+	url := fmt.Sprintf("/v1/applications/%s/environments/%s/allowed", appName, envName)
+	req := httptest.NewRequest("POST", url, nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("failed to link allowed_in: %s -> %s, status: %d", appName, envName, resp.Code)
+	}
+}
+
+func createTestData(t *testing.T, router http.Handler) {
+	createApplication(t, router, "checkout")
+	createService(t, router, "checkout", "checkout-api")
+	createService(t, router, "checkout", "checkout-worker")
+	createEnvironment(t, router, "dev")
+	createEnvironment(t, router, "prod")
+	// Add allowed_in policy for both environments before linking services
+	linkAppAllowedInEnvironment(t, router, "checkout", "dev")
+	linkAppAllowedInEnvironment(t, router, "checkout", "prod")
+	linkServiceToEnvironment(t, router, "checkout", "checkout-api", "dev")
+	linkServiceToEnvironment(t, router, "checkout", "checkout-api", "prod")
+	linkServiceToEnvironment(t, router, "checkout", "checkout-worker", "dev")
+}
+
+func setupTestData(t *testing.T, router http.Handler) {
+	createTestData(t, router)
+}
+
 func TestCreateAndGetApplication(t *testing.T) {
 	router := server.NewRouter()
-	createApplication(t, router, "checkout")
+	setupTestData(t, router)
 
 	req := httptest.NewRequest("GET", "/v1/applications/checkout", nil)
 	resp := httptest.NewRecorder()
@@ -86,8 +143,7 @@ func TestCreateAndGetApplication(t *testing.T) {
 
 func TestListApplications(t *testing.T) {
 	router := server.NewRouter()
-	createApplication(t, router, "checkout")
-	createApplication(t, router, "billing")
+	setupTestData(t, router)
 
 	req := httptest.NewRequest("GET", "/v1/applications", nil)
 	resp := httptest.NewRecorder()
@@ -103,7 +159,7 @@ func TestListApplications(t *testing.T) {
 
 func TestUpdateApplication(t *testing.T) {
 	router := server.NewRouter()
-	createApplication(t, router, "checkout")
+	setupTestData(t, router)
 
 	app := map[string]interface{}{
 		"metadata": map[string]interface{}{
@@ -111,10 +167,9 @@ func TestUpdateApplication(t *testing.T) {
 			"owner": "team-x",
 		},
 		"spec": map[string]interface{}{
-			"description":  "Handles checkout flows - updated",
-			"tags":         []string{"payments", "frontend"},
-			"environments": []string{"dev", "qa"},
-			"lifecycle":    map[string]interface{}{},
+			"description": "Handles checkout flows - updated",
+			"tags":        []string{"payments", "frontend"},
+			"lifecycle":   map[string]interface{}{},
 		},
 	}
 	body, _ := json.Marshal(app)
@@ -129,8 +184,7 @@ func TestUpdateApplication(t *testing.T) {
 
 func TestCreateAndGetService(t *testing.T) {
 	router := server.NewRouter()
-	createApplication(t, router, "checkout")
-	createService(t, router, "checkout", "checkout-api")
+	setupTestData(t, router)
 
 	// Now test GET
 	req := httptest.NewRequest("GET", "/v1/applications/checkout/services/checkout-api", nil)
@@ -143,9 +197,7 @@ func TestCreateAndGetService(t *testing.T) {
 
 func TestListServices(t *testing.T) {
 	router := server.NewRouter()
-	createApplication(t, router, "checkout")
-	createService(t, router, "checkout", "checkout-api")
-	createService(t, router, "checkout", "checkout-worker")
+	setupTestData(t, router)
 
 	req := httptest.NewRequest("GET", "/v1/applications/checkout/services", nil)
 	resp := httptest.NewRecorder()
@@ -161,7 +213,8 @@ func TestListServices(t *testing.T) {
 
 func TestApplyGraph(t *testing.T) {
 	router := server.NewRouter()
-	createApplication(t, router, "checkout")
+	setupTestData(t, router)
+
 	req := httptest.NewRequest("POST", "/v1/apply?env=dev", nil)
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
@@ -172,7 +225,8 @@ func TestApplyGraph(t *testing.T) {
 
 func TestGetGraph(t *testing.T) {
 	router := server.NewRouter()
-	createApplication(t, router, "checkout")
+	setupTestData(t, router)
+
 	req := httptest.NewRequest("GET", "/v1/graph?env=dev", nil)
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
@@ -221,7 +275,8 @@ func TestGetApplicationSchema(t *testing.T) {
 
 func TestGetServiceSchema(t *testing.T) {
 	router := server.NewRouter()
-	req := httptest.NewRequest("GET", "/v1/services/schema", nil)
+	// Use the new endpoint under the application scope
+	req := httptest.NewRequest("GET", "/v1/applications/checkout/services/schema", nil)
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
 	if resp.Code != http.StatusOK {
@@ -230,5 +285,58 @@ func TestGetServiceSchema(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if len(body) == 0 {
 		t.Error("expected non-empty service schema response")
+	}
+}
+
+func TestCreateAndListEnvironments(t *testing.T) {
+	router := server.NewRouter()
+	setupTestData(t, router)
+
+	req := httptest.NewRequest("GET", "/v1/environments", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if len(body) == 0 {
+		t.Error("expected non-empty environments list")
+	}
+}
+
+func TestCreateAndLinkServiceToEnvironment(t *testing.T) {
+	router := server.NewRouter()
+	setupTestData(t, router)
+	// Already linked in setupTestData, so just verify no error on relink
+	linkServiceToEnvironment(t, router, "checkout", "checkout-api", "dev")
+}
+
+func TestAllowedInPolicyEdge(t *testing.T) {
+	router := server.NewRouter()
+	setupTestData(t, router)
+	linkAppAllowedInEnvironment(t, router, "checkout", "prod")
+}
+
+func TestAllowedEnvironmentsPolicyAPI(t *testing.T) {
+	router := server.NewRouter()
+	setupTestData(t, router)
+	// Set allowed environments to only dev for checkout
+	putBody, _ := json.Marshal([]string{"dev"})
+	req := httptest.NewRequest("PUT", "/v1/applications/checkout/environments/allowed", bytes.NewBuffer(putBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("failed to set allowed environments, status: %d", resp.Code)
+	}
+	// Should succeed: link service to allowed env (dev)
+	linkServiceToEnvironment(t, router, "checkout", "checkout-api", "dev")
+	// Should fail: link service to not-allowed env (prod)
+	url := "/v1/applications/checkout/services/checkout-api/environments/prod"
+	req = httptest.NewRequest("POST", url, nil)
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code == http.StatusCreated {
+		t.Error("expected failure when linking service to not-allowed environment, but got success")
 	}
 }

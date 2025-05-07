@@ -21,10 +21,9 @@ func TestGlobalGraph_Apply_RedisBackend(t *testing.T) {
 			Owner: "team-x",
 		},
 		Spec: contracts.ApplicationSpec{
-			Description:  "Checkout app",
-			Tags:         []string{"payments"},
-			Environments: []string{"dev", "qa"},
-			Lifecycle:    map[string]contracts.LifecycleDefinition{},
+			Description: "Checkout app",
+			Tags:        []string{"payments"},
+			Lifecycle:   map[string]contracts.LifecycleDefinition{},
 		},
 	}
 	appNode, _ := ResolveContract(app)

@@ -3,10 +3,9 @@ package contracts
 import "fmt"
 
 type ApplicationSpec struct {
-	Description  string
-	Tags         []string
-	Environments []string
-	Lifecycle    map[string]LifecycleDefinition
+	Description string                         `json:"description"`
+	Tags        []string                       `json:"tags"`
+	Lifecycle   map[string]LifecycleDefinition `json:"lifecycle"`
 }
 
 type ApplicationContract struct {
@@ -21,9 +20,6 @@ func (a ApplicationContract) GetMetadata() Metadata { return a.Metadata }
 func (a ApplicationContract) Validate() error {
 	if a.Metadata.Name == "" {
 		return fmt.Errorf("application name is required")
-	}
-	if len(a.Spec.Environments) == 0 {
-		return fmt.Errorf("at least one environment must be defined")
 	}
 	return nil
 }

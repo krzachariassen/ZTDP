@@ -20,11 +20,23 @@ func NewGlobalGraph(backend GraphBackend) *GlobalGraph {
 func (gg *GlobalGraph) AddNode(node *Node) {
 	gg.mu.Lock()
 	defer gg.mu.Unlock()
+	if existing, ok := gg.Graph.Nodes[node.ID]; ok {
+		existing.Kind = node.Kind
+		existing.Metadata = node.Metadata
+		existing.Spec = node.Spec
+		return
+	}
 	gg.Graph.Nodes[node.ID] = node
 }
 
 func (gg *GlobalGraph) AddEdge(fromID, toID, relType string) error {
-	return gg.Graph.AddEdge(fromID, toID, relType)
+	for _, edge := range gg.Graph.Edges[fromID] {
+		if edge.To == toID && edge.Type == relType {
+			return nil
+		}
+	}
+	gg.Graph.Edges[fromID] = append(gg.Graph.Edges[fromID], Edge{To: toID, Type: relType})
+	return nil
 }
 
 func (gg *GlobalGraph) Apply(env string) (*Graph, error) {

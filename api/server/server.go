@@ -22,11 +22,24 @@ func NewRouter() http.Handler {
 		v1.Get("/applications/{app_name}", handlers.GetApplication)
 		v1.Put("/applications/{app_name}", handlers.UpdateApplication)
 		v1.Get("/applications/schema", handlers.ApplicationSchema)
-		// Services
+		// Services should always be created under an application
 		v1.Post("/applications/{app_name}/services", handlers.CreateService)
 		v1.Get("/applications/{app_name}/services", handlers.ListServices)
 		v1.Get("/applications/{app_name}/services/{service_name}", handlers.GetService)
-		v1.Get("/services/schema", handlers.ServiceSchema)
+		// Environments
+		v1.Post("/environments", handlers.CreateEnvironment)
+		v1.Get("/environments", handlers.ListEnvironments)
+		// Link Service to Environment (deployed_in) - now nested under application
+		v1.Post("/applications/{app_name}/services/{service_name}/environments/{env_name}", handlers.LinkServiceToEnvironment)
+		// Application allowed_in policy edge
+		v1.Post("/applications/{app_name}/environments/{env_name}/allowed", handlers.LinkAppAllowedInEnvironment)
+		// List allowed environments for an application (policy)
+		v1.Get("/applications/{app_name}/environments/allowed", handlers.ListAllowedEnvironments)
+		// Update and Add allowed environments for an application
+		v1.Put("/applications/{app_name}/environments/allowed", handlers.UpdateAllowedEnvironments)
+		v1.Post("/applications/{app_name}/environments/allowed", handlers.AddAllowedEnvironments)
+		// Service schema
+		v1.Get("/applications/{app_name}/services/schema", handlers.ServiceSchema)
 		// Swagger UI
 		r.Get("/swagger/*", httpSwagger.WrapHandler)
 		// Graph Visualization
