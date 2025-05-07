@@ -1,15 +1,18 @@
 # Zero Touch Developer Platform (ZTDP)
 
-ZTDP is a next-generation internal developer platform built around **declarative contracts**, **graph-based orchestration**, and **extensible resource providers**. It enables zero-touch infrastructure and application delivery with APIs, automation, and AI-native architecture at its core.
+ZTDP is a bold reimagining of the internal developer platform. It empowers you to deliver infrastructure and applications with **zero manual touch**—just intent, contracts, and code. No YAML, no portals, no friction. ZTDP is built for the future: API-first, event-driven, and ready for both human and AI operators.
 
-## 🧠 Key Concepts
+---
 
-- **Contract-Driven**: Define apps and services declaratively, no YAML or Helm.
-- **Graph Engine**: Converts contracts into a DAG (Directed Acyclic Graph) of platform intent.
-- **Environment-Aware**: Apply the same graph to multiple environments (dev, qa, prod).
-- **Resource Providers**: Extensible backend modules (e.g. Kubernetes, Postgres).
-- **API-First + TDD**: Everything is API-driven and tested from day one.
-- **Redis-Backed**: Control plane stores the graph DAG persistently in Redis.
+## 🧠 What Makes ZTDP Different?
+
+- **Contract-Driven, Not YAML-Driven:** Express your intent in structured contracts—no more brittle YAML, no more static manifests.
+- **Graph-Native Orchestration:** Every resource, dependency, and lifecycle is modeled as a live, queryable graph—enabling true dependency awareness and incremental updates.
+- **Composable, Pluggable Resource Providers:** Add new infrastructure types or swap backends without changing the core platform.
+- **Event-Driven, Not Pipeline-Driven:** ZTDP is built on an event bus, not a pipeline runner—enabling real-time, auditable, and autonomous operations.
+- **AI-Ready by Design:** Structured, deterministic, and safe for both human and AI agents to operate—no hidden state, no magic.
+- **API-First, TDD-First:** Every feature is built and tested as an API from day one, with a focus on developer experience and automation.
+- **Zero Touch, Zero Friction:** From contract submission to deployment, ZTDP eliminates manual steps, portals, and glue code—just outcomes.
 
 ---
 
@@ -37,33 +40,21 @@ ZTDP/
 
 ---
 
-## ⚙️ Local Development Setup
+## ⚙️ Getting Started (Local Dev)
 
-ZTDP uses **Docker Compose** for local development.
+ZTDP is designed for rapid iteration and local hacking. You can be up and running in minutes.
 
-### ✅ Prerequisites
+### Prerequisites
 
-- Docker
-- Docker-Compose
-- Go 1.22+
+- Docker & Docker Compose
+- Go 1.23+
 
-### 🔧 Setup
+### Quickstart
 
-# Create the docker-compose.yaml file
-```yaml
-services:
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    environment:
-      - REDIS_PASSWORD=BVogb1sEPqA
-    command: ["redis-server", "--requirepass", "BVogb1sEPqA"]
-```
+```bash
 # Start Redis for backend storage
 docker-compose up -d
 
-```bash
 # Set environment variables
 export ZTDP_GRAPH_BACKEND=redis
 export REDIS_HOST=localhost:6379
@@ -75,14 +66,14 @@ go run ./test/controlplane/graph_demo.go
 
 ---
 
-## 🧪 Testing Strategy
+## 🧪 Testing & Quality
 
-We follow **TDD** and **API-first** development:
+We live and breathe TDD and API-first development:
 
-- ✅ Each feature begins with a test
-- ✅ Logic and contracts are test-covered (`go test ./...`)
-- ✅ APIs are tested with HTTP assertions
-- ✅ Redis-backed graph is tested for both in-memory and persistence
+- Every feature starts with a test.
+- Logic and contracts are covered (`go test ./...`).
+- APIs are tested with HTTP assertions.
+- Redis-backed graph is tested for both in-memory and persistence.
 
 ```bash
 # Run all tests
@@ -93,31 +84,44 @@ go test ./...
 
 ## 🌐 API Endpoints
 
-| Method | Endpoint         | Purpose                             |
-|--------|------------------|-------------------------------------|
-| POST   | `/contracts`     | Submit new contract (app/service)   |
-| POST   | `/apply/{env}`   | Apply global graph to an environment |
-| GET    | `/graph/{env}`   | View environment-specific DAG       |
-| GET    | `/healthz`       | Health check                        |
+| Method | Endpoint                | Purpose                                 |
+|--------|-------------------------|-----------------------------------------|
+| POST   | `/v1/contracts`         | Submit new contract (app/service)       |
+| POST   | `/v1/apply`             | Apply global graph to an environment    |
+| GET    | `/v1/graph`             | View current global DAG                 |
+| GET    | `/v1/contracts/schema`  | Get contract schemas                    |
+| GET    | `/v1/status`            | Platform status                         |
+| GET    | `/v1/healthz`           | Health check                            |
 
-APIs are public and MCP-compatible.
+- **Swagger/OpenAPI docs:** [http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)
 
 ---
 
-## 📍 MVP Progress
+## 🏗️ MVP Progress
 
-| Phase                | Status     |
-|----------------------|------------|
-| Contract schema      | ✅ Complete |
-| Graph Engine         | ✅ Complete |
-| Redis graph backend  | ✅ Complete |
-| Control plane demo   | ✅ Complete |
+| Phase                | Status         |
+|----------------------|----------------|
+| Contract schema      | ✅ Complete    |
+| Graph Engine         | ✅ Complete    |
+| Redis graph backend  | ✅ Complete    |
+| Control plane demo   | ✅ Complete    |
 | API-first server     | ✅ In progress |
-| Resource Providers   | ⏳ Coming up |
-| Event orchestration  | ⏳ Coming up |
-| Reconciliation loop  | ⏳ Coming up |
+| Swagger/OpenAPI docs | ✅ Complete    |
+| Resource Providers   | ⏳ Coming up   |
+| Event orchestration  | ⏳ Coming up   |
+| Reconciliation loop  | ⏳ Coming up   |
 
-See: [`docs/ZTDP – MVP v1 Development Plan`](docs/ZTDP%20–%20MVP%20v1%20Development%20Plan.md)
+See: [`MVP_BACKLOG.md`](MVP_BACKLOG.md) for detailed backlog and progress.
+
+---
+
+## 🔄 Regenerating Swagger Docs
+
+After updating handler annotations, run:
+
+```bash
+swag init -g api/server/server.go
+```
 
 ---
 
@@ -128,6 +132,17 @@ See: [`docs/ZTDP – MVP v1 Development Plan`](docs/ZTDP%20–%20MVP%20v1%20Deve
 
 ---
 
+## 💡 Why Contribute?
+
+ZTDP is for builders, dreamers, and those who want to change how platforms are delivered.  
+Whether you’re into Go, distributed systems, or just want to see what a zero-touch platform feels like—jump in, hack, and help us shape the future.
+
+---
+
 ## 📌 License
 
 TBD — Project is in private development. License terms will be clarified before any public release.
+
+---
+
+**Ready to build the future? Clone, run, and let’s go! 🚀**
