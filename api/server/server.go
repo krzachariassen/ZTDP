@@ -29,6 +29,8 @@ func NewRouter() http.Handler {
 		v1.Get("/services/schema", handlers.ServiceSchema)
 		// Swagger UI
 		r.Get("/swagger/*", httpSwagger.WrapHandler)
+		// Graph Visualization
+		r.Handle("/graph.html", http.FileServer(http.Dir("static")))
 	})
 	return r
 }

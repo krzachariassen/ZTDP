@@ -43,7 +43,7 @@ func TestGlobalGraph_Apply_MemoryBackend(t *testing.T) {
 	svcNode, _ := ResolveContract(svc)
 	gg.AddNode(svcNode)
 
-	if err := gg.AddEdge("checkout-api", "checkout"); err != nil {
+	if err := gg.AddEdge("checkout-api", "checkout", "owns"); err != nil {
 		t.Fatalf("failed to add edge: %v", err)
 	}
 
@@ -55,7 +55,7 @@ func TestGlobalGraph_Apply_MemoryBackend(t *testing.T) {
 	if len(applied.Nodes) != 2 {
 		t.Errorf("expected 2 nodes, got %d", len(applied.Nodes))
 	}
-	if len(applied.Edges["checkout-api"]) != 1 || applied.Edges["checkout-api"][0] != "checkout" {
+	if len(applied.Edges["checkout-api"]) != 1 || applied.Edges["checkout-api"][0].To != "checkout" || applied.Edges["checkout-api"][0].Type != "owns" {
 		t.Errorf("expected edge checkout-api --> checkout not found")
 	}
 }

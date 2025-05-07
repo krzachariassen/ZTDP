@@ -55,7 +55,7 @@ func main() {
 
 		svcNode, _ := graph.ResolveContract(svc)
 		global.AddNode(svcNode)
-		global.AddEdge("checkout-api", "checkout")
+		global.AddEdge(app.Metadata.Name, svc.Metadata.Name, "owns")
 
 		// Save it
 		if err := global.Save(); err != nil {
@@ -76,7 +76,6 @@ func main() {
 		}
 	}
 
-	// ...existing code...
 	for _, env := range app.Spec.Environments {
 		fmt.Printf("\n🌐 GlobalGraph applied to [%s]\n", env)
 		g, _ := global.Apply(env)
@@ -89,9 +88,9 @@ func main() {
 
 	// Print global edges once
 	fmt.Println("\nGlobal Edges:")
-	for from, toList := range global.Graph.Edges {
-		for _, to := range toList {
-			fmt.Printf("   - %s --> %s\n", from, to)
+	for from, edgeList := range global.Graph.Edges {
+		for _, edge := range edgeList {
+			fmt.Printf("   - {%s} -%s-> {%s}\n", from, edge.Type, edge.To)
 		}
 	}
 }

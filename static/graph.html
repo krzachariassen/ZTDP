@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ZTDP Graph Visualization</title>
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.1">
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    #container { display: flex; height: 95vh; }
+    #cy { flex: 3; height: 100%; border-right: 1px solid #ccc; }
+    #details { flex: 1; padding: 1em; background: #f9f9f9; min-width: 250px; }
+    h2 { margin-top: 0.5em; }
+    .node-label { font-weight: bold; }
+    .json { font-family: monospace; font-size: 0.95em; background: #eee; padding: 0.5em; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h2>ZTDP Platform Graph Visualization</h2>
+  <div id="container">
+    <div id="cy"></div>
+    <div id="details">
+      <div><em>Click a node to see details.</em></div>
+    </div>
+  </div>
+  <script>
+    function renderTable(obj) {
+      if (typeof obj !== 'object' || obj === null) return String(obj);
+      let rows = '';
+      for (const [key, value] of Object.entries(obj)) {
+        rows += `<tr><td><b>${key}</b></td><td>${typeof value === 'object' && value !== null ? renderTable(value) : value}</td></tr>`;
+      }
+      return `<table class="json">${rows}</table>`;
+    }
+
+    fetch('/v1/graph')
+      .then(res => res.json())
+      .then(data => {
+        const nodes = Object.values(data.Nodes).map(n => ({
+          data: {
+            id: n.id,
+            label: `${n.kind}: ${n.metadata.name}`,
+            kind: n.kind,
+            details: n
+          }
+        }));
+        const edges = [];
+        for (const [from, edgeList] of Object.entries(data.Edges)) {
+          edgeList.forEach(edge => {
+            edges.push({ data: { source: from, target: edge.to || edge.To, label: edge.type || edge.Type } });
+          });
+        }
+
+        const cy = cytoscape({
+          container: document.getElementById('cy'),
+          elements: { nodes, edges },
+          style: [
+            {
+              selector: 'node[kind="application"]',
+              style: {
+                'background-color': '#0074D9',
+                'label': 'data(label)',
+                'color': '#fff',
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'font-weight': 'bold',
+                'width': 70,
+                'height': 70,
+                'font-size': 18,
+                'text-outline-color': '#0074D9',
+                'text-outline-width': 2,
+                'box-shadow': '0 4px 12px rgba(0,0,0,0.15)'
+              }
+            },
+            {
+              selector: 'node[kind="service"]',
+              style: {
+                'background-color': '#2ECC40',
+                'label': 'data(label)',
+                'color': '#fff',
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'width': 55,
+                'height': 55,
+                'font-size': 15,
+                'text-outline-color': '#2ECC40',
+                'text-outline-width': 2,
+                'box-shadow': '0 4px 12px rgba(0,0,0,0.10)'
+              }
+            },
+            {
+              selector: 'edge',
+              style: {
+                'width': 4,
+                'line-color': '#888',
+                'target-arrow-color': '#888',
+                'target-arrow-shape': 'triangle',
+                'curve-style': 'bezier',
+                'label': 'data(label)',
+                'font-size': 13,
+                'text-background-color': '#fff',
+                'text-background-opacity': 1,
+                'text-background-padding': 2
+              }
+            }
+          ],
+          layout: { name: 'cose', animate: true, padding: 30 }
+        });
+
+        cy.on('tap', 'node', function(evt){
+          const node = evt.target.data();
+          const detailsDiv = document.getElementById('details');
+          detailsDiv.innerHTML = `
+            <div class="node-label">${node.label}</div>
+            ${renderTable(node.details)}
+          `;
+        });
+
+        cy.on('tap', function(evt){
+          if (evt.target === cy) {
+            document.getElementById('details').innerHTML = '<div><em>Click a node to see details.</em></div>';
+          }
+        });
+      })
+      .catch(err => {
+        document.getElementById('cy').innerText = 'Failed to load graph: ' + err;
+      });
+  </script>
+</body>
+</html>

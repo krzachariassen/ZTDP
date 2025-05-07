@@ -37,7 +37,8 @@ func CreateService(w http.ResponseWriter, r *http.Request) {
 	}
 	node, _ := graph.ResolveContract(svc)
 	GlobalGraph.AddNode(node)
-	GlobalGraph.AddEdge(svc.Metadata.Name, appName)
+	// Add edge with relationship type 'owns'
+	GlobalGraph.AddEdge(appName, svc.Metadata.Name, "owns")
 	if err := GlobalGraph.Save(); err != nil {
 		WriteJSONError(w, "Failed to save service", http.StatusInternalServerError)
 		return
