@@ -20,11 +20,12 @@ func main() {
 
 	global := graph.NewGlobalGraph(backend)
 
+	var app contracts.ApplicationContract
 	// Try loading from backend
 	if err := global.Load(); err != nil {
 		fmt.Println("🔄 No existing global graph found, creating new one")
 		// Setup global graph for first time
-		app := contracts.ApplicationContract{
+		app = contracts.ApplicationContract{
 			Metadata: contracts.Metadata{
 				Name:  "checkout",
 				Owner: "team-x",
@@ -45,11 +46,7 @@ func main() {
 				Name:  "checkout-api",
 				Owner: "team-x",
 			},
-			Spec: struct {
-				Application string `json:"application"`
-				Port        int    `json:"port"`
-				Public      bool   `json:"public"`
-			}{
+			Spec: contracts.ServiceSpec{
 				Application: "checkout",
 				Port:        8080,
 				Public:      true,
@@ -67,9 +64,20 @@ func main() {
 		}
 	} else {
 		fmt.Println("✅ Loaded global graph from backend")
+		// Find the application node in the loaded graph
+		if n, ok := global.Graph.Nodes["checkout"]; ok {
+			// Unmarshal node.Spec into app
+			contract, err := graph.LoadNode(n.Kind, n.Spec, n.Metadata)
+			if err == nil {
+				if loadedApp, ok := contract.(*contracts.ApplicationContract); ok {
+					app = *loadedApp
+				}
+			}
+		}
 	}
 
-	for _, env := range []string{"dev", "qa"} {
+	// ...existing code...
+	for _, env := range app.Spec.Environments {
 		fmt.Printf("\n🌐 GlobalGraph applied to [%s]\n", env)
 		g, _ := global.Apply(env)
 
@@ -77,11 +85,13 @@ func main() {
 		for id, n := range g.Nodes {
 			fmt.Printf("   - [%s] %s\n", n.Kind, id)
 		}
-		fmt.Println("  Edges:")
-		for from, toList := range g.Edges {
-			for _, to := range toList {
-				fmt.Printf("   - %s --> %s\n", from, to)
-			}
+	}
+
+	// Print global edges once
+	fmt.Println("\nGlobal Edges:")
+	for from, toList := range global.Graph.Edges {
+		for _, to := range toList {
+			fmt.Printf("   - %s --> %s\n", from, to)
 		}
 	}
 }

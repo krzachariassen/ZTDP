@@ -26,14 +26,14 @@ ZTDP/
 ├── cmd/                      # Entrypoint: main.go
 ├── internal/                 # Core architecture
 │   ├── contracts/            # Contract types: Application, Service, etc.
-│   ├── graph/                # Graph engine, backend, resolver
+│   ├── graph/                # Graph engine, backend, resolver, registry
 │   └── state/                # State store abstraction (future)
 ├── rps/                      # Resource Providers (Kubernetes, Postgres, etc.)
 ├── test/
 │   ├── api/                  # End-to-end API tests
 │   └── controlplane/         # Control plane validation demos
 ├── charts/                   # Helm charts (e.g., redis)
-├── docker-compose.yaml       # Local services: Redis
+├── docker-compose.yml        # Local services: Redis
 ├── .env                      # Environment configuration
 └── go.mod / go.sum           # Go dependencies
 ```
@@ -60,8 +60,11 @@ export ZTDP_GRAPH_BACKEND=redis
 export REDIS_HOST=localhost:6379
 export REDIS_PASSWORD=BVogb1sEPqA  # matches docker-compose.yaml
 
-# Run a control plane demo
+# Run a control plane demo (optional, to pre-populate sample data)
 go run ./test/controlplane/graph_demo.go
+
+# Or start the API server
+go run ./cmd/api/main.go
 ```
 
 ---
@@ -86,14 +89,75 @@ go test ./...
 
 | Method | Endpoint                | Purpose                                 |
 |--------|-------------------------|-----------------------------------------|
-| POST   | `/v1/contracts`         | Submit new contract (app/service)       |
-| POST   | `/v1/apply`             | Apply global graph to an environment    |
-| GET    | `/v1/graph`             | View current global DAG                 |
-| GET    | `/v1/contracts/schema`  | Get contract schemas                    |
-| GET    | `/v1/status`            | Platform status                         |
-| GET    | `/v1/healthz`           | Health check                            |
+| POST   | `/v1/applications`         | Submit new application                  |
+| GET    | `/v1/applications`         | List all applications                   |
+| GET    | `/v1/applications/{app}`   | Get a specific application              |
+| PUT    | `/v1/applications/{app}`   | Update an application                   |
+| GET    | `/v1/applications/schema`  | Get application contract schema         |
+| POST   | `/v1/applications/{app}/services` | Add a service to an application   |
+| GET    | `/v1/applications/{app}/services` | List services for an application  |
+| GET    | `/v1/applications/{app}/services/{service}` | Get a specific service      |
+| GET    | `/v1/services/schema`      | Get service contract schema             |
+| POST   | `/v1/apply`                | Apply global graph to an environment    |
+| GET    | `/v1/graph`                | View current global DAG                 |
+| GET    | `/v1/status`               | Platform status                         |
+| GET    | `/v1/healthz`              | Health check                            |
 
 - **Swagger/OpenAPI docs:** [http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)
+
+---
+
+## 🏗️ Generating Sample Data
+
+You can pre-populate the platform with sample data in two ways:
+
+### 1. **Run the Demo Script**
+
+```bash
+go run ./test/controlplane/graph_demo.go
+```
+This will create a sample application (`checkout`) and a service (`checkout-api`) in the graph and persist them to Redis (if configured).
+
+### 2. **Use the API (curl examples)**
+
+```bash
+# Create the "checkout" application
+curl -X POST http://localhost:8080/v1/applications \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "checkout", "owner": "team-x" },
+    "spec": {
+      "description": "Handles checkout flows",
+      "tags": ["payments", "frontend"],
+      "environments": ["dev", "qa"],
+      "lifecycle": {}
+    }
+  }'
+
+# Create the "checkout-api" service under "checkout"
+curl -X POST http://localhost:8080/v1/applications/checkout/services \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "checkout-api", "owner": "team-x" },
+    "spec": {
+      "application": "checkout",
+      "port": 8080,
+      "public": true
+    }
+  }'
+
+# Create another service, e.g., "checkout-worker" under "checkout"
+curl -X POST http://localhost:8080/v1/applications/checkout/services \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "checkout-worker", "owner": "team-x" },
+    "spec": {
+      "application": "checkout",
+      "port": 9090,
+      "public": false
+    }
+  }'
+```
 
 ---
 
