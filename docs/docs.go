@@ -15,6 +15,302 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/v1/applications": {
+            "get": {
+                "description": "Returns all application resources",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "List all applications",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/contracts.ApplicationContract"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new application resource",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Create a new application",
+                "parameters": [
+                    {
+                        "description": "Application payload",
+                        "name": "application",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.ApplicationContract"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/contracts.ApplicationContract"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/schema": {
+            "get": {
+                "description": "Returns example schema for application contract",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Get application contract schema",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{app_name}": {
+            "get": {
+                "description": "Returns a specific application by name",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Get an application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/contracts.ApplicationContract"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates an existing application resource",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Update an application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Application payload",
+                        "name": "application",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.ApplicationContract"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/contracts.ApplicationContract"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{app_name}/services": {
+            "get": {
+                "description": "Returns all services linked to an application",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "services"
+                ],
+                "summary": "List all services for an application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/contracts.ServiceContract"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new service resource linked to an application",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "services"
+                ],
+                "summary": "Create a new service for an application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Service payload",
+                        "name": "service",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.ServiceContract"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/contracts.ServiceContract"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{app_name}/services/{service_name}": {
+            "get": {
+                "description": "Returns a specific service by name for an application",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "services"
+                ],
+                "summary": "Get a service for an application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Service name",
+                        "name": "service_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/contracts.ServiceContract"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/apply": {
             "post": {
                 "description": "Applies the current dependency graph for the given environment",
@@ -30,50 +326,6 @@ const docTemplate = `{
                         "description": "Graph applied",
                         "schema": {
                             "type": "string"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/contracts": {
-            "post": {
-                "description": "Submit an application or service contract to the platform",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "contracts"
-                ],
-                "summary": "Submit a contract",
-                "parameters": [
-                    {
-                        "description": "Contract payload",
-                        "name": "contract",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
                         }
                     },
                     "400": {
@@ -111,7 +363,7 @@ const docTemplate = `{
         },
         "/v1/graph": {
             "get": {
-                "description": "Returns the current dependency graph",
+                "description": "Loads the latest graph from the backend and returns it as JSON",
                 "produces": [
                     "application/json"
                 ],
@@ -119,12 +371,29 @@ const docTemplate = `{
                     "graph"
                 ],
                 "summary": "Get the current graph",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment name (optional)",
+                        "name": "env",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
@@ -150,6 +419,27 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/services/schema": {
+            "get": {
+                "description": "Returns example schema for service contract",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "services"
+                ],
+                "summary": "Get service contract schema",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/status": {
             "get": {
                 "description": "Returns high-level platform status and graph node count",
@@ -166,6 +456,89 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "contracts.ApplicationContract": {
+            "type": "object",
+            "properties": {
+                "metadata": {
+                    "$ref": "#/definitions/contracts.Metadata"
+                },
+                "spec": {
+                    "$ref": "#/definitions/contracts.ApplicationSpec"
+                }
+            }
+        },
+        "contracts.ApplicationSpec": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "environments": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "lifecycle": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/contracts.LifecycleDefinition"
+                    }
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "contracts.LifecycleDefinition": {
+            "type": "object",
+            "properties": {
+                "gates": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "contracts.Metadata": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                }
+            }
+        },
+        "contracts.ServiceContract": {
+            "type": "object",
+            "properties": {
+                "metadata": {
+                    "$ref": "#/definitions/contracts.Metadata"
+                },
+                "spec": {
+                    "type": "object",
+                    "properties": {
+                        "application": {
+                            "type": "string"
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "public": {
+                            "type": "boolean"
                         }
                     }
                 }

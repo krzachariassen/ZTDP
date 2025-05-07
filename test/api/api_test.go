@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,123 +27,144 @@ func init() {
 	handlers.GlobalGraph = graph.NewGlobalGraph(backend)
 }
 
-func TestSubmitContract(t *testing.T) {
-	router := server.NewRouter()
-
-	contract := map[string]interface{}{
-		"kind": "application",
+func createApplication(t *testing.T, router http.Handler, name string) {
+	app := map[string]interface{}{
 		"metadata": map[string]interface{}{
-			"name":  "checkout",
-			"owner": "team-a",
+			"name":  name,
+			"owner": "team-x",
 		},
 		"spec": map[string]interface{}{
-			"description":  "Handles checkout flows",
+			"description":  "Handles " + name + " flows",
 			"tags":         []string{"payments", "frontend"},
 			"environments": []string{"dev", "qa"},
 			"lifecycle":    map[string]interface{}{},
 		},
 	}
-
-	body, _ := json.Marshal(contract)
-	req := httptest.NewRequest("POST", "/v1/contracts", bytes.NewBuffer(body))
+	body, _ := json.Marshal(app)
+	req := httptest.NewRequest("POST", "/v1/applications", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
-
 	router.ServeHTTP(resp, req)
-
 	if resp.Code != http.StatusCreated {
-		t.Errorf("expected status 201, got %d", resp.Code)
+		t.Fatalf("failed to create application: %s, status: %d", name, resp.Code)
 	}
 }
 
-func TestSubmitContract_InvalidJSON(t *testing.T) {
-	router := server.NewRouter()
-
-	req := httptest.NewRequest("POST", "/v1/contracts", bytes.NewBuffer([]byte("{invalid")))
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-
-	router.ServeHTTP(resp, req)
-
-	if resp.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400 for invalid JSON, got %d", resp.Code)
-	}
-}
-
-func TestSubmitContract_MissingKind(t *testing.T) {
-	router := server.NewRouter()
-
-	contract := map[string]interface{}{
-		"name":  "checkout",
-		"owner": "team-a",
-	}
-	body, _ := json.Marshal(contract)
-	req := httptest.NewRequest("POST", "/v1/contracts", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-
-	router.ServeHTTP(resp, req)
-
-	if resp.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400 for missing kind, got %d", resp.Code)
-	}
-}
-
-func TestSubmitContract_UnknownKind(t *testing.T) {
-	router := server.NewRouter()
-
-	contract := map[string]interface{}{
-		"kind":  "unknown",
-		"name":  "checkout",
-		"owner": "team-a",
-	}
-	body, _ := json.Marshal(contract)
-	req := httptest.NewRequest("POST", "/v1/contracts", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-
-	router.ServeHTTP(resp, req)
-
-	if resp.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400 for unknown kind, got %d", resp.Code)
-	}
-}
-
-func TestSubmitContract_ServiceContract(t *testing.T) {
-	router := server.NewRouter()
-
-	contract := map[string]interface{}{
-		"kind": "service",
+func createService(t *testing.T, router http.Handler, appName, svcName string) {
+	svc := map[string]interface{}{
 		"metadata": map[string]interface{}{
-			"name":  "checkout-api",
-			"owner": "team-a",
+			"name":  svcName,
+			"owner": "team-x",
 		},
 		"spec": map[string]interface{}{
-			"application": "checkout",
+			"application": appName,
 			"port":        8080,
 			"public":      true,
 		},
 	}
-	body, _ := json.Marshal(contract)
-	req := httptest.NewRequest("POST", "/v1/contracts", bytes.NewBuffer(body))
+	body, _ := json.Marshal(svc)
+	req := httptest.NewRequest("POST", fmt.Sprintf("/v1/applications/%s/services", appName), bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
-
 	router.ServeHTTP(resp, req)
-
 	if resp.Code != http.StatusCreated {
-		t.Errorf("expected status 201 for service contract, got %d", resp.Code)
+		t.Fatalf("failed to create service: %s, status: %d", svcName, resp.Code)
+	}
+}
+
+func TestCreateAndGetApplication(t *testing.T) {
+	router := server.NewRouter()
+	createApplication(t, router, "checkout")
+
+	req := httptest.NewRequest("GET", "/v1/applications/checkout", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+}
+
+func TestListApplications(t *testing.T) {
+	router := server.NewRouter()
+	createApplication(t, router, "checkout")
+	createApplication(t, router, "billing")
+
+	req := httptest.NewRequest("GET", "/v1/applications", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if len(body) == 0 {
+		t.Error("expected non-empty applications list")
+	}
+}
+
+func TestUpdateApplication(t *testing.T) {
+	router := server.NewRouter()
+	createApplication(t, router, "checkout")
+
+	app := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"name":  "checkout",
+			"owner": "team-x",
+		},
+		"spec": map[string]interface{}{
+			"description":  "Handles checkout flows - updated",
+			"tags":         []string{"payments", "frontend"},
+			"environments": []string{"dev", "qa"},
+			"lifecycle":    map[string]interface{}{},
+		},
+	}
+	body, _ := json.Marshal(app)
+	req := httptest.NewRequest("PUT", "/v1/applications/checkout", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+}
+
+func TestCreateAndGetService(t *testing.T) {
+	router := server.NewRouter()
+	createApplication(t, router, "checkout")
+	createService(t, router, "checkout", "checkout-api")
+
+	// Now test GET
+	req := httptest.NewRequest("GET", "/v1/applications/checkout/services/checkout-api", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+}
+
+func TestListServices(t *testing.T) {
+	router := server.NewRouter()
+	createApplication(t, router, "checkout")
+	createService(t, router, "checkout", "checkout-api")
+	createService(t, router, "checkout", "checkout-worker")
+
+	req := httptest.NewRequest("GET", "/v1/applications/checkout/services", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if len(body) == 0 {
+		t.Error("expected non-empty services list")
 	}
 }
 
 func TestApplyGraph(t *testing.T) {
 	router := server.NewRouter()
-
+	createApplication(t, router, "checkout")
 	req := httptest.NewRequest("POST", "/v1/apply?env=dev", nil)
 	resp := httptest.NewRecorder()
-
 	router.ServeHTTP(resp, req)
-
 	if resp.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.Code)
 	}
@@ -151,12 +172,10 @@ func TestApplyGraph(t *testing.T) {
 
 func TestGetGraph(t *testing.T) {
 	router := server.NewRouter()
-
+	createApplication(t, router, "checkout")
 	req := httptest.NewRequest("GET", "/v1/graph?env=dev", nil)
 	resp := httptest.NewRecorder()
-
 	router.ServeHTTP(resp, req)
-
 	if resp.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.Code)
 	}
@@ -166,27 +185,9 @@ func TestHealthz(t *testing.T) {
 	router := server.NewRouter()
 	req := httptest.NewRequest("GET", "/v1/healthz", nil)
 	resp := httptest.NewRecorder()
-
 	router.ServeHTTP(resp, req)
-
 	if resp.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.Code)
-	}
-}
-
-func TestGetContractSchema(t *testing.T) {
-	router := server.NewRouter()
-	req := httptest.NewRequest("GET", "/v1/contracts/schema", nil)
-	resp := httptest.NewRecorder()
-
-	router.ServeHTTP(resp, req)
-
-	if resp.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.Code)
-	}
-	body, _ := ioutil.ReadAll(resp.Body)
-	if len(body) == 0 {
-		t.Error("expected non-empty schema response")
 	}
 }
 
@@ -194,14 +195,40 @@ func TestStatusEndpoint(t *testing.T) {
 	router := server.NewRouter()
 	req := httptest.NewRequest("GET", "/v1/status", nil)
 	resp := httptest.NewRecorder()
-
 	router.ServeHTTP(resp, req)
-
 	if resp.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.Code)
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	if len(body) == 0 {
 		t.Error("expected non-empty status response")
+	}
+}
+
+func TestGetApplicationSchema(t *testing.T) {
+	router := server.NewRouter()
+	req := httptest.NewRequest("GET", "/v1/applications/schema", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if len(body) == 0 {
+		t.Error("expected non-empty application schema response")
+	}
+}
+
+func TestGetServiceSchema(t *testing.T) {
+	router := server.NewRouter()
+	req := httptest.NewRequest("GET", "/v1/services/schema", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if len(body) == 0 {
+		t.Error("expected non-empty service schema response")
 	}
 }

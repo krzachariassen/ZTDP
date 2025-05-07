@@ -1,6 +1,255 @@
+definitions:
+  contracts.ApplicationContract:
+    properties:
+      metadata:
+        $ref: '#/definitions/contracts.Metadata'
+      spec:
+        $ref: '#/definitions/contracts.ApplicationSpec'
+    type: object
+  contracts.ApplicationSpec:
+    properties:
+      description:
+        type: string
+      environments:
+        items:
+          type: string
+        type: array
+      lifecycle:
+        additionalProperties:
+          $ref: '#/definitions/contracts.LifecycleDefinition'
+        type: object
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  contracts.LifecycleDefinition:
+    properties:
+      gates:
+        items:
+          type: string
+        type: array
+    type: object
+  contracts.Metadata:
+    properties:
+      name:
+        type: string
+      owner:
+        type: string
+    type: object
+  contracts.ServiceContract:
+    properties:
+      metadata:
+        $ref: '#/definitions/contracts.Metadata'
+      spec:
+        properties:
+          application:
+            type: string
+          port:
+            type: integer
+          public:
+            type: boolean
+        type: object
+    type: object
 info:
   contact: {}
 paths:
+  /v1/applications:
+    get:
+      description: Returns all application resources
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/contracts.ApplicationContract'
+            type: array
+      summary: List all applications
+      tags:
+      - applications
+    post:
+      consumes:
+      - application/json
+      description: Creates a new application resource
+      parameters:
+      - description: Application payload
+        in: body
+        name: application
+        required: true
+        schema:
+          $ref: '#/definitions/contracts.ApplicationContract'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/contracts.ApplicationContract'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new application
+      tags:
+      - applications
+  /v1/applications/{app_name}:
+    get:
+      description: Returns a specific application by name
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/contracts.ApplicationContract'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get an application
+      tags:
+      - applications
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing application resource
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: Application payload
+        in: body
+        name: application
+        required: true
+        schema:
+          $ref: '#/definitions/contracts.ApplicationContract'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/contracts.ApplicationContract'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update an application
+      tags:
+      - applications
+  /v1/applications/{app_name}/services:
+    get:
+      description: Returns all services linked to an application
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/contracts.ServiceContract'
+            type: array
+      summary: List all services for an application
+      tags:
+      - services
+    post:
+      consumes:
+      - application/json
+      description: Creates a new service resource linked to an application
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: Service payload
+        in: body
+        name: service
+        required: true
+        schema:
+          $ref: '#/definitions/contracts.ServiceContract'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/contracts.ServiceContract'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new service for an application
+      tags:
+      - services
+  /v1/applications/{app_name}/services/{service_name}:
+    get:
+      description: Returns a specific service by name for an application
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: Service name
+        in: path
+        name: service_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/contracts.ServiceContract'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a service for an application
+      tags:
+      - services
+  /v1/applications/schema:
+    get:
+      description: Returns example schema for application contract
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get application contract schema
+      tags:
+      - applications
   /v1/apply:
     post:
       description: Applies the current dependency graph for the given environment
@@ -20,35 +269,6 @@ paths:
       summary: Apply the dependency graph
       tags:
       - graph
-  /v1/contracts:
-    post:
-      consumes:
-      - application/json
-      description: Submit an application or service contract to the platform
-      parameters:
-      - description: Contract payload
-        in: body
-        name: contract
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Submit a contract
-      tags:
-      - contracts
   /v1/contracts/schema:
     get:
       description: Returns example schemas for supported contract kinds
@@ -65,7 +285,12 @@ paths:
       - contracts
   /v1/graph:
     get:
-      description: Returns the current dependency graph
+      description: Loads the latest graph from the backend and returns it as JSON
+      parameters:
+      - description: Environment name (optional)
+        in: query
+        name: env
+        type: string
       produces:
       - application/json
       responses:
@@ -73,6 +298,12 @@ paths:
           description: OK
           schema:
             additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
             type: object
       summary: Get the current graph
       tags:
@@ -90,6 +321,20 @@ paths:
       summary: Health check
       tags:
       - health
+  /v1/services/schema:
+    get:
+      description: Returns example schema for service contract
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get service contract schema
+      tags:
+      - services
   /v1/status:
     get:
       description: Returns high-level platform status and graph node count
