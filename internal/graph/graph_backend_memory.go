@@ -33,8 +33,8 @@ func (m *memoryGraph) AddNode(env string, node *Node) error {
 	return m.getOrCreate(env).AddNode(node)
 }
 
-func (m *memoryGraph) AddEdge(env, fromID, toID string) error {
-	return m.getOrCreate(env).AddEdge(fromID, toID)
+func (m *memoryGraph) AddEdge(env, fromID, toID, relType string) error {
+	return m.getOrCreate(env).AddEdge(fromID, toID, relType)
 }
 
 func (m *memoryGraph) GetNode(env, id string) (*Node, error) {

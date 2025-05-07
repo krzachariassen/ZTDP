@@ -23,8 +23,8 @@ func (gg *GlobalGraph) AddNode(node *Node) {
 	gg.Graph.Nodes[node.ID] = node
 }
 
-func (gg *GlobalGraph) AddEdge(fromID, toID string) error {
-	return gg.Graph.AddEdge(fromID, toID)
+func (gg *GlobalGraph) AddEdge(fromID, toID, relType string) error {
+	return gg.Graph.AddEdge(fromID, toID, relType)
 }
 
 func (gg *GlobalGraph) Apply(env string) (*Graph, error) {
@@ -36,7 +36,7 @@ func (gg *GlobalGraph) Apply(env string) (*Graph, error) {
 	}
 
 	for from, toList := range gg.Graph.Edges {
-		applied.Edges[from] = append([]string{}, toList...)
+		applied.Edges[from] = append([]Edge{}, toList...)
 	}
 
 	return applied, nil

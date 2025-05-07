@@ -77,8 +77,13 @@ func (r *redisGraph) GetNode(env, id string) (*Node, error) {
 	return &node, nil
 }
 
-func (r *redisGraph) AddEdge(env, fromID, toID string) error {
-	return r.client.SAdd(context.Background(), redisKeyEdges(env, fromID), toID).Err()
+func (r *redisGraph) AddEdge(env, fromID, toID, relType string) error {
+	// Store as JSON: {to: ..., type: ...}
+	data, err := json.Marshal(Edge{To: toID, Type: relType})
+	if err != nil {
+		return err
+	}
+	return r.client.SAdd(context.Background(), redisKeyEdges(env, fromID), data).Err()
 }
 
 func (r *redisGraph) GetAll(env string) (*Graph, error) {
@@ -100,11 +105,16 @@ func (r *redisGraph) GetAll(env string) (*Graph, error) {
 
 	for id := range graph.Nodes {
 		edgeKey := redisKeyEdges(env, id)
-		edges, err := r.client.SMembers(ctx, edgeKey).Result()
+		edgeDatas, err := r.client.SMembers(ctx, edgeKey).Result()
 		if err != nil {
 			continue
 		}
-		graph.Edges[id] = edges
+		for _, edgeData := range edgeDatas {
+			var edge Edge
+			if err := json.Unmarshal([]byte(edgeData), &edge); err == nil {
+				graph.Edges[id] = append(graph.Edges[id], edge)
+			}
+		}
 	}
 
 	return graph, nil
