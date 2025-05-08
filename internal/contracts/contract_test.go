@@ -119,3 +119,38 @@ func TestContractInterface(t *testing.T) {
 		t.Error("expected error for invalid contract, got nil")
 	}
 }
+
+func TestServiceVersionContract(t *testing.T) {
+	valid := ServiceVersionContract{
+		IDValue:   "svc:1.0.0",
+		Name:      "svc",
+		Owner:     "team-x",
+		Version:   "1.0.0",
+		ConfigRef: "default",
+	}
+	if valid.ID() != "svc:1.0.0" {
+		t.Errorf("expected ID 'svc:1.0.0', got '%s'", valid.ID())
+	}
+	if valid.Kind() != "service_version" {
+		t.Errorf("expected Kind 'service_version', got '%s'", valid.Kind())
+	}
+	md := valid.GetMetadata()
+	if md.Name != "svc" || md.Owner != "team-x" {
+		t.Errorf("unexpected metadata: %+v", md)
+	}
+	if err := valid.Validate(); err != nil {
+		t.Errorf("expected valid contract, got error: %v", err)
+	}
+
+	missingName := valid
+	missingName.Name = ""
+	if err := missingName.Validate(); err == nil {
+		t.Error("expected error for missing name, got nil")
+	}
+
+	missingVersion := valid
+	missingVersion.Version = ""
+	if err := missingVersion.Validate(); err == nil {
+		t.Error("expected error for missing version, got nil")
+	}
+}

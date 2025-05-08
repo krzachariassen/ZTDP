@@ -65,3 +65,15 @@ func (g *Graph) AddEdge(fromID, toID, relType string, metadata ...map[string]int
 	g.Edges[fromID] = append(g.Edges[fromID], Edge{To: toID, Type: relType, Metadata: meta})
 	return nil
 }
+
+// Add ServiceVersionNode to the graph model
+type ServiceVersionNode struct {
+	ID       string                 `json:"id"`
+	Kind     string                 `json:"kind"`
+	Metadata map[string]interface{} `json:"metadata"`
+	Spec     map[string]interface{} `json:"spec"`
+}
+
+// Add new edge types for versioning
+// has_version: service -> service_version
+// deployed_in: service_version -> environment
