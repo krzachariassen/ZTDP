@@ -2,62 +2,73 @@
 
 ## Phase 1: End-to-End Flow (Walking Skeleton)
 
-- [ ] **API: Contract Submission**
-  - Endpoint to accept contract (application/service) via API
-  - Basic validation and error handling
+- [x] **API: Application Management**
+  - [x] Create, update, get, and list Applications via REST API
+  - [x] Application schema endpoint
+  - [x] Application-level environment policy (`allowed_in`)
 
-- [ ] **Graph Engine**
-  - Store contract as node(s) in in-memory/Redis graph
-  - Support node/edge creation
+- [x] **API: Service Management**
+  - [x] Create, update, get, and list Services under Applications
+  - [x] Service schema endpoint
+
+- [x] **API: Environment Management**
+  - [x] Create, get, and list Environments
+  - [x] Link Applications to allowed Environments (policy)
+  - [x] Link Services to Environments (deployed_in)
+
+- [x] **Graph Engine**
+  - [x] Store Applications, Services, Environments as nodes in in-memory/Redis graph
+  - [x] Support node/edge creation and retrieval
+
+- [x] **API: Status/Graph Retrieval**
+  - [x] Endpoint to get current graph as JSON
+  - [x] Endpoint to get platform status (node count, health)
 
 - [ ] **Planner**
-  - Topological sort of graph (execution order)
-  - Return plan for given contract/graph
+  - [ ] Topological sort of graph (execution order)
+  - [ ] Return plan for given application/graph
 
 - [ ] **Resource Provider: Kubernetes Deployment**
-  - Minimal RP that can create a Deployment in a test K8s cluster
-  - Trigger RP from plan
+  - [ ] Minimal RP that can create a Deployment in a test K8s cluster
+  - [ ] Trigger RP from plan
 
 - [ ] **Event Engine (Minimal)**
-  - Dispatch “deploy” event to RP (can be direct function call for MVP)
-
-- [ ] **API: Status/Graph Retrieval**
-  - Endpoint to get current graph and node status
+  - [ ] Dispatch “deploy” event to RP (can be direct function call for MVP)
 
 - [ ] **Demo: End-to-End Test**
-  - Submit contract → See deployment created in K8s
+  - [ ] Submit Application/Service/Environment → See deployment created in K8s
 
 ---
 
 ## Phase 2: Platform Hardening
 
 - [ ] **Resource Provider: Postgres**
-  - Minimal RP that provisions a Postgres DB
+  - [ ] Minimal RP that provisions a Postgres DB
 
 - [ ] **Secrets Management (Basic)**
-  - Store and inject secrets for RPs
+  - [ ] Store and inject secrets for RPs
 
 - [ ] **Event Bus Integration**
-  - Use NATS for event dispatch (replace direct calls)
+  - [ ] Use NATS for event dispatch (replace direct calls)
 
 - [ ] **State Store**
-  - Persist node/event state in Redis
+  - [ ] Persist node/event state in Redis
 
 - [ ] **Reconciliation Loop**
-  - Detect drift and trigger reconcile events
+  - [ ] Detect drift and trigger reconcile events
 
 ---
 
 ## Phase 3: Developer Experience & Docs
 
 - [ ] **Swagger/OpenAPI Docs**
-  - All endpoints documented and browsable
+  - [ ] All endpoints documented and browsable
 
 - [ ] **Local Dev Environment**
-  - Docker Compose for Redis, Postgres, NATS
+  - [ ] Docker Compose for Redis, Postgres, NATS
 
 - [ ] **README & Usage Docs**
-  - Example contract, API usage, and “how to run demo”
+  - [ ] Example Application/Service/Environment, API usage, and “how to run demo”
 
 ---
 

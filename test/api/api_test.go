@@ -111,18 +111,51 @@ func linkAppAllowedInEnvironment(t *testing.T, router http.Handler, appName, env
 	}
 }
 
+func createServiceVersion(t *testing.T, router http.Handler, appName, svcName, version string) {
+	ver := map[string]interface{}{
+		"version":    version,
+		"config_ref": "default-config",
+		"owner":      "team-x",
+	}
+	url := fmt.Sprintf("/v1/applications/%s/services/%s/versions", appName, svcName)
+	body, _ := json.Marshal(ver)
+	req := httptest.NewRequest("POST", url, bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated && resp.Code != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("failed to create service version: %s, status: %d, body: %s", version, resp.Code, string(respBody))
+	}
+}
+
+func deployServiceVersion(t *testing.T, router http.Handler, appName, svcName, version, envName string) {
+	payload := map[string]interface{}{"environment": envName}
+	url := fmt.Sprintf("/v1/applications/%s/services/%s/versions/%s/deploy", appName, svcName, version)
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", url, bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("failed to deploy service version %s to env %s, status: %d", version, envName, resp.Code)
+	}
+}
+
 func createTestData(t *testing.T, router http.Handler) {
 	createApplication(t, router, "checkout")
 	createService(t, router, "checkout", "checkout-api")
 	createService(t, router, "checkout", "checkout-worker")
 	createEnvironment(t, router, "dev")
 	createEnvironment(t, router, "prod")
-	// Add allowed_in policy for both environments before linking services
 	linkAppAllowedInEnvironment(t, router, "checkout", "dev")
 	linkAppAllowedInEnvironment(t, router, "checkout", "prod")
-	linkServiceToEnvironment(t, router, "checkout", "checkout-api", "dev")
-	linkServiceToEnvironment(t, router, "checkout", "checkout-api", "prod")
-	linkServiceToEnvironment(t, router, "checkout", "checkout-worker", "dev")
+	// Create service versions and deploy them
+	createServiceVersion(t, router, "checkout", "checkout-api", "1.0.0")
+	createServiceVersion(t, router, "checkout", "checkout-worker", "1.0.0")
+	deployServiceVersion(t, router, "checkout", "checkout-api", "1.0.0", "dev")
+	deployServiceVersion(t, router, "checkout", "checkout-api", "1.0.0", "prod")
+	deployServiceVersion(t, router, "checkout", "checkout-worker", "1.0.0", "dev")
 }
 
 func setupTestData(t *testing.T, router http.Handler) {
@@ -338,5 +371,43 @@ func TestAllowedEnvironmentsPolicyAPI(t *testing.T) {
 	router.ServeHTTP(resp, req)
 	if resp.Code == http.StatusCreated {
 		t.Error("expected failure when linking service to not-allowed environment, but got success")
+	}
+}
+
+func TestListServiceVersions(t *testing.T) {
+	router := server.NewRouter()
+	setupTestData(t, router)
+
+	// List versions for checkout-api
+	url := "/v1/applications/checkout/services/checkout-api/versions"
+	req := httptest.NewRequest("GET", url, nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+	var versions []map[string]interface{}
+	_ = json.NewDecoder(resp.Body).Decode(&versions)
+	if len(versions) == 0 {
+		t.Error("expected at least one service version for checkout-api")
+	}
+}
+
+func TestListEnvironmentDeployments(t *testing.T) {
+	router := server.NewRouter()
+	setupTestData(t, router)
+
+	// List deployments in dev environment
+	url := "/v1/environments/dev/deployments"
+	req := httptest.NewRequest("GET", url, nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.Code)
+	}
+	var deployments []map[string]interface{}
+	_ = json.NewDecoder(resp.Body).Decode(&deployments)
+	if len(deployments) == 0 {
+		t.Error("expected at least one deployment in dev environment")
 	}
 }

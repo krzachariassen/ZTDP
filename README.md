@@ -103,6 +103,10 @@ go test ./...
 | POST   | `/v1/applications/{app}/environments/{env}/allowed`             | Allow an application to deploy to an environment|
 | GET    | `/v1/applications/{app}/environments/allowed`                   | List allowed environments for an application    |
 | POST   | `/v1/applications/{app}/services/{service}/environments/{env}`  | Deploy a service to an environment              |
+| POST   | `/v1/applications/{app}/services/{service}/versions`              | Create a new service version                    |
+| GET    | `/v1/applications/{app}/services/{service}/versions`              | List all versions for a service                 |
+| POST   | `/v1/applications/{app}/services/{service}/versions/{version}/deploy` | Deploy a service version to an environment      |
+| GET    | `/v1/environments/{env}/deployments`                              | List deployments in an environment              |
 | GET    | `/v1/graph`                                                     | View current global DAG                         |
 | GET    | `/v1/status`                                                    | Platform status                                 |
 | GET    | `/v1/healthz`                                                   | Health check                                    |
@@ -180,7 +184,47 @@ curl -X POST http://localhost:8080/v1/applications/checkout/services \
   }'
 ```
 
-### 5. Deploy Services to Environments
+### 5. Create Service Versions
+```bash
+# Create a new version for a service
+curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": "1.0.0",
+    "config_ref": "default-config",
+    "owner": "team-x"
+  }'
+
+# Create another version for a service
+curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": "1.1.0",
+    "config_ref": "default-config",
+    "owner": "team-x"
+  }'
+```
+
+### 6. List Service Versions
+```bash
+curl -X GET http://localhost:8080/v1/applications/checkout/services/checkout-api/versions
+```
+
+### 7. Deploy a Service Version to an Environment
+```bash
+curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions/1.0.0/deploy \
+  -H "Content-Type: application/json" \
+  -d '{
+    "environment": "dev"
+  }'
+```
+
+### 8. List Deployments in an Environment
+```bash
+curl -X GET http://localhost:8080/v1/environments/dev/deployments
+```
+
+### 9. Deploy Services to Environments
 ```bash
 # Deploy checkout-api to dev
 deploy_service="checkout-api"
@@ -196,7 +240,7 @@ worker_service="checkout-worker"
 curl -X POST http://localhost:8080/v1/applications/checkout/services/$worker_service/environments/$deploy_env
 ```
 
-### 6. Attempt to Deploy Service to Not-Allowed Environment (Should Fail)
+### 10. Attempt to Deploy Service to Not-Allowed Environment (Should Fail)
 ```bash
 # Remove prod from allowed environments for checkout (replace allowed list with only dev)
 curl -X PUT http://localhost:8080/v1/applications/checkout/environments/allowed \

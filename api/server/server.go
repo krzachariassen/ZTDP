@@ -40,6 +40,11 @@ func NewRouter() http.Handler {
 		v1.Post("/applications/{app_name}/environments/allowed", handlers.AddAllowedEnvironments)
 		// Service schema
 		v1.Get("/applications/{app_name}/services/schema", handlers.ServiceSchema)
+		// Service versioning endpoints
+		v1.Post("/applications/{app_name}/services/{service_name}/versions", handlers.CreateServiceVersion)
+		v1.Get("/applications/{app_name}/services/{service_name}/versions", handlers.ListServiceVersions)
+		v1.Post("/applications/{app_name}/services/{service_name}/versions/{version}/deploy", handlers.DeployServiceVersion)
+		v1.Get("/environments/{env_name}/deployments", handlers.ListEnvironmentDeployments)
 		// Swagger UI
 		r.Get("/swagger/*", httpSwagger.WrapHandler)
 		// Graph Visualization
