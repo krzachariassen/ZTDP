@@ -3,24 +3,31 @@ package graph
 import (
 	"errors"
 	"fmt"
+
+	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
-type Edge struct {
-	To       string                 `json:"to"`
-	Type     string                 `json:"type"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+var policyRegistry *policies.PolicyRegistry
+
+func SetPolicyRegistry(reg *policies.PolicyRegistry) {
+	policyRegistry = reg
 }
 
-type Node struct {
-	ID       string                 `json:"id"`
-	Kind     string                 `json:"kind"`
-	Metadata map[string]interface{} `json:"metadata"`
-	Spec     map[string]interface{} `json:"spec"`
+type Edge struct {
+	To   string
+	Type string
 }
 
 type Graph struct {
-	Nodes map[string]*Node  `json:"Nodes"`
-	Edges map[string][]Edge `json:"Edges"`
+	Nodes map[string]*Node
+	Edges map[string][]Edge
+}
+
+type Node struct {
+	ID       string
+	Kind     string
+	Metadata map[string]interface{}
+	Spec     map[string]interface{}
 }
 
 func NewGraph() *Graph {
@@ -46,7 +53,7 @@ func (g *Graph) GetNode(id string) (*Node, error) {
 	return n, nil
 }
 
-func (g *Graph) AddEdge(fromID, toID, relType string, metadata ...map[string]interface{}) error {
+func (g *Graph) AddEdge(fromID, toID, relType string) error {
 	if _, ok := g.Nodes[fromID]; !ok {
 		return fmt.Errorf("source node %s does not exist", fromID)
 	}
@@ -58,22 +65,43 @@ func (g *Graph) AddEdge(fromID, toID, relType string, metadata ...map[string]int
 			return errors.New("edge already exists")
 		}
 	}
-	var meta map[string]interface{}
-	if len(metadata) > 0 {
-		meta = metadata[0]
+	// Policy enforcement (restored)
+	if policyRegistry != nil {
+		for _, p := range policyRegistry.All() {
+			mutation := policies.Mutation{
+				Type: "add_edge",
+				Edge: &policies.EdgeView{
+					From: fromID,
+					To:   toID,
+					Type: relType,
+				},
+			}
+			gv := policies.GraphView{
+				Nodes: make(map[string]policies.NodeView),
+				Edges: make(map[string][]policies.EdgeView),
+			}
+			for id, node := range g.Nodes {
+				gv.Nodes[id] = policies.NodeView{
+					ID:       node.ID,
+					Kind:     node.Kind,
+					Metadata: node.Metadata,
+					Spec:     node.Spec,
+				}
+			}
+			for from, edges := range g.Edges {
+				for _, edge := range edges {
+					gv.Edges[from] = append(gv.Edges[from], policies.EdgeView{
+						From: from,
+						To:   edge.To,
+						Type: edge.Type,
+					})
+				}
+			}
+			if err := p.Validate(gv, mutation); err != nil {
+				return err
+			}
+		}
 	}
-	g.Edges[fromID] = append(g.Edges[fromID], Edge{To: toID, Type: relType, Metadata: meta})
+	g.Edges[fromID] = append(g.Edges[fromID], Edge{To: toID, Type: relType})
 	return nil
 }
-
-// Add ServiceVersionNode to the graph model
-type ServiceVersionNode struct {
-	ID       string                 `json:"id"`
-	Kind     string                 `json:"kind"`
-	Metadata map[string]interface{} `json:"metadata"`
-	Spec     map[string]interface{} `json:"spec"`
-}
-
-// Add new edge types for versioning
-// has_version: service -> service_version
-// deployed_in: service_version -> environment

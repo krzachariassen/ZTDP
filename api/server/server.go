@@ -29,8 +29,6 @@ func NewRouter() http.Handler {
 		// Environments
 		v1.Post("/environments", handlers.CreateEnvironment)
 		v1.Get("/environments", handlers.ListEnvironments)
-		// Link Service to Environment (deployed_in) - now nested under application
-		v1.Post("/applications/{app_name}/services/{service_name}/environments/{env_name}", handlers.LinkServiceToEnvironment)
 		// Application allowed_in policy edge
 		v1.Post("/applications/{app_name}/environments/{env_name}/allowed", handlers.LinkAppAllowedInEnvironment)
 		// List allowed environments for an application (policy)

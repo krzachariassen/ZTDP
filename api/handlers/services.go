@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -167,6 +168,8 @@ func CreateServiceVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	node, _ := graph.ResolveContract(ver)
 	GlobalGraph.AddNode(node)
+	// Debug log to confirm node creation
+	fmt.Printf("[DEBUG] Created service version node with ID: %s, Kind: %s\n", node.ID, node.Kind)
 	GlobalGraph.AddEdge(serviceName, id, "has_version")
 	if err := GlobalGraph.Save(); err != nil {
 		WriteJSONError(w, "Failed to save service version", http.StatusInternalServerError)
@@ -200,81 +203,4 @@ func ListServiceVersions(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(versions)
-}
-
-// DeployServiceVersion godoc
-// @Summary      Deploy a service version to an environment
-// @Description  Deploys a specific service version to an environment
-// @Tags         services
-// @Accept       json
-// @Produce      json
-// @Param        app_name     path  string  true  "Application name"
-// @Param        service_name path  string  true  "Service name"
-// @Param        version      path  string  true  "Service version"
-// @Param        env         body  object  true  "Deployment target"
-// @Success      201  {object}  map[string]string
-// @Failure      400  {object}  map[string]string
-// @Router       /v1/applications/{app_name}/services/{service_name}/versions/{version}/deploy [post]
-func DeployServiceVersion(w http.ResponseWriter, r *http.Request) {
-	serviceName := chi.URLParam(r, "service_name")
-	version := chi.URLParam(r, "version")
-	var req struct {
-		Environment string `json:"environment"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-	verID := serviceName + ":" + version
-	if _, ok := GlobalGraph.Graph.Nodes[verID]; !ok {
-		WriteJSONError(w, "Service version not found", http.StatusNotFound)
-		return
-	}
-	if _, ok := GlobalGraph.Graph.Nodes[req.Environment]; !ok {
-		WriteJSONError(w, "Environment not found", http.StatusNotFound)
-		return
-	}
-	GlobalGraph.AddEdge(verID, req.Environment, "deployed_in")
-	if err := GlobalGraph.Save(); err != nil {
-		WriteJSONError(w, "Failed to save deployment", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"status": "deployed"})
-}
-
-// ListEnvironmentDeployments godoc
-// @Summary      List deployments in an environment
-// @Description  Returns all service versions deployed in the environment
-// @Tags         environments
-// @Produce      json
-// @Param        env_name  path  string  true  "Environment name"
-// @Success      200  {array}  contracts.ServiceVersionContract
-// @Router       /v1/environments/{env_name}/deployments [get]
-func ListEnvironmentDeployments(w http.ResponseWriter, r *http.Request) {
-	envName := chi.URLParam(r, "env_name")
-	deployments := []contracts.ServiceVersionContract{}
-	for from, edges := range GlobalGraph.Graph.Edges {
-		for _, edge := range edges {
-			if edge.Type == "deployed_in" && edge.To == envName {
-				if node, ok := GlobalGraph.Graph.Nodes[from]; ok && node.Kind == "service_version" {
-					var ver contracts.ServiceVersionContract
-					b, _ := json.Marshal(node)
-					_ = json.Unmarshal(b, &ver)
-					deployments = append(deployments, ver)
-				}
-			}
-		}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(deployments)
-}
-
-// getNodeKeys returns a slice of all keys in the given map (for logging)
-func getNodeKeys(m map[string]*graph.Node) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
 }
