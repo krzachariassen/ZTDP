@@ -40,9 +40,9 @@
       .then(data => {
         const nodes = Object.values(data.Nodes).map(n => ({
           data: {
-            id: n.id,
-            label: `${n.kind}: ${n.metadata.name}`,
-            kind: n.kind,
+            id: n.id || n.ID,
+            label: `${n.kind || n.Kind}: ${(n.metadata && (n.metadata.name || n.metadata.Name)) || n.ID || n.id}`,
+            kind: n.kind || n.Kind,
             details: n
           }
         }));

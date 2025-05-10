@@ -9,9 +9,14 @@ import (
 	"github.com/krzachariassen/ZTDP/api/handlers"
 	"github.com/krzachariassen/ZTDP/api/server"
 	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
 func main() {
+	// Create a new, empty registry (policies will register themselves dynamically)
+	policyRegistry := policies.NewPolicyRegistry()
+	graph.SetPolicyRegistry(policyRegistry)
+
 	var backend graph.GraphBackend
 	switch os.Getenv("ZTDP_GRAPH_BACKEND") {
 	case "redis":

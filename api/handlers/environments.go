@@ -2,13 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/graph"
-	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
 // CreateEnvironment godoc
@@ -63,62 +61,6 @@ func ListEnvironments(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(envs)
 }
 
-// LinkServiceToEnvironment godoc
-// @Summary      Link a service to an environment
-// @Description  Creates a 'deployed_in' edge from a service to an environment, ensuring the service belongs to the specified application
-// @Tags         environments
-// @Produce      json
-// @Param        app_name      path  string  true  "Application name"
-// @Param        service_name  path  string  true  "Service name"
-// @Param        env_name      path  string  true  "Environment name"
-// @Success      201  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
-// @Router       /v1/applications/{app_name}/services/{service_name}/environments/{env_name} [post]
-func LinkServiceToEnvironment(w http.ResponseWriter, r *http.Request) {
-	appName := chi.URLParam(r, "app_name")
-	serviceName := chi.URLParam(r, "service_name")
-	envName := chi.URLParam(r, "env_name")
-	serviceNode, serviceOk := GlobalGraph.Graph.Nodes[serviceName]
-	envNode, envOk := GlobalGraph.Graph.Nodes[envName]
-	if !serviceOk || serviceNode.Kind != "service" {
-		WriteJSONError(w, "Service not found", http.StatusNotFound)
-		return
-	}
-	if !envOk || envNode.Kind != "environment" {
-		WriteJSONError(w, "Environment not found", http.StatusNotFound)
-		return
-	}
-	// Ensure the service belongs to the specified application
-	appEdgeFound := false
-	for _, edge := range GlobalGraph.Graph.Edges[appName] {
-		if edge.To == serviceName && edge.Type == "owns" {
-			appEdgeFound = true
-			break
-		}
-	}
-	if !appEdgeFound {
-		WriteJSONError(w, "Service does not belong to the specified application", http.StatusNotFound)
-		return
-	}
-	// Enforce allowed_in policy
-	if !policies.IsEnvironmentAllowedForApp(GlobalGraph.Graph, appName, envName) {
-		WriteJSONError(w, "Environment is not allowed for this application", http.StatusForbidden)
-		return
-	}
-	if err := GlobalGraph.AddEdge(serviceName, envName, "deployed_in"); err != nil {
-		fmt.Printf("AddEdge error: %v\n", err)
-		WriteJSONError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := GlobalGraph.Save(); err != nil {
-		WriteJSONError(w, "Failed to save graph", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"status": "linked"})
-
-}
-
 // LinkAppAllowedInEnvironment godoc
 // @Summary      Add an allowed_in policy edge from an application to an environment
 // @Description  Creates an 'allowed_in' policy edge from an application to an environment
@@ -142,8 +84,15 @@ func LinkAppAllowedInEnvironment(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Environment not found", http.StatusNotFound)
 		return
 	}
-	// Use policy function to check if already allowed
-	if policies.IsEnvironmentAllowedForApp(GlobalGraph.Graph, appName, envName) {
+	// Use policy function to check if already allowed (removed, just check for existing edge)
+	alreadyAllowed := false
+	for _, edge := range GlobalGraph.Graph.Edges[appName] {
+		if edge.Type == "allowed_in" && edge.To == envName {
+			alreadyAllowed = true
+			break
+		}
+	}
+	if alreadyAllowed {
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]string{"status": "already allowed"})
 		return
@@ -158,6 +107,17 @@ func LinkAppAllowedInEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"status": "allowed"})
+}
+
+// Helper to get allowed environments for an application
+func getAllowedEnvironmentsForApp(g *graph.Graph, appID string) []string {
+	allowed := []string{}
+	for _, edge := range g.Edges[appID] {
+		if edge.Type == "allowed_in" {
+			allowed = append(allowed, edge.To)
+		}
+	}
+	return allowed
 }
 
 // ListAllowedEnvironments godoc
@@ -176,7 +136,7 @@ func ListAllowedEnvironments(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Application not found", http.StatusNotFound)
 		return
 	}
-	allowedIDs := policies.GetAllowedEnvironmentsForApp(GlobalGraph.Graph, appName)
+	allowedIDs := getAllowedEnvironmentsForApp(GlobalGraph.Graph, appName)
 	allowedEnvs := []contracts.EnvironmentContract{}
 	for _, envID := range allowedIDs {
 		node, ok := GlobalGraph.Graph.Nodes[envID]
@@ -273,7 +233,14 @@ func AddAllowedEnvironments(w http.ResponseWriter, r *http.Request) {
 			WriteJSONError(w, "Environment not found: "+envName, http.StatusNotFound)
 			return
 		}
-		if !policies.IsEnvironmentAllowedForApp(GlobalGraph.Graph, appName, envName) {
+		alreadyAllowed := false
+		for _, edge := range GlobalGraph.Graph.Edges[appName] {
+			if edge.Type == "allowed_in" && edge.To == envName {
+				alreadyAllowed = true
+				break
+			}
+		}
+		if !alreadyAllowed {
 			GlobalGraph.AddEdge(appName, envName, "allowed_in")
 		}
 	}
