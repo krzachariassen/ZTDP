@@ -57,6 +57,10 @@
 - [ ] **Reconciliation Loop**
   - [ ] Detect drift and trigger reconcile events
 
+- [ ] **Event Store (Pluggable Resource Provider)**
+  - [ ] Minimal RP that captures all platform events and operation logs
+  - [ ] Allow custom implementations for compliance/integration
+
 ---
 
 ## Phase 3: Developer Experience & Docs
