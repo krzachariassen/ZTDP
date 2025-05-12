@@ -61,6 +61,21 @@ definitions:
       public:
         type: boolean
     type: object
+  contracts.ServiceVersionContract:
+    properties:
+      config_ref:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      owner:
+        type: string
+      version:
+        type: string
+    type: object
 info:
   contact: {}
 paths:
@@ -379,10 +394,9 @@ paths:
       summary: Get a service for an application
       tags:
       - services
-  /v1/applications/{app_name}/services/{service_name}/environments/{env_name}:
-    post:
-      description: Creates a 'deployed_in' edge from a service to an environment,
-        ensuring the service belongs to the specified application
+  /v1/applications/{app_name}/services/{service_name}/versions:
+    get:
+      description: Returns all versions for a service
       parameters:
       - description: Application name
         in: path
@@ -394,11 +408,82 @@ paths:
         name: service_name
         required: true
         type: string
-      - description: Environment name
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/contracts.ServiceVersionContract'
+            type: array
+      summary: List all versions for a service
+      tags:
+      - services
+    post:
+      consumes:
+      - application/json
+      description: Creates a new version for a service
+      parameters:
+      - description: Application name
         in: path
-        name: env_name
+        name: app_name
         required: true
         type: string
+      - description: Service name
+        in: path
+        name: service_name
+        required: true
+        type: string
+      - description: Service version payload
+        in: body
+        name: version
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/contracts.ServiceVersionContract'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new service version
+      tags:
+      - services
+  /v1/applications/{app_name}/services/{service_name}/versions/{version}/deploy:
+    post:
+      consumes:
+      - application/json
+      description: Deploys a specific service version to an environment
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: Service name
+        in: path
+        name: service_name
+        required: true
+        type: string
+      - description: Service version
+        in: path
+        name: version
+        required: true
+        type: string
+      - description: Deployment target
+        in: body
+        name: env
+        required: true
+        schema:
+          type: object
       produces:
       - application/json
       responses:
@@ -408,15 +493,15 @@ paths:
             additionalProperties:
               type: string
             type: object
-        "404":
-          description: Not Found
+        "400":
+          description: Bad Request
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Link a service to an environment
+      summary: Deploy a service version to an environment
       tags:
-      - environments
+      - deployments
   /v1/applications/{app_name}/services/schema:
     get:
       description: Returns the JSON schema for the service contract
@@ -526,6 +611,27 @@ paths:
       summary: Create a new environment
       tags:
       - environments
+  /v1/environments/{env_name}/deployments:
+    get:
+      description: Returns all service versions deployed in the environment
+      parameters:
+      - description: Environment name
+        in: path
+        name: env_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/contracts.ServiceVersionContract'
+            type: array
+      summary: List deployments in an environment
+      tags:
+      - deployments
   /v1/graph:
     get:
       description: Loads the latest graph from the backend and returns it as JSON

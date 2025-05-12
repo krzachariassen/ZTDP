@@ -17,7 +17,7 @@ func (p *MustDeployToDevBeforeProdPolicy) Validate(g GraphView, m Mutation) erro
 	if m.Type != "add_edge" || m.Edge == nil {
 		return nil // Only care about edge additions
 	}
-	if m.Edge.Type != "deployed_in" {
+	if m.Edge.Type != "deploy" {
 		return nil // Only care about deployments
 	}
 	// Only enforce for prod deployments
@@ -45,7 +45,7 @@ func (p *MustDeployToDevBeforeProdPolicy) Validate(g GraphView, m Mutation) erro
 	}
 	// Check if this version is already deployed to 'dev'
 	for _, e := range g.Edges[verNode.ID] {
-		if e.Type == "deployed_in" {
+		if e.Type == "deploy" {
 			devNode, ok := g.Nodes[e.To]
 			if ok && devNode.Kind == "environment" && devNode.Metadata["name"] == "dev" {
 				return nil // Already deployed to dev, allow
