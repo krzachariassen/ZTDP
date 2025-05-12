@@ -22,7 +22,7 @@ func (p *AllowedEnvironmentPolicy) Validate(g GraphView, m Mutation) error {
 		log.Printf("[AllowedEnvironmentPolicy] Skipping: mutation type is '%s' or edge is nil", m.Type)
 		return nil // Only care about edge additions
 	}
-	if m.Edge.Type != "deployed_in" {
+	if m.Edge.Type != "deploy" {
 		log.Printf("[AllowedEnvironmentPolicy] Skipping: edge type is '%s'", m.Edge.Type)
 		return nil // Only care about deployments
 	}

@@ -527,16 +527,113 @@
                 }
             }
         },
-        "/v1/applications/{app_name}/services/{service_name}/environments/{env_name}": {
-            "post": {
-                "description": "Creates a 'deployed_in' edge from a service to an environment, ensuring the service belongs to the specified application",
+        "/v1/applications/{app_name}/services/{service_name}/versions": {
+            "get": {
+                "description": "Returns all versions for a service",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "environments"
+                    "services"
                 ],
-                "summary": "Link a service to an environment",
+                "summary": "List all versions for a service",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Service name",
+                        "name": "service_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/contracts.ServiceVersionContract"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new version for a service",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "services"
+                ],
+                "summary": "Create a new service version",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Service name",
+                        "name": "service_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Service version payload",
+                        "name": "version",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/contracts.ServiceVersionContract"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{app_name}/services/{service_name}/versions/{version}/deploy": {
+            "post": {
+                "description": "Deploys a specific service version to an environment",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Deploy a service version to an environment",
                 "parameters": [
                     {
                         "type": "string",
@@ -554,10 +651,19 @@
                     },
                     {
                         "type": "string",
-                        "description": "Environment name",
-                        "name": "env_name",
+                        "description": "Service version",
+                        "name": "version",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Deployment target",
+                        "name": "env",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
                     }
                 ],
                 "responses": {
@@ -570,8 +676,8 @@
                             }
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -690,6 +796,38 @@
                             "type": "object",
                             "additionalProperties": {
                                 "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/environments/{env_name}/deployments": {
+            "get": {
+                "description": "Returns all service versions deployed in the environment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "List deployments in an environment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment name",
+                        "name": "env_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/contracts.ServiceVersionContract"
                             }
                         }
                     }
@@ -871,6 +1009,29 @@
                 },
                 "public": {
                     "type": "boolean"
+                }
+            }
+        },
+        "contracts.ServiceVersionContract": {
+            "type": "object",
+            "properties": {
+                "config_ref": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
                 }
             }
         }

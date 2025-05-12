@@ -102,11 +102,11 @@ go test ./...
 | GET    | `/v1/environments`                                              | List all environments                           |
 | POST   | `/v1/applications/{app}/environments/{env}/allowed`             | Allow an application to deploy to an environment|
 | GET    | `/v1/applications/{app}/environments/allowed`                   | List allowed environments for an application    |
-| POST   | `/v1/applications/{app}/services/{service}/environments/{env}`  | Deploy a service to an environment              |
+| POST   | `/v1/applications/{app}/services/{service}/environments/{env}`  | Deploy a service to an environment (creates a 'deploy' edge)              |
 | POST   | `/v1/applications/{app}/services/{service}/versions`              | Create a new service version                    |
 | GET    | `/v1/applications/{app}/services/{service}/versions`              | List all versions for a service                 |
 | POST   | `/v1/applications/{app}/services/{service}/versions/{version}/deploy` | Deploy a service version to an environment      |
-| GET    | `/v1/environments/{env}/deployments`                              | List deployments in an environment              |
+| GET    | `/v1/environments/{env}/deployments`                              | List deployments in an environment (uses 'deploy' edges)              |
 | GET    | `/v1/graph`                                                     | View current global DAG                         |
 | GET    | `/v1/status`                                                    | Platform status                                 |
 | GET    | `/v1/healthz`                                                   | Health check                                    |
@@ -240,6 +240,8 @@ worker_service="checkout-worker"
 curl -X POST http://localhost:8080/v1/applications/checkout/services/$worker_service/environments/$deploy_env
 ```
 
+> **Note:** This operation now creates a `deploy` edge in the graph (previously `deployed_in`).
+
 ### 10. Attempt to Deploy Service to Not-Allowed Environment (Should Fail)
 ```bash
 # Remove prod from allowed environments for checkout (replace allowed list with only dev)
@@ -285,7 +287,7 @@ swag init -g api/server/server.go
 ## 🔐 Secrets & State (Planned)
 
 - Secrets will be stored per environment and injected at runtime.
-- State (events, node status) will be tracked in Redis initially.
+- State (events, node status) will be tracked in Redis initially (deploy edges in the graph represent deployment intent and status).
 
 ---
 

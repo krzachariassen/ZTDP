@@ -17,11 +17,11 @@ func (p *BlockDirectServiceToEnvEdgePolicy) Validate(g GraphView, m Mutation) er
 	if m.Type != "add_edge" || m.Edge == nil {
 		return nil
 	}
-	if m.Edge.Type == "deployed_in" {
+	if m.Edge.Type == "deploy" {
 		fromNode, ok := g.Nodes[m.Edge.From]
 		toNode, ok2 := g.Nodes[m.Edge.To]
 		if ok && ok2 && fromNode.Kind == "service" && toNode.Kind == "environment" {
-			return fmt.Errorf("direct service-to-environment 'deployed_in' edges are not allowed")
+			return fmt.Errorf("direct service-to-environment 'deploy' edges are not allowed")
 		}
 	}
 	return nil

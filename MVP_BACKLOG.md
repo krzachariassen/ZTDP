@@ -14,7 +14,7 @@
 - [x] **API: Environment Management**
   - [x] Create, get, and list Environments
   - [x] Link Applications to allowed Environments (policy)
-  - [x] Link Services to Environments (deployed_in)
+  - [x] Link Services to Environments (deploy)
 
 - [x] **Graph Engine**
   - [x] Store Applications, Services, Environments as nodes in in-memory/Redis graph

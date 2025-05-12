@@ -105,10 +105,10 @@ func main() {
 		global.AddNode(workerSvcNode)
 		global.AddEdge(app.Metadata.Name, workerSvc.Metadata.Name, "owns")
 
-		// Link services to environments (deployed_in)
-		// global.AddEdge(svc.Metadata.Name, envDev.Metadata.Name, "deployed_in")
-		// global.AddEdge(workerSvc.Metadata.Name, envDev.Metadata.Name, "deployed_in")
-		// global.AddEdge(svc.Metadata.Name, envProd.Metadata.Name, "deployed_in")
+		// Link services to environments (deploy)
+		// global.AddEdge(svc.Metadata.Name, envDev.Metadata.Name, "deploy")
+		// global.AddEdge(workerSvc.Metadata.Name, envDev.Metadata.Name, "deploy")
+		// global.AddEdge(svc.Metadata.Name, envProd.Metadata.Name, "deploy")
 
 		// Add service version for checkout-api
 		version := "1.0.0"
@@ -125,8 +125,8 @@ func main() {
 		global.AddEdge(svc.Metadata.Name, serviceVersion.ID(), "has_version")
 
 		// Deploy service version to environments
-		global.AddEdge(serviceVersion.ID(), envDev.Metadata.Name, "deployed_in")
-		global.AddEdge(serviceVersion.ID(), envProd.Metadata.Name, "deployed_in")
+		global.AddEdge(serviceVersion.ID(), envDev.Metadata.Name, "deploy")
+		global.AddEdge(serviceVersion.ID(), envProd.Metadata.Name, "deploy")
 
 		// Add service version for checkout-worker
 		workerVersion := "1.0.0"
@@ -141,8 +141,8 @@ func main() {
 		workerServiceVersionNode, _ := graph.ResolveContract(workerServiceVersion)
 		global.AddNode(workerServiceVersionNode)
 		global.AddEdge(workerSvc.Metadata.Name, workerServiceVersion.ID(), "has_version")
-		global.AddEdge(workerServiceVersion.ID(), envDev.Metadata.Name, "deployed_in")
-		global.AddEdge(workerServiceVersion.ID(), envProd.Metadata.Name, "deployed_in")
+		global.AddEdge(workerServiceVersion.ID(), envDev.Metadata.Name, "deploy")
+		global.AddEdge(workerServiceVersion.ID(), envProd.Metadata.Name, "deploy")
 
 		// Save it
 		if err := global.Save(); err != nil {

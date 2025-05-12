@@ -41,7 +41,7 @@ func DeployServiceVersion(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Environment not found", http.StatusNotFound)
 		return
 	}
-	if err := GlobalGraph.Graph.AddEdge(verID, req.Environment, "deployed_in"); err != nil {
+	if err := GlobalGraph.Graph.AddEdge(verID, req.Environment, "deploy"); err != nil {
 		// Policy errors should return 403 Forbidden
 		if err.Error() == "deployment to environment '"+req.Environment+"' is not allowed for application '"+chi.URLParam(r, "app_name")+"'" ||
 			err.Error() == "must deploy service version "+verID+" to 'dev' before deploying to 'prod'" ||
@@ -73,7 +73,7 @@ func ListEnvironmentDeployments(w http.ResponseWriter, r *http.Request) {
 	deployments := []contracts.ServiceVersionContract{}
 	for from, edges := range GlobalGraph.Graph.Edges {
 		for _, edge := range edges {
-			if edge.Type == "deployed_in" && edge.To == envName {
+			if edge.Type == "deploy" && edge.To == envName {
 				if node, ok := GlobalGraph.Graph.Nodes[from]; ok && node.Kind == "service_version" {
 					var ver contracts.ServiceVersionContract
 					b, _ := json.Marshal(node)
