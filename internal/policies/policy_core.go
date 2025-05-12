@@ -42,8 +42,18 @@ type PolicyRegistry struct {
 	policies map[string]Policy
 }
 
+// NewPolicyRegistry returns an empty PolicyRegistry.
 func NewPolicyRegistry() *PolicyRegistry {
 	return &PolicyRegistry{policies: make(map[string]Policy)}
+}
+
+// NewPolicyRegistryWithDefaults returns a PolicyRegistry with all built-in policies registered.
+func NewPolicyRegistryWithDefaults() *PolicyRegistry {
+	reg := NewPolicyRegistry()
+	reg.Register(NewAllowedEnvironmentPolicy())
+	reg.Register(NewMustDeployToDevBeforeProdPolicy())
+	reg.Register(NewBlockDirectServiceToEnvEdgePolicy())
+	return reg
 }
 
 func (r *PolicyRegistry) Register(policy Policy) {
@@ -61,13 +71,4 @@ func (r *PolicyRegistry) All() []Policy {
 		result = append(result, p)
 	}
 	return result
-}
-
-// NewDefaultPolicyRegistry returns a PolicyRegistry with all built-in policies registered.
-func NewDefaultPolicyRegistry() *PolicyRegistry {
-	reg := NewPolicyRegistry()
-	reg.Register(NewAllowedEnvironmentPolicy())
-	reg.Register(NewMustDeployToDevBeforeProdPolicy())
-	reg.Register(NewBlockDirectServiceToEnvEdgePolicy())
-	return reg
 }

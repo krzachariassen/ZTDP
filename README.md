@@ -265,6 +265,7 @@ curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-wo
 | Swagger/OpenAPI docs | ✅ Complete    |
 | Resource Providers   | ⏳ Coming up   |
 | Event orchestration  | ⏳ Coming up   |
+| Event Store (pluggable RP) | ⏳ Coming up   |
 | Reconciliation loop  | ⏳ Coming up   |
 
 See: [`MVP_BACKLOG.md`](MVP_BACKLOG.md) for detailed backlog and progress.
