@@ -144,6 +144,26 @@ func main() {
 		global.AddEdge(workerServiceVersion.ID(), envDev.Metadata.Name, "deploy")
 		global.AddEdge(workerServiceVersion.ID(), envProd.Metadata.Name, "deploy")
 
+		// Add resource node (e.g., Postgres DB) as a child of the application
+		postgresResource := &graph.Node{
+			ID:   "postgres-db",
+			Kind: "resource",
+			Metadata: map[string]interface{}{
+				"name":  "postgres-db",
+				"owner": "platform-team",
+				"config_ref": "postgres-config",
+			},
+			Spec: map[string]interface{}{
+				"type": "postgres",
+				"version": "15.0",
+			},
+		}
+		global.AddNode(postgresResource)
+		global.AddEdge(app.Metadata.Name, postgresResource.ID, "owns")
+
+		// Add 'uses' edge from worker service to postgres resource
+		global.AddEdge(workerSvc.Metadata.Name, postgresResource.ID, "uses")
+
 		// Save it
 		if err := global.Save(); err != nil {
 			fmt.Printf("❌ Failed to save global graph: %v\n", err)
