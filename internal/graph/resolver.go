@@ -31,3 +31,6 @@ func ResolveContract(c contracts.Contract) (*Node, error) {
 		Spec:     spec,
 	}, nil
 }
+
+// This function was moved to resource_registry.go
+// See resource_registry.LoadNode

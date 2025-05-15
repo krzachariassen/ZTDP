@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/resources"
 )
 
 // CreateEnvironment godoc
@@ -46,7 +47,7 @@ func ListEnvironments(w http.ResponseWriter, r *http.Request) {
 	envs := []contracts.EnvironmentContract{}
 	for _, node := range GlobalGraph.Graph.Nodes {
 		if node.Kind == "environment" {
-			contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+			contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
 				Name:  node.Metadata["name"].(string),
 				Owner: node.Metadata["owner"].(string),
 			})
@@ -141,7 +142,7 @@ func ListAllowedEnvironments(w http.ResponseWriter, r *http.Request) {
 	for _, envID := range allowedIDs {
 		node, ok := GlobalGraph.Graph.Nodes[envID]
 		if ok && node.Kind == "environment" {
-			contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+			contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
 				Name:  node.Metadata["name"].(string),
 				Owner: node.Metadata["owner"].(string),
 			})

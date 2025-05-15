@@ -1,0 +1,14 @@
+/* Styles for the Zero Trust Developer Platform Graph Visualization */
+
+/* Mini-graph styling */
+#mini-graph {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  background-color: #f8fafc;
+}
+
+#relation-list {
+  margin-top: 1rem;
+}

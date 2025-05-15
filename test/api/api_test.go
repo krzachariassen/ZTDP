@@ -140,6 +140,59 @@ func addAllowedEnvironments(t *testing.T, router http.Handler, appName string, e
 	}
 }
 
+// --- Resource API helpers ---
+func createResource(t *testing.T, router http.Handler, resourceName, resourceType, configRef string) {
+	resource := map[string]interface{}{
+		"kind": "resource",
+		"metadata": map[string]interface{}{
+			"name": resourceName,
+		},
+		"spec": map[string]interface{}{
+			"type":       resourceType,
+			"config_ref": configRef,
+		},
+	}
+	body, _ := json.Marshal(resource)
+	req := httptest.NewRequest("POST", "/v1/resources", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated && resp.Code != http.StatusConflict {
+		t.Fatalf("failed to create resource %s, status: %d", resourceName, resp.Code)
+	}
+}
+
+func addResourceToApplication(t *testing.T, router http.Handler, appName, resourceName string) {
+	url := "/v1/applications/" + appName + "/resources/" + resourceName
+	req := httptest.NewRequest("POST", url, nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated && resp.Code != http.StatusConflict {
+		t.Fatalf("failed to add resource %s to application %s, status: %d", resourceName, appName, resp.Code)
+	}
+}
+
+func linkServiceToResource(t *testing.T, router http.Handler, appName, serviceName, resourceName string) {
+	url := "/v1/applications/" + appName + "/services/" + serviceName + "/resources/" + resourceName
+	req := httptest.NewRequest("POST", url, nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated && resp.Code != http.StatusConflict {
+		t.Fatalf("failed to link service %s to resource %s, status: %d", serviceName, resourceName, resp.Code)
+	}
+}
+
+func getJSON(t *testing.T, router http.Handler, url string) []byte {
+	req := httptest.NewRequest("GET", url, nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET %s failed, status: %d", url, resp.Code)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	return body
+}
+
 // --- Focused setup helpers ---
 func setupApplications(t *testing.T, router http.Handler) {
 	createApplication(t, router, "checkout")
@@ -406,5 +459,51 @@ func TestDisallowDeploymentToNotAllowedEnv(t *testing.T) {
 	router.ServeHTTP(resp, req)
 	if resp.Code != http.StatusForbidden && resp.Code != http.StatusBadRequest {
 		t.Errorf("expected forbidden or bad request when deploying to not-allowed environment, got %d", resp.Code)
+	}
+}
+
+func TestResourceCatalogAndLinking(t *testing.T) {
+	router := newTestRouter(t)
+	setupApplications(t, router)
+	setupServices(t, router)
+
+	// 1. Create resources in the catalog
+	createResource(t, router, "pg-db", "postgres", "config/postgres/pg-db")
+	createResource(t, router, "redis-cache", "redis", "config/redis/redis-cache")
+
+	// 2. Add resources to application
+	addResourceToApplication(t, router, "checkout", "pg-db")
+	addResourceToApplication(t, router, "checkout", "redis-cache")
+
+	// 3. Link services to resources
+	linkServiceToResource(t, router, "checkout", "checkout-api", "pg-db")
+	linkServiceToResource(t, router, "checkout", "checkout-api", "redis-cache")
+	linkServiceToResource(t, router, "checkout", "checkout-worker", "pg-db")
+
+	// 4. List all resources in the catalog
+	catalog := getJSON(t, router, "/v1/resources")
+	if !bytes.Contains(catalog, []byte("pg-db")) || !bytes.Contains(catalog, []byte("redis-cache")) {
+		t.Error("expected both resources in catalog list")
+	}
+
+	// 5. List resources owned by application
+	appResources := getJSON(t, router, "/v1/applications/checkout/resources")
+	if !bytes.Contains(appResources, []byte("pg-db")) || !bytes.Contains(appResources, []byte("redis-cache")) {
+		t.Error("expected both resources in application resource list")
+	}
+
+	// 6. List resources used by checkout-api
+	apiResources := getJSON(t, router, "/v1/applications/checkout/services/checkout-api/resources")
+	if !bytes.Contains(apiResources, []byte("pg-db")) || !bytes.Contains(apiResources, []byte("redis-cache")) {
+		t.Error("expected both resources in checkout-api resource list")
+	}
+
+	// 7. List resources used by checkout-worker (should only have pg-db)
+	workerResources := getJSON(t, router, "/v1/applications/checkout/services/checkout-worker/resources")
+	if !bytes.Contains(workerResources, []byte("pg-db")) {
+		t.Error("expected pg-db in checkout-worker resource list")
+	}
+	if bytes.Contains(workerResources, []byte("redis-cache")) {
+		t.Error("did not expect redis-cache in checkout-worker resource list")
 	}
 }
