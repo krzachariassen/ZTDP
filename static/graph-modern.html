@@ -1,0 +1,2266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZTDP Platform Graph</title>
+  <!-- Modern dependencies -->
+  <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <!-- Add fcose layout - high-quality force-directed layout like yFiles -->
+  <script src="https://unpkg.com/layout-base@2.1.0/layout-base.js"></script>
+  <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
+  <script src="https://unpkg.com/cytoscape-fcose@2.1.0/cytoscape-fcose.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="graph-modern.css">
+  
+  <style>
+    :root {
+      --main-bg: #f8f9fa;
+      --panel-bg: #fff;
+      --primary: #3B82F6;
+      --primary-dark: #2563EB;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --purple: #8B5CF6;
+      --info: #06B6D4;
+      --gray: #6B7280;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --radius: 8px;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: var(--main-bg);
+      color: #111827;
+      line-height: 1.5;
+    }
+    
+    .container {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr auto;
+      min-height: 100vh;
+    }
+    
+    header {
+      background-color: white;
+      padding: 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .logo {
+      font-weight: 700;
+      font-size: 1.25rem;
+      color: var(--primary-dark);
+      display: flex;
+      align-items: center;
+    }
+    
+    .logo i {
+      margin-right: 0.5rem;
+    }
+    
+    .content {
+      display: grid;
+      grid-template-columns: 1fr 350px;
+      height: calc(100vh - 130px);
+    }
+    
+    #graph {
+      height: 100%;
+      width: 100%;
+      background-color: white;
+      position: relative;
+    }
+    
+    .panel {
+      background: var(--panel-bg);
+      padding: 1rem;
+      border-left: 1px solid #e5e7eb;
+      overflow-y: auto;
+    }
+    
+    .panel-title {
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      color: #1f2937;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .panel-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: auto;
+    }
+    
+    .panel-tab {
+      background: none;
+      border: none;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--gray);
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+    
+    .panel-tab:hover {
+      background: #f3f4f6;
+    }
+    
+    .panel-tab.active {
+      background: var(--primary);
+      color: white;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .panel-tabs {
+      display: flex;
+      gap: 0.25rem;
+      margin-left: auto;
+    }
+    
+    .panel-tab {
+      background: none;
+      border: none;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      border-radius: var(--radius);
+      color: #6b7280;
+    }
+    
+    .panel-tab:hover {
+      background-color: #f3f4f6;
+    }
+    
+    .panel-tab.active {
+      background-color: var(--primary);
+      color: white;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .node-detail-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .node-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 0.75rem;
+      flex-shrink: 0;
+    }
+    
+    .node-title {
+      font-weight: 600;
+      font-size: 1rem;
+      flex-grow: 1;
+    }
+    
+    .node-kind {
+      font-size: 0.8rem;
+      color: var(--gray);
+      margin-top: 0.25rem;
+    }
+    
+    .detail-section {
+      margin-bottom: 1rem;
+    }
+    
+    .section-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+      color: #4b5563;
+    }
+    
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin-bottom: 1rem;
+    }
+    
+    .detail-table td {
+      padding: 0.5rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    
+    .detail-table td:first-child {
+      font-weight: 500;
+      width: 40%;
+      color: #4b5563;
+    }
+    
+    .detail-value {
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      background: #f9fafb;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 300px;
+      color: var(--gray);
+    }
+    
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+    
+    /* Notification styles */
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 16px;
+      background: white;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      z-index: 9999;
+      transform: translateX(120%);
+      opacity: 0;
+      transition: all 0.3s ease;
+      max-width: 300px;
+    }
+    
+    .notification.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    
+    .notification i {
+      margin-right: 10px;
+      font-size: 18px;
+    }
+    
+    .notification.info i {
+      color: var(--primary);
+    }
+    
+    .notification.success i {
+      color: var(--success);
+    }
+    
+    .notification.warning i {
+      color: var(--warning);
+    }
+    
+    .notification.error i {
+      color: var(--danger);
+    }
+    
+    /* Edge tooltip styling */
+    .edge-tooltip {
+      background: rgba(255, 255, 255, 0.9) !important;
+      color: #1f2937;
+      border-radius: 4px;
+      font-size: 12px;
+      padding: 4px 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+    }
+    
+    .edge-tooltip i {
+      margin-right: 5px;
+      color: var(--primary);
+    }
+    
+    .toolbar {
+      padding: 0.5rem 1rem;
+      background: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e5e7eb;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    
+    @media (max-width: 768px) {
+      .toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      
+      .toolbar > div {
+        width: 100%;
+        margin-bottom: 0.5rem;
+      }
+      
+      .search-box {
+        width: 100%;
+      }
+      
+      .search-box input {
+        flex: 1;
+      }
+      
+      .filter-group {
+        width: 100%;
+      }
+      
+      .filter-group select {
+        width: 100%;
+      }
+    }
+    
+    .toolbar-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+    
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: white;
+      border: 1px solid #d1d5db;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    
+    .search-box input {
+      border: none;
+      padding: 0.5rem 0.75rem;
+      outline: none;
+      font-family: inherit;
+      font-size: 0.875rem;
+      width: 220px;
+    }
+    
+    .search-box .btn {
+      border: none;
+      border-radius: 0;
+      border-left: 1px solid #d1d5db;
+      margin: 0;
+    }
+    
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      color: #374151;
+      border: 1px solid #d1d5db;
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn:hover {
+      background: #f9fafb;
+      border-color: #9ca3af;
+    }
+    
+    .btn-group {
+      display: flex;
+      border: 1px solid #d1d5db;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    
+    .btn-group .btn {
+      border: none;
+      border-radius: 0;
+      border-right: 1px solid #d1d5db;
+      margin: 0;
+    }
+    
+    .btn-group .btn:last-child {
+      border-right: none;
+    }
+    
+    .search-box {
+      display: flex;
+      border: 1px solid #d1d5db;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    
+    .search-box input {
+      border: none;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.875rem;
+      outline: none;
+      min-width: 200px;
+    }
+    
+    .search-box .btn {
+      border: none;
+      border-radius: 0;
+      border-left: 1px solid #d1d5db;
+    }
+    
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+      border-color: var(--primary-dark);
+    }
+    
+    .btn-primary:hover {
+      background-color: var(--primary-dark);
+      color: white;
+    }
+    
+    .btn-active {
+      background-color: #f0f9ff;
+      border-color: #60a5fa;
+      color: var(--primary-dark);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    
+    .btn i {
+      margin-right: 0.375rem;
+      font-size: 0.875rem;
+    }
+    
+    .filter-group {
+      display: flex;
+      background: white;
+      border: 1px solid #d1d5db;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    
+    .filter-group span {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.875rem;
+      border-right: 1px solid #d1d5db;
+      display: flex;
+      align-items: center;
+      color: #6b7280;
+    }
+    
+    .filter-group select {
+      border: none;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.875rem;
+      font-family: inherit;
+      outline: none;
+      color: #111827;
+      flex: 1;
+      min-width: 150px;
+    }
+
+    .tippy-box {
+      background-color: white;
+      color: #111827;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 0.5rem;
+      font-size: 0.875rem;
+      border: 1px solid #e5e7eb;
+    }
+
+    .tippy-content {
+      padding: 0.25rem;
+    }
+
+    .edge-tooltip {
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+    }
+
+    .edge-tooltip i {
+      margin-right: 0.375rem;
+      color: var(--primary);
+    }
+
+    footer {
+      padding: 0.75rem;
+      font-size: 0.75rem;
+      color: #6b7280;
+      text-align: center;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .loader {
+      border: 3px solid #f3f3f3;
+      border-radius: 50%;
+      border-top: 3px solid var(--primary);
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Node styling classes for legend */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.5rem 0;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      font-size: 0.75rem;
+      margin-right: 0.75rem;
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      margin-right: 0.375rem;
+    }
+
+    /* Node type colors */
+    .color-application { background-color: var(--primary); }
+    .color-service { background-color: var(--success); }
+    .color-environment { background-color: var(--warning); }
+    .color-service_version { background-color: var(--purple); }
+    .color-resource { background-color: var(--info); }
+    .color-resource_type { background-color: #90CAF9; }
+    .color-resource_register { background-color: #FFD700; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <i class="fa-solid fa-diagram-project"></i>
+        ZTDP Platform Graph
+      </div>
+      <div>
+        <a href="/graph.html" class="btn">
+          <i class="fa-solid fa-rotate-left"></i>
+          Classic View
+        </a>
+      </div>
+    </header>
+    
+    <div class="toolbar">
+      <div class="toolbar-actions">
+        <button id="btn-fit" class="btn">
+          <i class="fa-solid fa-expand"></i>
+          Fit View
+        </button>
+        <button id="btn-layout" class="btn">
+          <i class="fa-solid fa-diagram-project"></i>
+          Re-layout
+        </button>
+        <div class="btn-group">
+          <button id="btn-zoom-in" class="btn">
+            <i class="fa-solid fa-magnifying-glass-plus"></i>
+          </button>
+          <button id="btn-zoom-out" class="btn">
+            <i class="fa-solid fa-magnifying-glass-minus"></i>
+          </button>
+        </div>
+        <button id="btn-focus-resources" class="btn">
+          <i class="fa-solid fa-sitemap"></i>
+          Focus on Resources
+        </button>
+        <button id="btn-toggle-chain" class="btn" title="Toggle chain highlighting on/off">
+          <i class="fa-solid fa-link"></i>
+          Chain View
+        </button>
+      </div>
+      
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search nodes...">
+        <button id="search-button" class="btn">
+          <i class="fa-solid fa-search"></i>
+        </button>
+        <button id="btn-clear-search" class="btn">
+          <i class="fa-solid fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="filter-group">
+        <span><i class="fa-solid fa-filter"></i></span>
+        <select id="node-filter">
+          <option value="all">All Node Types</option>
+          <option value="application">Applications</option>
+          <option value="service">Services</option>
+          <option value="environment">Environments</option>
+          <option value="service_version">Service Versions</option>
+          <option value="resource_register">Resource Catalog</option>
+          <option value="resource_type">Resource Types</option>
+          <option value="resource">Resource Instances</option>
+        </select>
+      </div>
+      
+    </div>
+
+    <div class="content">
+      <div id="graph">
+        <div class="loading-overlay">
+          <div class="loader"></div>
+        </div>
+      </div>
+      
+      <div class="panel">
+        <div class="panel-title">
+          Node Details
+          <div class="panel-tabs">
+            <button class="panel-tab active" data-tab="details">Details</button>
+            <button class="panel-tab" data-tab="relations">Relations</button>
+          </div>
+        </div>
+        <div id="details-content" class="tab-content active" data-tab="details">
+          <div class="empty-state">
+            <i class="fa-solid fa-circle-info"></i>
+            <p>Click on a node to see details</p>
+          </div>
+        </div>
+        <div id="relations-content" class="tab-content" data-tab="relations">
+          <div class="empty-state">
+            <i class="fa-solid fa-circle-info"></i>
+            <p>Click on a node to see its relationships</p>
+          </div>
+          <div id="mini-graph" style="height: 300px; display: none;"></div>
+          <div id="relation-list" style="display: none;">
+            <div class="section-title" style="margin-top: 1rem;">Connection Details</div>
+          </div>
+        </div>
+        
+        <div class="panel-title" style="margin-top: 1.5rem">
+          Legend
+        </div>
+        <div class="legend">
+          <div class="legend-item">
+            <div class="legend-color color-application"></div>
+            <span>Application</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color color-service"></div>
+            <span>Service</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color color-environment"></div>
+            <span>Environment</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color color-service_version"></div>
+            <span>Service Version</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color color-resource_register"></div>
+            <span>Resource Catalog</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color color-resource_type"></div>
+            <span>Resource Type</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color color-resource"></div>
+            <span>Resource</span>
+          </div>
+        </div>
+        
+        <div class="panel-title" style="margin-top: 1.5rem">
+          Relationship Types
+        </div>
+        <div class="legend">
+          <div class="legend-item" style="width: 45%">
+            <div class="legend-color" style="background-color: #2563EB;"></div>
+            <span>owns</span>
+          </div>
+          <div class="legend-item" style="width: 45%">
+            <div class="legend-color" style="background-color: #8B5CF6;"></div>
+            <span>has_version</span>
+          </div>
+          <div class="legend-item" style="width: 45%">
+            <div class="legend-color" style="background-color: #F59E0B;"></div>
+            <span>deploy</span>
+          </div>
+          <div class="legend-item" style="width: 45%">
+            <div class="legend-color" style="background-color: #06B6D4;"></div>
+            <span>uses</span>
+          </div>
+          <div class="legend-item" style="width: 45%">
+            <div class="legend-color" style="background-color: #10B981;"></div>
+            <span>instance_of</span>
+          </div>
+        </div>
+
+        <div class="panel-title" style="margin-top: 1.5rem">
+          Selection Highlights
+        </div>
+        <div style="font-size: 0.8rem; color: #4b5563; margin-bottom: 0.75rem;">
+          When a node is selected, the full relationship chain will be shown:
+        </div>
+        <div class="legend">
+          <div class="legend-item" style="width: 45%">
+            <div class="legend-color" style="border: 3px solid #111827; background-color: transparent;"></div>
+            <span>Selected node</span>
+          </div>
+          <div class="legend-item" style="width: 45%">
+            <div class="legend-color" style="border: 2px solid #6366F1; background-color: transparent;"></div>
+            <span>Chain nodes</span>
+          </div>
+        </div>
+        <div style="font-size: 0.8rem; color: #4b5563; margin: 0.5rem 0;">
+          The selection includes upward relationships (owns, has_version) and downward 
+          relationships (deploy, uses, instance_of) automatically, showing the complete
+          path from applications to resources.
+        </div>
+      </div>
+    </div>
+    
+    <footer>
+      Zero Touch Developer Platform | Graph Visualization
+    </footer>
+  </div>
+  
+  <script>
+    // Initialize Cytoscape
+    const cy = cytoscape({
+      container: document.getElementById('graph'),
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'label': 'data(label)',
+            'color': '#fff',
+            'font-weight': 500,
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-outline-width': 2,
+            'text-outline-opacity': 0.5,
+            'font-size': 12,
+            'text-wrap': 'wrap',
+            'text-max-width': '100px',
+            'transition-property': 'background-color, border-color, opacity, width, height',
+            'transition-duration': '0.3s'
+          }
+        },
+        {
+          selector: 'node[kind="application"]',
+          style: {
+            'background-color': '#3B82F6', // Primary blue
+            'text-outline-color': '#2563EB',
+            'width': 60,
+            'height': 60,
+            'font-size': 13,
+            'border-width': 1,
+            'border-color': '#2563EB',
+            'border-opacity': 0.5
+          }
+        },
+        {
+          selector: 'node[kind="service"]',
+          style: {
+            'background-color': '#10B981', // Success green
+            'text-outline-color': '#059669',
+            'width': 50,
+            'height': 50,
+            'font-size': 12,
+            'border-width': 1,
+            'border-color': '#059669',
+            'border-opacity': 0.5
+          }
+        },
+        {
+          selector: 'node[kind="service_version"]',
+          style: {
+            'background-color': '#8B5CF6', // Purple
+            'text-outline-color': '#7C3AED',
+            'width': 40,
+            'height': 40,
+            'font-size': 11,
+            'border-width': 1,
+            'border-color': '#7C3AED',
+            'border-opacity': 0.5
+          }
+        },
+        {
+          selector: 'node[kind="environment"]',
+          style: {
+            'background-color': '#F59E0B', // Warning amber
+            'text-outline-color': '#D97706',
+            'width': 45,
+            'height': 45,
+            'font-size': 12,
+            'border-width': 1,
+            'border-color': '#D97706',
+            'border-opacity': 0.5
+          }
+        },
+        {
+          selector: 'node[kind="resource_register"]',
+          style: {
+            'background-color': '#FFD700', // Gold
+            'text-outline-color': '#B8860B',
+            'color': '#111827',
+            'width': 75,
+            'height': 75,
+            'font-size': 14,
+            'font-weight': 600,
+            'border-width': 2,
+            'border-color': '#B8860B',
+            'border-opacity': 0.8
+          }
+        },
+        {
+          selector: 'node[kind="resource_type"]',
+          style: {
+            'background-color': '#90CAF9', // Light blue
+            'text-outline-color': '#42A5F5',
+            'color': '#1A237E',
+            'width': 55,
+            'height': 55,
+            'font-size': 13,
+            'border-width': 2,
+            'border-color': '#1976D2',
+            'border-opacity': 0.6
+          }
+        },
+        {
+          selector: 'node[kind="resource"]',
+          style: {
+            'background-color': '#06B6D4', // Info teal
+            'text-outline-color': '#0891B2',
+            'width': 50,
+            'height': 50,
+            'font-size': 12,
+            'border-width': 1,
+            'border-color': '#0891B2',
+            'border-opacity': 0.5
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'width': 2.5,
+            'line-color': '#CBD5E1',
+            'target-arrow-color': '#94A3B8',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier',
+            'arrow-scale': 0.8,
+            'opacity': 0.8,
+            'transition-property': 'line-color, opacity, width',
+            'transition-duration': '0.2s',
+            'text-opacity': 1 // Ensure edge labels have full opacity by default
+          }
+        },
+        {
+          selector: 'edge[label="owns"]',
+          style: {
+            'line-color': '#2563EB',
+            'target-arrow-color': '#2563EB',
+            'line-style': 'solid',
+            'width': 3
+          }
+        },
+        {
+          selector: 'edge[label="has_version"]',
+          style: {
+            'line-color': '#8B5CF6',
+            'target-arrow-color': '#8B5CF6',
+            'line-style': 'solid'
+          }
+        },
+        {
+          selector: 'edge[label="deploy"]',
+          style: {
+            'line-color': '#F59E0B',
+            'target-arrow-color': '#F59E0B',
+            'line-style': 'solid'
+          }
+        },
+        {
+          selector: 'edge[label="uses"]',
+          style: {
+            'line-color': '#06B6D4',
+            'target-arrow-color': '#06B6D4',
+            'line-style': 'dashed',
+            'line-dash-pattern': [6, 3]
+          }
+        },
+        {
+          selector: 'edge[label="instance_of"]',
+          style: {
+            'line-color': '#10B981',
+            'target-arrow-color': '#10B981',
+            'line-style': 'dashed',
+            'line-dash-pattern': [6, 3]
+          }
+        },
+        {
+          selector: '.highlighted',
+          style: {
+            'border-width': 3,
+            'border-color': '#111827',
+            'border-opacity': 1,
+            'opacity': 1,
+            'z-index': 999
+          }
+        },
+        {
+          selector: '.highlighted-edge',
+          style: {
+            'width': 4,
+            'opacity': 1,
+            'z-index': 999
+          }
+        },
+        {
+          selector: '.faded',
+          style: {
+            'opacity': 0.15,
+            'text-opacity': 0.15
+          }
+        },
+        {
+          selector: '.hover-faded',
+          style: {
+            'opacity': 0.6,
+            'text-opacity': 0.8
+          }
+        },
+        {
+          selector: '.chain-node',
+          style: {
+            'opacity': 1,
+            'border-width': 2,
+            'border-color': '#6366F1',
+            'border-opacity': 0.8,
+            'background-color': function(ele) {
+              // Get the original background color and make it slightly brighter
+              return ele.style('background-color');
+            }
+          }
+        },
+        {
+          selector: '.chain-edge',
+          style: {
+            'opacity': 0.9,
+            'line-color': '#6366F1',
+            'target-arrow-color': '#6366F1',
+            'width': 3,
+            'z-index': 900
+          }
+        }
+      ]
+    });
+
+    // Register the layout extensions
+    cytoscape.use(cytoscapeDagre);
+    cytoscape.use(cytoscape.extensions.fcose);
+    
+    // Helper to format JSON objects
+    function formatJSON(obj) {
+      if (typeof obj !== 'object' || obj === null) return String(obj);
+      return JSON.stringify(obj, null, 2);
+    }
+    
+    // Global variables to track state
+    let selectedNode = null;
+    let enableChainHighlight = true; // By default, enable chain highlighting
+    
+    // Create a mini-graph instance for the relations view
+    const miniCy = cytoscape({
+      container: document.getElementById('mini-graph'),
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'label': 'data(label)',
+            'color': '#fff',
+            'background-color': '#95a5a6',
+            'font-weight': 500,
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-outline-width': 2,
+            'text-outline-color': '#95a5a6',
+            'font-size': 10,
+          }
+        },
+        {
+          selector: 'node.source',
+          style: {
+            'background-color': '#3498db',
+            'border-width': 2,
+            'border-color': '#2980b9',
+            'text-outline-color': '#3498db',
+            'width': 30,
+            'height': 30,
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'width': 2,
+            'line-color': '#95a5a6',
+            'target-arrow-color': '#95a5a6',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier',
+            'label': 'data(label)',
+            'font-size': 10,
+            'text-rotation': 'autorotate',
+            'text-background-color': 'white',
+            'text-background-opacity': 1,
+            'text-background-padding': 2,
+            'color': '#333',
+          }
+        },
+        {
+          selector: 'edge.incoming',
+          style: {
+            'line-color': '#e74c3c',
+            'target-arrow-color': '#e74c3c',
+          }
+        },
+        {
+          selector: 'edge.outgoing',
+          style: {
+            'line-color': '#2ecc71',
+            'target-arrow-color': '#2ecc71',
+          }
+        }
+      ],
+      layout: {
+        name: 'dagre',
+        padding: 10,
+        animate: true,
+        nodeDimensionsIncludeLabels: true,
+        fit: true,
+      }
+    });
+    
+    // Function to update the relations view
+    function updateRelationsView(node) {
+      // Get the mini-graph container and relation list
+      const miniGraphEl = document.getElementById('mini-graph');
+      const relationListEl = document.getElementById('relation-list');
+      
+      // Show them
+      miniGraphEl.style.display = 'block';
+      relationListEl.style.display = 'block';
+      
+      // Clear the current content
+      miniCy.elements().remove();
+      
+      // Get connected nodes and edges
+      const neighborhood = node.neighborhood();
+      const connectedEdges = node.connectedEdges();
+      
+      // Add the center node
+      miniCy.add({
+        group: 'nodes',
+        data: {
+          id: node.id(),
+          label: node.data('label'),
+        },
+        classes: 'source'
+      });
+      
+      // Add connected nodes
+      neighborhood.nodes().forEach(n => {
+        miniCy.add({
+          group: 'nodes',
+          data: {
+            id: n.id(),
+            label: n.data('label'),
+          }
+        });
+      });
+      
+      // Add edges with direction classes
+      connectedEdges.forEach(edge => {
+        // Determine if this is an incoming or outgoing edge
+        const isOutgoing = edge.source().id() === node.id();
+        const cls = isOutgoing ? 'outgoing' : 'incoming';
+        
+        miniCy.add({
+          group: 'edges',
+          data: {
+            id: edge.id(),
+            source: edge.source().id(),
+            target: edge.target().id(),
+            label: edge.data('label'),
+          },
+          classes: cls
+        });
+      });
+      
+      // Run the layout
+      miniCy.layout({
+        name: 'dagre',
+        padding: 10,
+        animate: true,
+        nodeDimensionsIncludeLabels: true,
+        fit: true
+      }).run();
+      
+      // Build the relation list HTML
+      let html = '<div class="detail-section">';
+      
+      // Count edges by type
+      const edgeCounts = {};
+      connectedEdges.forEach(edge => {
+        const label = edge.data('label');
+        edgeCounts[label] = (edgeCounts[label] || 0) + 1;
+      });
+      
+      // Add summary
+      html += `<table class="detail-table">
+        <tr>
+          <td>Connected nodes</td>
+          <td>${neighborhood.nodes().length}</td>
+        </tr>
+        <tr>
+          <td>Relationships</td>
+          <td>${connectedEdges.length}</td>
+        </tr>
+      </table>`;
+      
+      // Add edge type breakdown
+      html += '<div class="section-title">Relationship Types</div>';
+      html += '<table class="detail-table">';
+      
+      for (const [type, count] of Object.entries(edgeCounts)) {
+        html += `<tr>
+          <td>${type}</td>
+          <td>${count}</td>
+        </tr>`;
+      }
+      
+      html += '</table></div>';
+      
+      // Update the relation list content
+      relationListEl.innerHTML = html;
+    }
+    
+    // Function to render node details
+    function renderNodeDetails(node) {
+      // Store selected node globally
+      selectedNode = node;
+      
+      const detailsEl = document.getElementById('details-content');
+      const data = node.data('details');
+      const kind = data.kind || data.Kind;
+      const name = (data.metadata && (data.metadata.name || data.metadata.Name)) || data.ID || data.id;
+      
+      // Define icon and color based on node kind
+      let iconClass, colorClass;
+      switch(kind) {
+        case 'application':
+          iconClass = 'fa-solid fa-cube';
+          colorClass = 'color-application';
+          break;
+        case 'service':
+          iconClass = 'fa-solid fa-server';
+          colorClass = 'color-service';
+          break;
+        case 'environment':
+          iconClass = 'fa-solid fa-cloud';
+          colorClass = 'color-environment';
+          break;
+        case 'service_version':
+          iconClass = 'fa-solid fa-code-branch';
+          colorClass = 'color-service_version';
+          break;
+        case 'resource_register':
+          iconClass = 'fa-solid fa-database';
+          colorClass = 'color-resource_register';
+          break;
+        case 'resource_type':
+          iconClass = 'fa-solid fa-layer-group';
+          colorClass = 'color-resource_type';
+          break;
+        case 'resource':
+          iconClass = 'fa-solid fa-hdd';
+          colorClass = 'color-resource';
+          break;
+        default:
+          iconClass = 'fa-solid fa-circle';
+          colorClass = '';
+      }
+      
+      // Start building HTML
+      let html = `
+        <div class="node-detail-header">
+          <div class="node-icon ${colorClass}">
+            <i class="${iconClass}"></i>
+          </div>
+          <div class="node-title">
+            ${name}
+            <div class="node-kind">${kind}</div>
+          </div>
+        </div>
+      `;
+      
+      // Add metadata section
+      if (data.metadata) {
+        html += `<div class="detail-section">
+          <div class="section-title">Metadata</div>
+          <table class="detail-table">`;
+        
+        for (const [key, value] of Object.entries(data.metadata)) {
+          html += `<tr>
+            <td>${key}</td>
+            <td>${typeof value === 'object' ? 
+              `<div class="detail-value">${formatJSON(value)}</div>` : 
+              value}</td>
+          </tr>`;
+        }
+        
+        html += `</table></div>`;
+      }
+      
+      // Add spec section
+      if (data.spec) {
+        html += `<div class="detail-section">
+          <div class="section-title">Specification</div>
+          <table class="detail-table">`;
+        
+        for (const [key, value] of Object.entries(data.spec)) {
+          html += `<tr>
+            <td>${key}</td>
+            <td>${typeof value === 'object' ? 
+              `<div class="detail-value">${formatJSON(value)}</div>` : 
+              value}</td>
+          </tr>`;
+        }
+        
+        html += `</table></div>`;
+      }
+      
+      // Add connections section
+      html += `<div class="detail-section">
+        <div class="section-title">Connections</div>`;
+      
+      const connections = {
+        incoming: [],
+        outgoing: []
+      };
+      
+      // Find incoming edges
+      cy.edges().forEach(edge => {
+        if (edge.target().id() === node.id()) {
+          connections.incoming.push({
+            type: edge.data('label'),
+            node: edge.source().data('label')
+          });
+        }
+        if (edge.source().id() === node.id()) {
+          connections.outgoing.push({
+            type: edge.data('label'),
+            node: edge.target().data('label')
+          });
+        }
+      });
+      
+      // Show incoming connections
+      if (connections.incoming.length) {
+        html += `<table class="detail-table">
+          <tr>
+            <td>Incoming</td>
+            <td>
+        `;
+        
+        connections.incoming.forEach(conn => {
+          html += `<div><i class="fa-solid fa-arrow-right-long"></i> ${conn.type} from ${conn.node}</div>`;
+        });
+        
+        html += `</td></tr></table>`;
+      }
+      
+      // Show outgoing connections
+      if (connections.outgoing.length) {
+        html += `<table class="detail-table">
+          <tr>
+            <td>Outgoing</td>
+            <td>
+        `;
+        
+        connections.outgoing.forEach(conn => {
+          html += `<div><i class="fa-solid fa-arrow-right-long"></i> ${conn.type} to ${conn.node}</div>`;
+        });
+        
+        html += `</td></tr></table>`;
+      }
+      
+      html += `</div>`;
+      
+      detailsEl.innerHTML = html;
+    }
+
+    // Show empty state when no node is selected
+    function showEmptyDetails() {
+      const detailsEl = document.getElementById('details-content');
+      detailsEl.innerHTML = `
+        <div class="empty-state">
+          <i class="fa-solid fa-circle-info"></i>
+          <p>Click on a node to see details</p>
+        </div>
+      `;
+    }
+
+    // Node filter function
+    function filterNodesByKind(value) {
+      if (value === 'all') {
+        cy.elements().removeClass('faded');
+      } else {
+        // First fade all nodes
+        cy.elements().addClass('faded');
+        
+        // Then unfade the selected nodes and their connected edges
+        const selectedNodes = cy.nodes(`[kind="${value}"]`);
+        selectedNodes.removeClass('faded');
+        
+        // Also unfade the edges connected to the selected nodes
+        selectedNodes.connectedEdges().removeClass('faded');
+        
+        // No notification for node count
+      }
+    }
+    
+    // Old notification function, removed in favor of the unified one below
+    
+    // Search function
+    function performSearch(query) {
+      query = query.trim().toLowerCase();
+      
+      if (!query) {
+        cy.elements().removeClass('faded');
+        return;
+      }
+      
+      // Fade all elements
+      cy.elements().addClass('faded');
+      
+      // Find matching nodes
+      const matchingNodes = cy.nodes().filter(node => {
+        const label = node.data('label').toLowerCase();
+        const kind = node.data('kind').toLowerCase();
+        const isMatch = label.includes(query) || kind.includes(query);
+        
+        // Also search in metadata and spec
+        if (!isMatch) {
+          const metadata = node.data('details').metadata;
+          const spec = node.data('details').spec;
+          
+          for (const key in metadata) {
+            if (String(metadata[key]).toLowerCase().includes(query)) {
+              return true;
+            }
+          }
+          
+          for (const key in spec) {
+            if (String(spec[key]).toLowerCase().includes(query)) {
+              return true;
+            }
+          }
+        }
+        
+        return isMatch;
+      });
+      
+      if (matchingNodes.length === 0) {
+        // No notification for no matches
+        cy.elements().removeClass('faded');
+        return;
+      }
+      
+      // Highlight matched nodes
+      matchingNodes.removeClass('faded');
+      
+      // Also show direct connections between matching nodes
+      matchingNodes.edgesWith(matchingNodes).removeClass('faded');
+      
+      // No notification - removed
+      
+      // Fit to show matching nodes
+      cy.fit(matchingNodes, 50);
+    }
+    
+    // Focus on resources
+    function focusOnResources() {
+      // Reset view
+      cy.elements().removeClass('faded highlighted highlighted-edge');
+      
+      // Identify the resource catalog node
+      const resourceCatalog = cy.nodes('[kind="resource_register"]');
+      
+      // Find resource types and resources
+      const resourceTypes = cy.nodes('[kind="resource_type"]');
+      const resources = cy.nodes('[kind="resource"]');
+      
+      if (!resourceCatalog.length && !resourceTypes.length && !resources.length) {
+        // No notification
+        return;
+      }
+      
+      // Fade all nodes
+      cy.elements().addClass('faded');
+      
+      // Unfade the resource catalog, types and resources
+      resourceCatalog.removeClass('faded');
+      resourceTypes.removeClass('faded');
+      resources.removeClass('faded');
+      
+      // Also unfade the edges between these nodes
+      resourceCatalog.edgesWith(resourceTypes).removeClass('faded');
+      resourceTypes.edgesWith(resources).removeClass('faded');
+      
+      // Get applications that own resources
+      const applications = cy.nodes('[kind="application"]');
+      const ownsEdges = cy.edges('[label="owns"]');
+      const appWithResources = applications.filter(app => {
+        return ownsEdges.some(edge => 
+          edge.source().id() === app.id() && 
+          resources.some(res => res.id() === edge.target().id())
+        );
+      });
+      
+      appWithResources.removeClass('faded');
+      
+      // Show edges between apps and resources
+      appWithResources.edgesWith(resources).filter('[label="owns"]').removeClass('faded');        // Fit to show the relevant nodes
+      const nesToFit = resourceCatalog.union(resourceTypes).union(resources).union(appWithResources);
+      cy.fit(nesToFit, 50);
+      
+      // Apply a resource-focused layout
+      cy.layout({
+        name: 'dagre',
+        animate: true,
+        rankDir: 'LR',
+        nodeDimensionsIncludeLabels: true,
+        fit: true,
+        padding: 50,
+        rankSep: 100,
+        edgeSep: 50
+      }).run();
+      
+      // No notification
+    }
+
+    // Run the layout with better error handling
+    function runLayout() {
+      console.log("Running layout with", cy.elements().length, "elements");
+      
+      // Ensure we have elements to layout
+      if (cy.elements().length === 0) {
+        console.warn("No elements to layout");
+        return;
+      }
+      
+      // If we have more than 100 elements, use a simpler layout approach
+      // to avoid performance issues
+      const useSimpleLayout = cy.elements().length > 100;
+      
+      try {
+        if (useSimpleLayout) {
+          console.log("Using simplified layout for large graph");
+          cy.layout({
+            name: 'fcose', // Use fcose even for large graphs but with simplified settings
+            animate: 'end', // Only animate at the end
+            nodeDimensionsIncludeLabels: true,
+            fit: true,
+            padding: 50,
+            randomize: true, // Start with random positions
+            quality: 'draft', // Use draft quality for large graphs
+            samplingType: true, // Enable sampling for better performance
+            sampleSize: 100, // Limit sample size
+            nodeSeparation: 120,
+            uniformNodeDimensions: true,
+            packComponents: true,
+            // Ideal edge length based on node connectivity
+            idealEdgeLength: edge => 100 + (edge.source().degree() + edge.target().degree()) * 5
+          }).run();
+        } else {
+          console.log("Using force-directed fcose layout");
+          cy.layout({
+            name: 'fcose', // yFiles-like force directed layout
+            // Basic fcose settings
+            quality: 'proof', 
+            animate: true,
+            animationDuration: 1000,
+            fit: true,
+            padding: 50,
+            
+            // Force-directed options (similar to yFiles)
+            nodeSeparation: 120,
+            nodeRepulsion: node => 8000 + (node.degree() * 1000), // More connected = more repulsion
+            idealEdgeLength: edge => 100 + (edge.source().degree() + edge.target().degree()) * 5, // Adaptive edge length
+            edgeElasticity: 0.45,
+            
+            // Advanced options
+            gravityRangeCompound: 1.5,
+            gravityCompound: 1.0,
+            gravity: 0.25,
+            
+            // Improve layout quality
+            numIter: 2500, // More iterations = better layout
+            tile: true, // Tile disconnected components
+            packComponents: true, // Pack components together
+            randomize: false, // Don't use randomization for better deterministic results
+            
+            // Handle node types differently - keep resources and applications apart
+            alignmentConstraint: { vertical: [
+              cy.nodes('[kind="resource"], [kind="resource_type"]').map(n => n.id()),
+              cy.nodes('[kind="application"]').map(n => n.id())
+            ]},
+            
+            // Relative placement constraints (ensure hierarchy)
+            relativePlacementConstraint: [
+              {
+                // Resource register above resource types
+                top: cy.nodes('[kind="resource_register"]').map(n => n.id()),
+                bottom: cy.nodes('[kind="resource_type"]').map(n => n.id()),
+                gap: 100
+              },
+              {
+                // Resource types above resources
+                top: cy.nodes('[kind="resource_type"]').map(n => n.id()),
+                bottom: cy.nodes('[kind="resource"]').map(n => n.id()),
+                gap: 80
+              },
+              {
+                // Applications above services
+                top: cy.nodes('[kind="application"]').map(n => n.id()),
+                bottom: cy.nodes('[kind="service"]').map(n => n.id()),
+                gap: 80
+              }
+            ]
+          }).run();
+        }
+      } catch (err) {
+        console.error("Layout engine error:", err);
+        showNotification("Layout error - falling back to simple layout", "warning");
+        
+        // Fallback to simplest possible layout
+        cy.layout({
+          name: 'cose', // Use basic cose as fallback
+          fit: true, 
+          padding: 75,
+          animate: false,
+          nodeDimensionsIncludeLabels: true,
+          randomize: true
+        }).run();
+      }
+    }
+
+    // Function to create edge tooltips using an alternative approach
+    function createEdgeTooltips() {
+      // Create a tooltip div that will be positioned manually
+      const tooltip = document.createElement('div');
+      tooltip.className = 'edge-tooltip';
+      tooltip.style.position = 'absolute';
+      tooltip.style.display = 'none';
+      tooltip.style.zIndex = '10';
+      tooltip.style.backgroundColor = 'white';
+      tooltip.style.padding = '5px 8px';
+      tooltip.style.borderRadius = '4px';
+      tooltip.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+      tooltip.style.fontSize = '12px';
+      tooltip.style.pointerEvents = 'none';
+      document.body.appendChild(tooltip);
+      
+      // Edge mouse events for tooltip
+      cy.on('mouseover', 'edge', function(e) {
+        const edge = e.target;
+        const label = edge.data('label');
+        
+        // Choose icon based on edge type
+        let iconClass;
+        switch(label) {
+          case 'owns':
+            iconClass = 'fa-solid fa-cubes';
+            break;
+          case 'has_version':
+            iconClass = 'fa-solid fa-code-branch';
+            break;
+          case 'deploy':
+            iconClass = 'fa-solid fa-rocket';
+            break;
+          case 'uses':
+            iconClass = 'fa-solid fa-arrow-right-arrow-left';
+            break;
+          case 'instance_of':
+            iconClass = 'fa-solid fa-sitemap';
+            break;
+          default:
+            iconClass = 'fa-solid fa-link';
+        }
+        
+        tooltip.innerHTML = `<i class="${iconClass}"></i> ${label}`;
+        tooltip.style.display = 'block';
+        
+        // Position the tooltip near the mouse
+        const renderedPosition = e.renderedPosition;
+        tooltip.style.left = (renderedPosition.x + window.pageXOffset) + 'px';
+        tooltip.style.top = (renderedPosition.y + window.pageYOffset - 30) + 'px';
+      });
+      
+      cy.on('mouseout', 'edge', function() {
+        tooltip.style.display = 'none';
+      });
+      
+      // Update tooltip position when the mouse moves over an edge
+      cy.on('mousemove', 'edge', function(e) {
+        const renderedPosition = e.renderedPosition;
+        tooltip.style.left = (renderedPosition.x + window.pageXOffset) + 'px';
+        tooltip.style.top = (renderedPosition.y + window.pageYOffset - 30) + 'px';
+      });
+    }      // Unified notification function
+      function showNotification(message, type = 'info') {
+        // Create notification element
+        const notif = document.createElement('div');
+        notif.className = `notification ${type}`;
+        notif.innerHTML = `
+          <i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 
+                               type === 'warning' ? 'fa-exclamation-triangle' : 
+                               type === 'error' ? 'fa-times-circle' : 'fa-info-circle'}"></i>
+          <span>${message}</span>
+        `;
+        
+        // Add to DOM
+        document.body.appendChild(notif);
+        
+        // Animate in
+        setTimeout(() => {
+          notif.classList.add('show');
+        }, 10);
+        
+        // Remove after delay
+        setTimeout(() => {
+          notif.classList.remove('show');
+          setTimeout(() => {
+            notif.remove();
+          }, 300);
+        }, 3000);
+        
+        console.log(`Notification: ${message} (${type})`); // Log to help debug
+      }
+      
+      // This is a duplicate function that's been removed, using the one defined earlier
+      
+      // Using the performSearch function defined earlier instead of duplicating logic
+      
+      // Function to show empty details panel state
+      function showEmptyDetails() {
+        document.getElementById('details-content').innerHTML = `
+          <div class="empty-state">
+            <i class="fa-solid fa-circle-info"></i>
+            <p>Click on a node to see details</p>
+          </div>
+        `;
+        
+        document.getElementById('relations-content').innerHTML = `
+          <div class="empty-state">
+            <i class="fa-solid fa-circle-info"></i>
+            <p>Click on a node to see its relationships</p>
+          </div>
+          <div id="mini-graph" style="height: 300px; display: none;"></div>
+          <div id="relation-list" style="display: none;"></div>
+        `;
+        
+        // Reset selected node
+        selectedNode = null;
+      }
+      
+      // Function to switch tabs in the panel
+      function switchTab(tabName) {
+        // Update tab buttons
+        document.querySelectorAll('.panel-tab').forEach(tab => {
+          if (tab.dataset.tab === tabName) {
+            tab.classList.add('active');
+          } else {
+            tab.classList.remove('active');
+          }
+        });
+        
+        // Update tab contents
+        document.querySelectorAll('.tab-content').forEach(content => {
+          if (content.dataset.tab === tabName) {
+            content.classList.add('active');
+            
+            // Special handling for the relations tab - update mini graph layout
+            if (tabName === 'relations' && selectedNode) {
+              updateRelationsView(selectedNode);
+              setTimeout(() => {
+                if (miniCy) {
+                  miniCy.fit();
+                }
+              }, 100);
+            }
+          } else {
+            content.classList.remove('active');
+          }
+        });
+      }
+      
+      // Setup event listeners for UI controls
+      document.addEventListener('DOMContentLoaded', () => {
+        console.log("DOM loaded, setting up event handlers");
+        
+        // Set up node filter
+        const nodeFilter = document.getElementById('node-filter');
+        if (nodeFilter) {
+          console.log("Setting up node filter");
+          nodeFilter.addEventListener('change', function() {
+            const value = this.value;
+            console.log("Node filter changed to:", value);
+            filterNodesByKind(value);
+          });
+        } else {
+          console.warn("Node filter element not found");
+        }
+        
+        // Zoom controls
+        const zoomInBtn = document.getElementById('btn-zoom-in');
+        if (zoomInBtn) {
+          zoomInBtn.addEventListener('click', () => {
+            cy.zoom(cy.zoom() * 1.2);
+            // No notification
+          });
+        } else {
+          console.warn("Zoom in button not found");
+        }
+        
+        document.getElementById('btn-zoom-out').addEventListener('click', () => {
+          cy.zoom(cy.zoom() * 0.8);
+          // No notification
+        });
+        
+        // Fit view button
+        document.getElementById('btn-fit').addEventListener('click', () => {
+          cy.fit(cy.elements(':visible'), 50);
+          // No notification
+        });
+        
+        // Re-layout button
+        document.getElementById('btn-layout').addEventListener('click', () => {
+          // Clear any highlighting or fading before re-layouting
+          cy.elements().removeClass('highlighted highlighted-edge faded hover-faded chain-node chain-edge');
+          runLayout();
+          // No notification
+        });
+        
+        // Focus on resources button
+        document.getElementById('btn-focus-resources').addEventListener('click', focusOnResources);
+        
+        // Chain toggle button
+        document.getElementById('btn-toggle-chain').addEventListener('click', () => {
+          // Toggle the state
+          enableChainHighlight = !enableChainHighlight;
+          
+          // Update button appearance
+          const btnChainToggle = document.getElementById('btn-toggle-chain');
+          if (enableChainHighlight) {
+            btnChainToggle.classList.add('btn-active');
+            btnChainToggle.title = "Chain highlighting enabled - click to disable";
+          } else {
+            btnChainToggle.classList.remove('btn-active');
+            btnChainToggle.title = "Chain highlighting disabled - click to enable";
+          }
+          
+          // Reapply highlighting if a node is currently selected
+          if (selectedNode) {
+            // Trigger a fake tap event to refresh the view
+            cy.$(`#${selectedNode.id()}`).trigger('tap');
+          }
+        });
+        
+        // Set initial state of chain toggle button
+        document.getElementById('btn-toggle-chain').classList.add('btn-active');
+        
+        // Search box
+        const searchInput = document.getElementById('search-input');
+        const searchButton = document.getElementById('search-button');
+        
+        searchButton.addEventListener('click', () => {
+          performSearch(searchInput.value);
+        });
+        
+        searchInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            performSearch(searchInput.value);
+          }
+        });
+        
+        // Reset search/filter button
+        document.getElementById('btn-clear-search').addEventListener('click', () => {
+          searchInput.value = '';
+          cy.elements().removeClass('faded highlighted highlighted-edge chain-node chain-edge hover-faded');
+          cy.fit(cy.elements(), 50);
+          // No notification
+        });
+        
+        // Tab switching
+        document.querySelectorAll('.panel-tab').forEach(tab => {
+          tab.addEventListener('click', () => {
+            const tabName = tab.dataset.tab;
+            switchTab(tabName);
+          });
+        });
+      });
+
+      // Fetch and process graph data
+    console.log("Fetching graph data from /v1/graph...");
+    
+    // Function to retry fetch with exponential backoff
+    function fetchWithRetry(url, options = {}, retries = 3, backoff = 300) {
+      return new Promise((resolve, reject) => {
+        const attemptFetch = (retriesLeft) => {
+          console.log(`Attempting to fetch data, ${retriesLeft} retries left`);
+          
+          fetch(url, options)
+            .then(res => {
+              console.log("Response received:", res.status);
+              if (!res.ok) {
+                throw new Error(`HTTP error! Status: ${res.status}`);
+              }
+              return res.json();
+            })
+            .then(resolve)
+            .catch(err => {
+              if (retriesLeft === 0) {
+                return reject(err);
+              }
+              
+              console.log(`Fetch failed, retrying in ${backoff}ms...`, err);
+              setTimeout(() => {
+                attemptFetch(retriesLeft - 1);
+              }, backoff);
+            });
+        };
+        
+        attemptFetch(retries);
+      });
+    }
+    
+    // Use the retry function
+    fetchWithRetry('/v1/graph')
+      .then(data => {
+        console.log("Data received:", data);
+        
+        // Add more detailed logging for troubleshooting
+        console.log("Response data type:", typeof data);
+        console.log("Response structure:", Object.keys(data));
+        
+        // Check for capitalization in the response
+        const hasNodes = data.Nodes || data.nodes;
+        const hasEdges = data.Edges || data.edges;
+        
+        // Normalize data structure to ensure we have Nodes and Edges properties
+        if (data.nodes && !data.Nodes) data.Nodes = data.nodes;
+        if (data.edges && !data.Edges) data.Edges = data.edges;
+        
+        if (!hasNodes || !hasEdges) {
+          console.error("Missing nodes or edges in the response:", data);
+          throw new Error('Invalid graph data format received from the server');
+        }
+        
+        console.log("Processing graph with", Object.keys(data.Nodes).length, "nodes and", Object.keys(data.Edges).length, "edge sources");
+        
+        // Create nodes
+        const nodes = Object.values(data.Nodes).map(n => {
+          // Handle case-sensitivity issues with properties
+          const metadata = n.metadata || n.Metadata || {};
+          const name = (metadata.name || metadata.Name || n.ID || n.id);
+          const kind = n.kind || n.Kind || 'unknown';
+          
+          console.log("Processing node:", name, "of kind:", kind);
+          
+          // Format node label based on kind
+          let label;
+          if (kind === 'resource') {
+            label = name;
+          } else if (kind === 'resource_type') {
+            label = name;
+          } else if (kind === 'resource_register') {
+            label = 'Resource Catalog';
+          } else if (kind === 'service_version') {
+            // Extract version part from service_version ID (format: serviceName:version)
+            const parts = name.split(':');
+            label = parts.length > 1 ? `v${parts[1]}` : name;
+          } else {
+            label = name;
+          }
+          
+          return {
+            data: {
+              id: n.id || n.ID,
+              label: label,
+              kind: kind,
+              details: n
+            }
+          };
+        });
+        
+        // Create edges with better error handling
+        const edges = [];
+        for (const [from, edgeList] of Object.entries(data.Edges)) {
+          // Handle both array and object formats
+          const edgesToProcess = Array.isArray(edgeList) ? edgeList : [edgeList];
+          
+          edgesToProcess.forEach(edge => {
+            const to = edge.to || edge.To;
+            const type = edge.type || edge.Type;
+            
+            if (!to || !type) {
+              console.warn("Edge missing required properties:", edge);
+              return; // Skip this edge
+            }
+            
+            edges.push({ 
+              data: { 
+                id: `${from}-${to}-${type}`,
+                source: from, 
+                target: to, 
+                label: type 
+              } 
+            });
+          });
+        }
+
+        // Load elements into cytoscape
+        try {
+          cy.add([...nodes, ...edges]);
+          console.log("Successfully added nodes and edges to cytoscape");
+          
+          // Check if we have elements in the graph
+          if (cy.elements().length === 0) {
+            console.warn("No elements added to cytoscape graph");
+            throw new Error("Failed to render graph - no elements were created.");
+          }
+          
+          // Remove the loading overlay
+          document.querySelector('.loading-overlay').style.display = 'none';
+          
+          // No notification for graph load
+          
+          // Run the initial layout with a more robust approach
+          try {
+            console.log("Starting initial layout...");
+            runLayout();
+          } catch (layoutError) {
+            console.error("Error in layout algorithm:", layoutError);
+            
+            // Try a simpler layout as fallback
+            console.log("Trying fallback layout...");
+            cy.layout({
+              name: 'preset',
+              padding: 50,
+              fit: true,
+              animate: false
+            }).run();
+            
+            // No notification for fallback layout
+          }
+        } catch(renderErr) {
+          console.error("Error rendering graph:", renderErr);
+          throw new Error(`Error rendering graph: ${renderErr.message}`);
+        }
+        
+        // Create edge tooltips
+        createEdgeTooltips();
+        
+        // Function to traverse the graph and find all connected nodes in a chain
+        function findConnectedNodesInChain(startNode) {
+          // Keep track of all nodes that should be highlighted
+          const nodesToHighlight = cy.collection();
+          nodesToHighlight.merge(startNode);
+          
+          // Find application chain (upward traversal)
+          // Common relationships going up: has_version, owns
+          function traverseUpward(currentNode, visited = new Set()) {
+            // Avoid cycles
+            if (visited.has(currentNode.id())) return;
+            visited.add(currentNode.id());
+            
+            // Add this node to the collection
+            nodesToHighlight.merge(currentNode);
+            
+            // Find incoming edges with relevant relationships
+            const upwardEdges = currentNode.connectedEdges().filter(edge => 
+              edge.target().id() === currentNode.id() && 
+              ['has_version', 'owns'].includes(edge.data('label'))
+            );
+            
+            // Traverse upward through these edges
+            upwardEdges.forEach(edge => {
+              const sourceNode = edge.source();
+              traverseUpward(sourceNode, visited);
+            });
+          }
+          
+          // Find environments and resources chain (downward traversal)
+          // Common relationships going down: deploy, uses, instance_of
+          function traverseDownward(currentNode, visited = new Set()) {
+            // Avoid cycles
+            if (visited.has(currentNode.id())) return;
+            visited.add(currentNode.id());
+            
+            // Add this node to the collection
+            nodesToHighlight.merge(currentNode);
+            
+            // Find outgoing edges with relevant relationships
+            const downwardEdges = currentNode.connectedEdges().filter(edge => 
+              edge.source().id() === currentNode.id() && 
+              ['deploy', 'uses', 'instance_of'].includes(edge.data('label'))
+            );
+            
+            // Traverse downward through these edges
+            downwardEdges.forEach(edge => {
+              const targetNode = edge.target();
+              traverseDownward(targetNode, visited);
+            });
+          }
+          
+          // Start traversal from the selected node in both directions
+          traverseUpward(startNode);
+          traverseDownward(startNode);
+          
+          return nodesToHighlight;
+        }
+        
+        // Node tap event
+        cy.on('tap', 'node', function(evt) {
+          const node = evt.target;
+          
+          // Get all nodes to highlight based on current mode
+          let nodesToShow;
+          
+          if (enableChainHighlight) {
+            // Find all connected nodes in the chain
+            const chainNodes = findConnectedNodesInChain(node);
+            
+            // Also include direct neighbors for completeness
+            const directNeighbors = node.neighborhood('node');
+            chainNodes.merge(directNeighbors);
+            
+            nodesToShow = chainNodes;
+          } else {
+            // Only show direct neighbors in simple mode
+            nodesToShow = node.neighborhood('node').union(node);
+          }
+          
+          // Gray out unrelated nodes
+          cy.nodes().addClass('faded');
+          
+          // Remove faded class from nodes to show
+          nodesToShow.removeClass('faded');
+          
+          // Find all edges between the nodes we want to show
+          const relatedEdges = nodesToShow.edgesWith(nodesToShow);
+          relatedEdges.removeClass('faded');
+          
+          // Remove any existing highlighting classes
+          cy.elements().removeClass('highlighted highlighted-edge chain-node chain-edge');
+          
+          // Always highlight the selected node
+          node.addClass('highlighted');
+          
+          if (enableChainHighlight) {
+            // Add special styling to the chain nodes and edges
+            nodesToShow.difference(node).addClass('chain-node');
+            relatedEdges.addClass('chain-edge');
+          }
+          
+          // Highlight direct connections with a stronger highlight
+          node.connectedEdges().addClass('highlighted-edge');
+          
+          // Store reference to selected node
+          selectedNode = node;
+          
+          // Show node details
+          renderNodeDetails(node);
+          
+          // Also update the relations view
+          updateRelationsView(node);
+          
+          // No notification for node selection
+        });
+        
+        // Tap on background (canvas)
+        cy.on('tap', function(evt) {
+          if (evt.target === cy) {
+            // Clear all highlight, chain, and faded classes
+            cy.elements().removeClass('highlighted highlighted-edge faded chain-node chain-edge hover-faded');
+            
+            // Reset selected node reference
+            selectedNode = null;
+            
+            // Clear details panel
+            showEmptyDetails();
+          }
+        });
+        
+        // Mouseover node
+        cy.on('mouseover', 'node', function(evt) {
+          const node = evt.target;
+          node.addClass('highlighted');
+          
+          // If the node is faded, temporarily reduce the fading effect when hovering
+          if (node.hasClass('faded')) {
+            node.addClass('hover-faded');
+          }
+        });
+        
+        // Mouseout node
+        cy.on('mouseout', 'node', function(evt) {
+          const node = evt.target;
+          if (!node.selected()) {
+            node.removeClass('highlighted');
+          }
+          
+          // Remove hover-faded class if it exists
+          node.removeClass('hover-faded');
+        });
+        
+        // Mouseover edge
+        cy.on('mouseover', 'edge', function(evt) {
+          evt.target.addClass('highlighted-edge');
+        });
+        
+        // Mouseout edge
+        cy.on('mouseout', 'edge', function(evt) {
+          if (!evt.target.selected()) {
+            evt.target.removeClass('highlighted-edge');
+          }
+        });
+      })
+      .catch(err => {
+        console.error('Error loading graph:', err);
+        document.querySelector('.loading-overlay').style.display = 'none';
+        
+        // Create a more user-friendly error message
+        const errorMessage = err.message || String(err);
+        
+        // Try to diagnose the specific issue
+        let troubleshootingSteps = '';
+        if (errorMessage.includes('Failed to fetch')) {
+          troubleshootingSteps = `
+            <ul style="text-align: left; padding-left: 20px; margin-top: 10px;">
+              <li>Check that the API server is running and accessible.</li>
+              <li>Make sure you're not experiencing network connectivity issues.</li>
+              <li>Check for any CORS restrictions in your browser console.</li>
+            </ul>
+          `;
+        } else if (errorMessage.includes('Invalid graph data format') || 
+                  errorMessage.includes('Unexpected token') ||
+                  errorMessage.includes('JSON')) {
+          troubleshootingSteps = `
+            <ul style="text-align: left; padding-left: 20px; margin-top: 10px;">
+              <li>The API response format may have changed - check browser console.</li>
+              <li>Try using the classic view and comparing the response.</li>
+              <li>Ensure the API endpoint is returning valid JSON data.</li>
+            </ul>
+          `;
+        } else {
+          troubleshootingSteps = `
+            <ul style="text-align: left; padding-left: 20px; margin-top: 10px;">
+              <li>Please check the browser console (F12) for more detailed error information.</li>
+              <li>Try running the classic view to see if that works.</li>
+              <li>Try refreshing the page or clearing browser cache.</li>
+            </ul>
+          `;
+        }
+        
+        // Add debug information button that logs to console when clicked
+        const debugInfo = {
+          timestamp: new Date().toISOString(),
+          error: errorMessage,
+          userAgent: navigator.userAgent,
+        };
+            
+        document.getElementById('graph').innerHTML = 
+          `<div class="empty-state" style="color: #e53e3e; max-width: 500px; margin: 0 auto; text-align: center; padding-top: 50px;">
+            <i class="fa-solid fa-triangle-exclamation" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+            <p style="font-size: 1.2rem; font-weight: 500; margin-bottom: 1rem;">Failed to load graph</p>
+            <p style="margin-bottom: 0.5rem;">${errorMessage}</p>
+            
+            <div style="font-size: 0.9rem; color: #718096; margin-top: 15px;">
+              <p style="font-weight: 500; margin-bottom: 5px;">Troubleshooting:</p>
+              ${troubleshootingSteps}
+            </div>
+            
+            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+              <button class="btn" onclick="window.location.reload()">
+                <i class="fa-solid fa-rotate-right"></i> Retry
+              </button>
+              <button class="btn" onclick="window.location.href='/graph.html'">
+                <i class="fa-solid fa-arrow-right"></i> Try Classic View
+              </button>
+              <button class="btn" onclick="console.log('Debug info:', ${JSON.stringify(debugInfo)}); alert('Debug info logged to console');">
+                <i class="fa-solid fa-bug"></i> Debug Info
+              </button>
+            </div>
+          </div>`;
+      });
+  </script>
+</body>
+</html>

@@ -38,14 +38,25 @@
     fetch('/v1/graph')
       .then(res => res.json())
       .then(data => {
-        const nodes = Object.values(data.Nodes).map(n => ({
-          data: {
-            id: n.id || n.ID,
-            label: `${n.kind || n.Kind}: ${(n.metadata && (n.metadata.name || n.metadata.Name)) || n.ID || n.id}`,
-            kind: n.kind || n.Kind,
-            details: n
+        const nodes = Object.values(data.Nodes).map(n => {
+          let label;
+          const name = (n.metadata && (n.metadata.name || n.metadata.Name)) || n.ID || n.id;
+          if ((n.kind || n.Kind) === 'resource') {
+            label = `resource: ${name}`;
+          } else if ((n.kind || n.Kind) === 'resource_type') {
+            label = `resource_type: ${name}`;
+          } else {
+            label = `${n.kind || n.Kind}: ${name}`;
           }
-        }));
+          return {
+            data: {
+              id: n.id || n.ID,
+              label,
+              kind: n.kind || n.Kind,
+              details: n
+            }
+          };
+        });
         const edges = [];
         for (const [from, edgeList] of Object.entries(data.Edges)) {
           edgeList.forEach(edge => {
@@ -118,6 +129,63 @@
                 'font-size': 13,
                 'text-outline-color': '#B10DC9',
                 'text-outline-width': 2
+              }
+            },
+            {
+              selector: 'node[kind="resource_register"]',
+              style: {
+                'background-color': '#FFD700', // gold
+                'label': 'data(label)',
+                'color': '#333',
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'font-weight': 'bold',
+                'width': 90,
+                'height': 90,
+                'font-size': 22,
+                'text-outline-color': '#FFD700',
+                'text-outline-width': 2,
+                'border-width': 4,
+                'border-color': '#B8860B',
+                'box-shadow': '0 6px 18px rgba(0,0,0,0.18)'
+              }
+            },
+            {
+              selector: 'node[kind="resource_type"]',
+              style: {
+                'background-color': '#F0F8FF', // light blue background
+                'label': 'data(label)',
+                'color': '#1A237E',
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'font-weight': 'bold',
+                'width': 70,
+                'height': 70,
+                'font-size': 18,
+                'text-outline-color': '#90CAF9',
+                'text-outline-width': 2,
+                'border-width': 3,
+                'border-color': '#1976D2',
+                'box-shadow': '0 4px 14px rgba(25,118,210,0.10)'
+              }
+            },
+            {
+              selector: 'node[kind="resource"]',
+              style: {
+                'background-color': '#1565C0', // deep blue
+                'label': 'data(label)',
+                'color': '#fff',
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'font-weight': 'bold',
+                'width': 60,
+                'height': 60,
+                'font-size': 16,
+                'text-outline-color': '#1976D2',
+                'text-outline-width': 2,
+                'border-width': 3,
+                'border-color': '#42A5F5',
+                'box-shadow': '0 4px 14px rgba(21,101,192,0.12)'
               }
             },
             {

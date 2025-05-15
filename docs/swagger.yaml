@@ -311,6 +311,66 @@ paths:
       summary: Replace allowed environments for an application
       tags:
       - environments
+  /v1/applications/{app_name}/resources:
+    get:
+      description: Returns all resource nodes owned by the application
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List all resources for an application
+      tags:
+      - resources
+  /v1/applications/{app_name}/resources/{resource_name}:
+    post:
+      description: Creates an 'owns' edge from application to resource
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: Resource name
+        in: path
+        name: resource_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Add a resource to an application
+      tags:
+      - resources
   /v1/applications/{app_name}/services:
     get:
       description: Returns all services linked to an application
@@ -394,6 +454,76 @@ paths:
       summary: Get a service for an application
       tags:
       - services
+  /v1/applications/{app_name}/services/{service_name}/resources:
+    get:
+      description: Returns all resource nodes linked by 'uses' edge from the service
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: Service name
+        in: path
+        name: service_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List all resources used by a service
+      tags:
+      - resources
+  /v1/applications/{app_name}/services/{service_name}/resources/{resource_name}:
+    post:
+      description: Creates a 'uses' edge from service to resource in the application
+      parameters:
+      - description: Application name
+        in: path
+        name: app_name
+        required: true
+        type: string
+      - description: Service name
+        in: path
+        name: service_name
+        required: true
+        type: string
+      - description: Resource name
+        in: path
+        name: resource_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Link a service to a resource (creates 'uses' edge)
+      tags:
+      - resources
   /v1/applications/{app_name}/services/{service_name}/versions:
     get:
       description: Returns all versions for a service
@@ -670,6 +800,51 @@ paths:
       summary: Health check
       tags:
       - health
+  /v1/resources:
+    get:
+      description: Returns all resource nodes in the global graph
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+      summary: List all resources in the resource catalog
+      tags:
+      - resources
+    post:
+      consumes:
+      - application/json
+      description: Creates a new resource node in the global graph
+      parameters:
+      - description: Resource payload
+        in: body
+        name: resource
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new resource (from catalog)
+      tags:
+      - resources
   /v1/status:
     get:
       description: Returns high-level platform status and graph node count

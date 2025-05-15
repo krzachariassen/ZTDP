@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/resources"
 )
 
 // CreateService godoc
@@ -63,7 +64,7 @@ func ListServices(w http.ResponseWriter, r *http.Request) {
 	services := []contracts.ServiceContract{}
 	for _, node := range GlobalGraph.Graph.Nodes {
 		if node.Kind == "service" {
-			contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+			contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
 				Name:  node.Metadata["name"].(string),
 				Owner: node.Metadata["owner"].(string),
 			})
@@ -96,7 +97,7 @@ func GetService(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Service not found", http.StatusNotFound)
 		return
 	}
-	contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+	contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
 		Name:  node.Metadata["name"].(string),
 		Owner: node.Metadata["owner"].(string),
 	})

@@ -43,10 +43,20 @@ func NewRouter() http.Handler {
 		v1.Get("/applications/{app_name}/services/{service_name}/versions", handlers.ListServiceVersions)
 		v1.Post("/applications/{app_name}/services/{service_name}/versions/{version}/deploy", handlers.DeployServiceVersion)
 		v1.Get("/environments/{env_name}/deployments", handlers.ListEnvironmentDeployments)
+		// Resources
+		v1.Post("/resources", handlers.CreateResource)
+		v1.Post("/applications/{app_name}/resources/{resource_name}", handlers.AddResourceToApplication)
+		v1.Post("/applications/{app_name}/services/{service_name}/resources/{resource_name}", handlers.LinkServiceToResource)
+		v1.Get("/resources", handlers.ListResources)
+		// Additional resource routes
+		v1.Get("/applications/{app_name}/resources", handlers.ListApplicationResources)
+		v1.Get("/applications/{app_name}/services/{service_name}/resources", handlers.ListServiceResources)
 		// Swagger UI
 		r.Get("/swagger/*", httpSwagger.WrapHandler)
 		// Graph Visualization
 		r.Handle("/graph.html", http.FileServer(http.Dir("static")))
+		r.Handle("/graph-modern.html", http.FileServer(http.Dir("static")))
+		r.Handle("/graph-modern.css", http.FileServer(http.Dir("static")))
 	})
 	return r
 }

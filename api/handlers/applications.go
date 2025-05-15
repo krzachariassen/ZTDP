@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/resources"
 )
 
 // CreateApplication godoc
@@ -50,7 +51,7 @@ func ListApplications(w http.ResponseWriter, r *http.Request) {
 	apps := []contracts.ApplicationContract{}
 	for _, node := range GlobalGraph.Graph.Nodes {
 		if node.Kind == "application" {
-			contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+			contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
 				Name:  node.Metadata["name"].(string),
 				Owner: node.Metadata["owner"].(string),
 			})
@@ -81,7 +82,7 @@ func GetApplication(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Application not found", http.StatusNotFound)
 		return
 	}
-	contract, err := graph.LoadNode(node.Kind, node.Spec, contracts.Metadata{
+	contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
 		Name:  node.Metadata["name"].(string),
 		Owner: node.Metadata["owner"].(string),
 	})
