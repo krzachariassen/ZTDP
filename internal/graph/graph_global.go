@@ -30,13 +30,9 @@ func (gg *GlobalGraph) AddNode(node *Node) {
 }
 
 func (gg *GlobalGraph) AddEdge(fromID, toID, relType string) error {
-	for _, edge := range gg.Graph.Edges[fromID] {
-		if edge.To == toID && edge.Type == relType {
-			return nil
-		}
-	}
-	gg.Graph.Edges[fromID] = append(gg.Graph.Edges[fromID], Edge{To: toID, Type: relType})
-	return nil
+	gg.mu.Lock()
+	defer gg.mu.Unlock()
+	return gg.Graph.AddEdge(fromID, toID, relType)
 }
 
 func (gg *GlobalGraph) Apply(env string) (*Graph, error) {

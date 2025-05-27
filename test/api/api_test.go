@@ -419,15 +419,38 @@ func TestCreateAndListEnvironments(t *testing.T) {
 }
 
 // --- Policy enforcement tests ---
+func attachMustDeployToDevBeforeProdPolicy() {
+	g := handlers.GlobalGraph.Graph
+	// Create the policy node if it doesn't exist
+	policyID := "policy-dev-before-prod"
+	if _, ok := g.Nodes[policyID]; !ok {
+		g.AddNode(&graph.Node{
+			ID:   policyID,
+			Kind: "policy",
+			Metadata: map[string]interface{}{
+				"name":        "Must Deploy To Dev Before Prod",
+				"description": "Requires a service version to be deployed to dev before it can be deployed to prod",
+				"type":        "system",
+				"status":      "active",
+			},
+			Spec: map[string]interface{}{},
+		})
+	}
+	// Attach the policy to the transition for checkout-api:2.0.0 -> prod
+	g.AttachPolicyToTransition("checkout-api:2.0.0", "prod", "deploy", policyID)
+	// Attach the policy to the transition for checkout-api:3.0.0 -> prod
+	g.AttachPolicyToTransition("checkout-api:3.0.0", "prod", "deploy", policyID)
+}
+
 func TestDisallowDirectProductionDeployment(t *testing.T) {
 	router := newTestRouter(t)
 	setupApplications(t, router)
 	setupServices(t, router)
 	setupEnvironments(t, router)
 	setupAllowedEnvironments(t, router)
-
-	// Only deploy to prod, skip dev
 	createServiceVersion(t, router, "checkout", "checkout-api", "2.0.0")
+	attachMustDeployToDevBeforeProdPolicy()
+	// Only deploy to prod, skip dev
 	resp := httptest.NewRecorder()
 	payload := map[string]interface{}{"environment": "prod"}
 	body, _ := json.Marshal(payload)
@@ -447,6 +470,7 @@ func TestDisallowDeploymentToNotAllowedEnv(t *testing.T) {
 	setupEnvironments(t, router)
 	addAllowedEnvironments(t, router, "checkout", []string{"dev"})
 	createServiceVersion(t, router, "checkout", "checkout-api", "3.0.0")
+	attachMustDeployToDevBeforeProdPolicy()
 	// Should succeed: deploy to allowed env (dev)
 	deployServiceVersion(t, router, "checkout", "checkout-api", "3.0.0", "dev")
 	// Should fail: deploy to not-allowed env (prod)
