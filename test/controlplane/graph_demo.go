@@ -212,6 +212,78 @@ func main() {
 	if empty {
 		fmt.Println("   (none)")
 	}
+
+	// --- Policy node and relationships setup (always run) ---
+	fmt.Println("\n🔒 Adding policy node and relationships to the demo graph...")
+	devBeforeProdPolicy := &graph.Node{
+		ID:   "policy-dev-before-prod",
+		Kind: "policy",
+		Metadata: map[string]interface{}{
+			"name":        "Must Deploy To Dev Before Prod",
+			"description": "Requires a service version to be deployed to dev before it can be deployed to prod",
+			"type":        "system",
+			"status":      "active",
+		},
+		Spec: map[string]interface{}{
+			"sourceKind":      "service_version",
+			"targetKind":      "environment",
+			"targetID":        "prod",
+			"requiredPathIDs": []string{"dev"},
+		},
+	}
+	global.AddNode(devBeforeProdPolicy)
+
+	// Add an explicit edge from the policy node to the application node it enforces
+	global.AddEdge(devBeforeProdPolicy.ID, "checkout", "enforces")
+
+	apiSvcV2 := createServiceVersion("checkout", "checkout-api", "2.0.0")
+	apiSvcV2Node, _ := graph.ResolveContract(apiSvcV2)
+	global.AddNode(apiSvcV2Node)
+	global.AddEdge("checkout-api", apiSvcV2.ID(), "has_version")
+	global.Graph.AttachPolicyToTransition(apiSvcV2.ID(), "prod", graph.EdgeTypeDeploy, devBeforeProdPolicy.ID)
+
+	checkNode := &graph.Node{
+		ID:   "check-dev-deployment-" + apiSvcV2.ID(),
+		Kind: graph.KindCheck,
+		Metadata: map[string]interface{}{
+			"name":   "Dev Deployment Verification for " + apiSvcV2.ID(),
+			"type":   "deployment-verification",
+			"status": graph.CheckStatusSucceeded,
+		},
+		Spec: map[string]interface{}{
+			"serviceVersion": apiSvcV2.ID(),
+			"environment":    "dev",
+		},
+	}
+	global.AddNode(checkNode)
+	global.AddEdge(checkNode.ID, devBeforeProdPolicy.ID, graph.EdgeTypeSatisfies)
+	global.AddEdge(apiSvcV2.ID(), "dev", graph.EdgeTypeDeploy)
+	global.AddEdge(apiSvcV2.ID(), "prod", graph.EdgeTypeDeploy)
+
+	// --- Print summary of the policy graph ---
+	fmt.Println("\n🔒 Policy Nodes:")
+	for id, n := range global.Graph.Nodes {
+		if n.Kind == graph.KindPolicy {
+			fmt.Printf("   - %s: %s\n", id, n.Metadata["name"])
+		}
+	}
+	fmt.Println("\n🔗 Policy Attachments:")
+	for from, edgeList := range global.Graph.Edges {
+		for _, edge := range edgeList {
+			// Print all edges to policy nodes
+			if toNode, ok := global.Graph.Nodes[edge.To]; ok && toNode.Kind == graph.KindPolicy {
+				fmt.Printf("   - %s -%s-> %s\n", from, edge.Type, edge.To)
+			}
+		}
+	}
+	fmt.Println("\n✅ Policy demonstration complete.")
+
+	// Persist the updated graph (including policy nodes/edges) to Redis
+	if err := global.Save(); err != nil {
+		fmt.Printf("❌ Failed to save global graph after policy integration: %v\n", err)
+	} else {
+		fmt.Println("✅ Saved global graph with policy nodes/edges to backend.")
+	}
 }
 
 // This is a helper function to create and add resource types and instances to the demo graph
@@ -398,4 +470,16 @@ func setupResourcesWithContracts(global *graph.GlobalGraph, app, paymentApp cont
 	global.AddEdge(workerSvc.Metadata.Name, checkoutPgInstance.Metadata.Name, "uses")
 	global.AddEdge(workerSvc.Metadata.Name, checkoutKafkaInstance.Metadata.Name, "uses")
 	global.AddEdge(paymentSvc.Metadata.Name, paymentRedisInstance.Metadata.Name, "uses")
+}
+
+// Helper function to create a ServiceVersionContract instance
+func createServiceVersion(appName, serviceName, version string) contracts.ServiceVersionContract {
+	return contracts.ServiceVersionContract{
+		IDValue:   serviceName + ":" + version,
+		Name:      serviceName,
+		Owner:     "team-x", // Assuming team-x owns all services in this demo
+		Version:   version,
+		ConfigRef: "default-config",
+		CreatedAt: time.Now(),
+	}
 }

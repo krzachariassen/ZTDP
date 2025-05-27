@@ -27,9 +27,9 @@ func newTestRouter(t *testing.T) http.Handler {
 	}
 
 	handlers.GlobalGraph = graph.NewGlobalGraph(backend)
-	// Set up a fresh policy registry for each test
-	reg := policies.NewPolicyRegistryWithDefaults()
-	graph.SetPolicyRegistry(reg)
+	// Set the graph-based policy validator
+	graphPolicyValidator := policies.NewGraphBasedPolicyValidator()
+	graph.SetPolicyValidator(graphPolicyValidator)
 	return server.NewRouter()
 }
 

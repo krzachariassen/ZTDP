@@ -8,10 +8,6 @@
   <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
   <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
   <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
-  <!-- Add fcose layout - high-quality force-directed layout like yFiles -->
-  <script src="https://unpkg.com/layout-base@2.1.0/layout-base.js"></script>
-  <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
-  <script src="https://unpkg.com/cytoscape-fcose@2.1.0/cytoscape-fcose.js"></script>
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
@@ -588,6 +584,7 @@
     .color-resource { background-color: var(--info); }
     .color-resource_type { background-color: #90CAF9; }
     .color-resource_register { background-color: #FFD700; }
+    .color-policy { background-color: #EF4444; }
   </style>
 </head>
 <body>
@@ -654,6 +651,7 @@
           <option value="resource_register">Resource Catalog</option>
           <option value="resource_type">Resource Types</option>
           <option value="resource">Resource Instances</option>
+          <option value="policy">Policies</option>
         </select>
       </div>
       
@@ -722,6 +720,10 @@
           <div class="legend-item">
             <div class="legend-color color-resource"></div>
             <span>Resource</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color color-policy"></div>
+            <span>Policy</span>
           </div>
         </div>
         
@@ -897,6 +899,21 @@
           }
         },
         {
+          selector: 'node[kind="policy"]',
+          style: {
+            'background-color': '#EF4444', // Red for policy
+            'text-outline-color': '#B91C1C',
+            'color': '#fff',
+            'width': 48,
+            'height': 48,
+            'font-size': 13,
+            'font-weight': 600,
+            'border-width': 2,
+            'border-color': '#B91C1C',
+            'border-opacity': 0.8
+          }
+        },
+        {
           selector: 'edge',
           style: {
             'width': 2.5,
@@ -1014,7 +1031,6 @@
 
     // Register the layout extensions
     cytoscape.use(cytoscapeDagre);
-    cytoscape.use(cytoscape.extensions.fcose);
     
     // Helper to format JSON objects
     function formatJSON(obj) {
@@ -1052,24 +1068,7 @@
             'border-color': '#2980b9',
             'text-outline-color': '#3498db',
             'width': 30,
-            'height': 30,
-          }
-        },
-        {
-          selector: 'edge',
-          style: {
-            'width': 2,
-            'line-color': '#95a5a6',
-            'target-arrow-color': '#95a5a6',
-            'target-arrow-shape': 'triangle',
-            'curve-style': 'bezier',
-            'label': 'data(label)',
-            'font-size': 10,
-            'text-rotation': 'autorotate',
-            'text-background-color': 'white',
-            'text-background-opacity': 1,
-            'text-background-padding': 2,
-            'color': '#333',
+            'height': 30
           }
         },
         {
@@ -1240,6 +1239,10 @@
         case 'resource':
           iconClass = 'fa-solid fa-hdd';
           colorClass = 'color-resource';
+          break;
+        case 'policy':
+          iconClass = 'fa-solid fa-shield-alt';
+          colorClass = 'color-policy';
           break;
         default:
           iconClass = 'fa-solid fa-circle';
@@ -1508,101 +1511,42 @@
     // Run the layout with better error handling
     function runLayout() {
       console.log("Running layout with", cy.elements().length, "elements");
-      
-      // Ensure we have elements to layout
       if (cy.elements().length === 0) {
         console.warn("No elements to layout");
         return;
       }
-      
       // If we have more than 100 elements, use a simpler layout approach
-      // to avoid performance issues
       const useSimpleLayout = cy.elements().length > 100;
-      
       try {
         if (useSimpleLayout) {
           console.log("Using simplified layout for large graph");
           cy.layout({
-            name: 'fcose', // Use fcose even for large graphs but with simplified settings
-            animate: 'end', // Only animate at the end
-            nodeDimensionsIncludeLabels: true,
+            name: 'cose',
+            animate: false,
             fit: true,
             padding: 50,
-            randomize: true, // Start with random positions
-            quality: 'draft', // Use draft quality for large graphs
-            samplingType: true, // Enable sampling for better performance
-            sampleSize: 100, // Limit sample size
-            nodeSeparation: 120,
-            uniformNodeDimensions: true,
-            packComponents: true,
-            // Ideal edge length based on node connectivity
-            idealEdgeLength: edge => 100 + (edge.source().degree() + edge.target().degree()) * 5
+            randomize: true,
+            nodeDimensionsIncludeLabels: true
           }).run();
         } else {
-          console.log("Using force-directed fcose layout");
+          console.log("Using dagre layout");
           cy.layout({
-            name: 'fcose', // yFiles-like force directed layout
-            // Basic fcose settings
-            quality: 'proof', 
+            name: 'dagre',
             animate: true,
-            animationDuration: 1000,
             fit: true,
             padding: 50,
-            
-            // Force-directed options (similar to yFiles)
-            nodeSeparation: 120,
-            nodeRepulsion: node => 8000 + (node.degree() * 1000), // More connected = more repulsion
-            idealEdgeLength: edge => 100 + (edge.source().degree() + edge.target().degree()) * 5, // Adaptive edge length
-            edgeElasticity: 0.45,
-            
-            // Advanced options
-            gravityRangeCompound: 1.5,
-            gravityCompound: 1.0,
-            gravity: 0.25,
-            
-            // Improve layout quality
-            numIter: 2500, // More iterations = better layout
-            tile: true, // Tile disconnected components
-            packComponents: true, // Pack components together
-            randomize: false, // Don't use randomization for better deterministic results
-            
-            // Handle node types differently - keep resources and applications apart
-            alignmentConstraint: { vertical: [
-              cy.nodes('[kind="resource"], [kind="resource_type"]').map(n => n.id()),
-              cy.nodes('[kind="application"]').map(n => n.id())
-            ]},
-            
-            // Relative placement constraints (ensure hierarchy)
-            relativePlacementConstraint: [
-              {
-                // Resource register above resource types
-                top: cy.nodes('[kind="resource_register"]').map(n => n.id()),
-                bottom: cy.nodes('[kind="resource_type"]').map(n => n.id()),
-                gap: 100
-              },
-              {
-                // Resource types above resources
-                top: cy.nodes('[kind="resource_type"]').map(n => n.id()),
-                bottom: cy.nodes('[kind="resource"]').map(n => n.id()),
-                gap: 80
-              },
-              {
-                // Applications above services
-                top: cy.nodes('[kind="application"]').map(n => n.id()),
-                bottom: cy.nodes('[kind="service"]').map(n => n.id()),
-                gap: 80
-              }
-            ]
+            nodeDimensionsIncludeLabels: true,
+            rankDir: 'LR',
+            rankSep: 100,
+            edgeSep: 50
           }).run();
         }
       } catch (err) {
         console.error("Layout engine error:", err);
         showNotification("Layout error - falling back to simple layout", "warning");
-        
-        // Fallback to simplest possible layout
         cy.layout({
-          name: 'cose', // Use basic cose as fallback
-          fit: true, 
+          name: 'cose',
+          fit: true,
           padding: 75,
           animate: false,
           nodeDimensionsIncludeLabels: true,
@@ -1867,7 +1811,48 @@
         });
       });
 
-      // Fetch and process graph data
+      // Transform graph data into Cytoscape format
+const transformGraphData = (data) => {
+  const elements = [];
+  // Process nodes (API uses 'ID' and 'Kind')
+  if (data.Nodes) {
+    Object.values(data.Nodes).forEach(node => {
+      if (!node || !node.ID) return;
+      elements.push({
+        group: 'nodes',
+        data: {
+          id: node.ID,
+          label: node.Metadata && node.Metadata.name ? node.Metadata.name : node.ID,
+          type: node.Kind || 'unknown',
+          ...node
+        }
+      });
+    });
+  }
+  // Process edges (API may use 'From'/'To' or 'Source'/'Target')
+  if (data.Edges) {
+    let edges = Object.values(data.Edges).flatMap(e => Array.isArray(e) ? e : [e]);
+    edges.forEach(edge => {
+      const source = edge.From || edge.Source;
+      const target = edge.To || edge.Target;
+      if (!source || !target) return;
+      elements.push({
+        group: 'edges',
+        data: {
+          id: edge.ID || `${source}-${target}`,
+          source,
+          target,
+          label: edge.Kind || edge.Type || 'link',
+          type: edge.Kind || edge.Type || 'standard',
+          ...edge
+        }
+      });
+    });
+  }
+  return elements;
+};
+
+// Fetch and process graph data
     console.log("Fetching graph data from /v1/graph...");
     
     // Function to retry fetch with exponential backoff
@@ -1927,29 +1912,25 @@
         
         // Create nodes
         const nodes = Object.values(data.Nodes).map(n => {
-          // Handle case-sensitivity issues with properties
           const metadata = n.metadata || n.Metadata || {};
           const name = (metadata.name || metadata.Name || n.ID || n.id);
           const kind = n.kind || n.Kind || 'unknown';
-          
-          console.log("Processing node:", name, "of kind:", kind);
-          
-          // Format node label based on kind
           let label;
-          if (kind === 'resource') {
-            label = name;
-          } else if (kind === 'resource_type') {
+          if (kind === 'policy') {
+            label = metadata.title || metadata.name || n.ID || n.id || 'Policy';
+          } else if (kind === 'service_version') {
+            // Always show full service:version (e.g., checkout-api:2.0.0)
+            label = n.ID || n.id || name;
+          } else if (kind === 'process') {
+            // Show full process node ID (e.g., checkout-api:2.0.0-deploy-prod)
+            label = n.ID || n.id || name;
+          } else if (kind === 'resource' || kind === 'resource_type') {
             label = name;
           } else if (kind === 'resource_register') {
             label = 'Resource Catalog';
-          } else if (kind === 'service_version') {
-            // Extract version part from service_version ID (format: serviceName:version)
-            const parts = name.split(':');
-            label = parts.length > 1 ? `v${parts[1]}` : name;
           } else {
             label = name;
           }
-          
           return {
             data: {
               id: n.id || n.ID,
@@ -1965,23 +1946,23 @@
         for (const [from, edgeList] of Object.entries(data.Edges)) {
           // Handle both array and object formats
           const edgesToProcess = Array.isArray(edgeList) ? edgeList : [edgeList];
-          
           edgesToProcess.forEach(edge => {
-            const to = edge.to || edge.To;
-            const type = edge.type || edge.Type;
-            
+            // Support all possible property names
+            const to = edge.to || edge.To || edge.target || edge.Target;
+            const type = edge.type || edge.Type || edge.kind || edge.Kind || edge.label;
+            // Use ID if present, else fallback to from-to-type
+            const edgeId = edge.ID || edge.id || `${from}-${to}-${type}`;
             if (!to || !type) {
               console.warn("Edge missing required properties:", edge);
               return; // Skip this edge
             }
-            
-            edges.push({ 
-              data: { 
-                id: `${from}-${to}-${type}`,
-                source: from, 
-                target: to, 
-                label: type 
-              } 
+            edges.push({
+              data: {
+                id: edgeId,
+                source: from,
+                target: to,
+                label: type
+              }
             });
           });
         }
