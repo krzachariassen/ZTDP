@@ -49,6 +49,11 @@ func NewRouter() http.Handler {
 		v1.Post("/applications/{app_name}/services/{service_name}/resources/{resource_name}", handlers.LinkServiceToResource)
 		v1.Get("/resources", handlers.ListResources)
 		// Additional resource routes
+
+		// Policy handler for the new graph-based policy system
+		v1.Post("/policies", handlers.PolicyHandler)
+		v1.Get("/policies", handlers.ListPolicies)
+		v1.Get("/policies/{policy_id}", handlers.GetPolicy)
 		v1.Get("/applications/{app_name}/resources", handlers.ListApplicationResources)
 		v1.Get("/applications/{app_name}/services/{service_name}/resources", handlers.ListServiceResources)
 		// Swagger UI

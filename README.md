@@ -24,9 +24,12 @@ ZTDP/
 │   ├── handlers/             # HTTP handler logic
 │   └── server/               # API routing setup
 ├── cmd/                      # Entrypoint: main.go
+├── docs/                     # Platform documentation
+│   └── policy-architecture.md # Policy system documentation
 ├── internal/                 # Core architecture
 │   ├── contracts/            # Contract types: Application, Service, etc.
 │   ├── graph/                # Graph engine, backend, resolver, registry
+│   ├── policies/             # Policy engine for governance
 │   └── state/                # State store abstraction (future)
 ├── rps/                      # Resource Providers (Kubernetes, Postgres, etc.)
 ├── test/
@@ -255,25 +258,6 @@ curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-wo
 
 ---
 
-## 🏗️ MVP Progress
-
-| Phase                | Status         |
-|----------------------|----------------|
-| Contract schema      | ✅ Complete    |
-| Graph Engine         | ✅ Complete    |
-| Redis graph backend  | ✅ Complete    |
-| Control plane demo   | ✅ Complete    |
-| API-first server     | ✅ In progress |
-| Swagger/OpenAPI docs | ✅ Complete    |
-| Resource Providers   | ⏳ Coming up   |
-| Event orchestration  | ⏳ Coming up   |
-| Event Store (pluggable RP) | ⏳ Coming up   |
-| Reconciliation loop  | ⏳ Coming up   |
-
-See: [`MVP_BACKLOG.md`](MVP_BACKLOG.md) for detailed backlog and progress.
-
----
-
 ## 🔄 Regenerating Swagger Docs
 
 After updating handler annotations, run:
@@ -291,6 +275,12 @@ swag init -g api/server/server.go
 
 ---
 
+## 🔐 Policy System
+
+ZTDP now uses a single, graph-based policy model for all governance and enforcement. Policies are represented as nodes and attached to transitions in the graph. See [docs/policy-architecture.md](docs/policy-architecture.md) for details and usage examples.
+
+---
+
 ## 💡 Why Contribute?
 
 ZTDP is for builders, dreamers, and those who want to change how platforms are delivered.  
@@ -304,4 +294,6 @@ TBD — Project is in private development. License terms will be clarified befor
 
 ---
 
-**Ready to build the future? Clone, run, and let’s go! 🚀**
+> **Ready to build the future?**
+>
+> Clone, run, and let’s go! 🚀
