@@ -45,7 +45,10 @@ func DeployServiceVersion(w http.ResponseWriter, r *http.Request) {
 		// Policy errors should return 403 Forbidden
 		if err.Error() == "deployment to environment '"+req.Environment+"' is not allowed for application '"+chi.URLParam(r, "app_name")+"'" ||
 			err.Error() == "must deploy service version "+verID+" to 'dev' before deploying to 'prod'" ||
-			(err != nil && (err.Error() == "service version node not found or not a service_version" || err.Error() == "source node "+verID+" does not exist")) {
+			err.Error() == "service version node not found or not a service_version" ||
+			err.Error() == "source node "+verID+" does not exist" ||
+			// Handle PolicyNotSatisfiedError
+			len(err.Error()) > 20 && err.Error()[:20] == "Policy not satisfied" {
 			WriteJSONError(w, err.Error(), http.StatusForbidden)
 			return
 		}

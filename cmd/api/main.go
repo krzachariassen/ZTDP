@@ -72,7 +72,7 @@ func main() {
 	eventEmitter := graph.NewGraphEventEmitter(graphBackend, graphEvents)
 
 	// Set up global handlers
-	handlers.SetGraphEmitter(eventEmitter)
+	events.SetGraphEmitter(eventEmitter)
 
 	r := server.NewRouter()
 	log.Println("Starting API on :8080")

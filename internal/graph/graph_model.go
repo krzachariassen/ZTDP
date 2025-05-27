@@ -66,6 +66,14 @@ func (g *Graph) AddEdge(fromID, toID, relType string) error {
 			return errors.New("edge already exists")
 		}
 	}
+
+	// Enforce policy for deploy edges
+	if relType == "deploy" {
+		if err := g.IsTransitionAllowed(fromID, toID, relType); err != nil {
+			return err
+		}
+	}
+
 	// Policy enforcement using validator interface
 	if policyValidator != nil {
 		mutation := common.Mutation{
