@@ -8,8 +8,9 @@ ZTDP is a bold reimagining of the internal developer platform. It empowers you t
 
 - **Contract-Driven, Not YAML-Driven:** Express your intent in structured contracts—no more brittle YAML, no more static manifests.
 - **Graph-Native Orchestration:** Every resource, dependency, and lifecycle is modeled as a live, queryable graph—enabling true dependency awareness and incremental updates.
+- **Policy-Enforced by Design:** Built-in governance through graph-based policies that enforce security, compliance, and operational constraints at every transition.
+- **Event-Driven Architecture:** Built on a robust event bus with comprehensive event emission for graph operations, policy enforcement, and state changes.
 - **Composable, Pluggable Resource Providers:** Add new infrastructure types or swap backends without changing the core platform.
-- **Event-Driven, Not Pipeline-Driven:** ZTDP is built on an event bus, not a pipeline runner—enabling real-time, auditable, and autonomous operations.
 - **AI-Ready by Design:** Structured, deterministic, and safe for both human and AI agents to operate—no hidden state, no magic.
 - **API-First, TDD-First:** Every feature is built and tested as an API from day one, with a focus on developer experience and automation.
 - **Zero Touch, Zero Friction:** From contract submission to deployment, ZTDP eliminates manual steps, portals, and glue code—just outcomes.
@@ -25,9 +26,13 @@ ZTDP/
 │   └── server/               # API routing setup
 ├── cmd/                      # Entrypoint: main.go
 ├── docs/                     # Platform documentation
+│   ├── README.md             # Documentation index and guide
+│   ├── architecture.md      # System architecture overview
+│   ├── migration-guide.md   # Recent architectural improvements
 │   └── policy-architecture.md # Policy system documentation
 ├── internal/                 # Core architecture
 │   ├── contracts/            # Contract types: Application, Service, etc.
+│   ├── events/               # Event system and graph emitters
 │   ├── graph/                # Graph engine, backend, resolver, registry
 │   ├── policies/             # Policy engine for governance
 │   └── state/                # State store abstraction (future)
@@ -275,9 +280,38 @@ swag init -g api/server/server.go
 
 ---
 
-## 🔐 Policy System
+## 🔐 Policy System & Event-Driven Architecture
 
-ZTDP now uses a single, graph-based policy model for all governance and enforcement. Policies are represented as nodes and attached to transitions in the graph. See [docs/policy-architecture.md](docs/policy-architecture.md) for details and usage examples.
+ZTDP features a comprehensive policy system that provides governance and compliance enforcement:
+
+- **Graph-Based Policies**: Policies are represented as first-class nodes in the graph, enabling dynamic and contextual policy enforcement
+- **Transition-Level Enforcement**: Policies are attached to specific transitions (edges) between nodes, providing fine-grained control
+- **Automated Policy Enforcement**: Policy checks are automatically enforced during all graph operations, including deployments and state transitions
+- **Event-Driven Compliance**: Every policy evaluation and enforcement action generates events for auditing and monitoring
+
+### Event System Architecture
+
+ZTDP's event-driven architecture provides real-time visibility and integration capabilities:
+
+- **Centralized Event Bus**: All platform operations emit structured events through a unified event system
+- **Graph Operation Events**: Node additions, updates, deletions, and edge changes generate events automatically
+- **Policy Events**: Policy checks, results, transition attempts, and approvals are all tracked as events
+- **Clean Architecture**: Event emitters are properly separated from business logic, enabling modular and testable code
+
+### Key Benefits
+
+- **Real-time Monitoring**: Track all platform operations as they happen
+- **Audit Trail**: Complete event history for compliance and debugging
+- **Integration Ready**: Events can be consumed by external systems for alerts, dashboards, and automation
+- **Policy Transparency**: All policy decisions are logged and auditable
+
+### Documentation
+
+- **[Documentation Index](docs/README.md)**: Comprehensive guide to all ZTDP documentation
+- **[System Architecture](docs/architecture.md)**: Comprehensive overview of ZTDP's architecture, components, and design principles
+- **[Policy System](docs/policy-architecture.md)**: Detailed documentation of the graph-based policy system and event-driven enforcement
+
+See [docs/policy-architecture.md](docs/policy-architecture.md) for detailed documentation and examples.
 
 ---
 

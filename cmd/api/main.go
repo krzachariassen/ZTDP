@@ -10,7 +10,6 @@ import (
 	"github.com/krzachariassen/ZTDP/api/server"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
-	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
 func main() {
@@ -42,12 +41,6 @@ func main() {
 	policyEvents := events.NewPolicyEventService(eventBus, "api-server")
 	graphEvents := events.NewGraphEventService(eventBus, "api-server")
 
-	// Create a validator that uses graph-based policies
-	graphPolicyValidator := policies.NewGraphBasedPolicyValidator()
-
-	// Set the policy validator for the graph package
-	graph.SetPolicyValidator(graphPolicyValidator)
-
 	var backend graph.GraphBackend
 	switch os.Getenv("ZTDP_GRAPH_BACKEND") {
 	case "redis":
@@ -75,6 +68,12 @@ func main() {
 	events.SetGraphEmitter(eventEmitter)
 
 	r := server.NewRouter()
-	log.Println("Starting API on :8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("Starting API on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, r))
 }

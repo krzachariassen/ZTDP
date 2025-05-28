@@ -30,7 +30,12 @@ func (m *memoryGraph) AddNode(env string, node *Node) error {
 	if node == nil {
 		return errors.New("cannot add nil node")
 	}
-	return m.getOrCreate(env).AddNode(node)
+	g := m.getOrCreate(env)
+	// If node exists, update it instead of erroring
+	if _, err := g.GetNode(node.ID); err == nil {
+		return g.UpdateNode(node)
+	}
+	return g.AddNode(node)
 }
 
 func (m *memoryGraph) AddEdge(env, fromID, toID, relType string) error {

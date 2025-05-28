@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
@@ -133,13 +134,31 @@ func PolicyHandler(w http.ResponseWriter, r *http.Request) {
 
 // ListPolicies returns all policies
 func ListPolicies(w http.ResponseWriter, r *http.Request) {
-	// Collect all policy nodes from the global graph
+	// Parse environment from query parameter or use default
+	env := r.URL.Query().Get("environment")
+	if env == "" {
+		env = "default"
+	}
+
+	// Get the graph store that's used by policy creation
+	graphStore := getGraphStore()
+
+	// Get policies from the environment-specific graph
 	policies := []interface{}{}
-	for _, node := range GlobalGraph.Graph.Nodes {
+	graph, err := graphStore.GetGraph(env)
+	if err != nil {
+		// If environment graph doesn't exist, return empty array
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(policies)
+		return
+	}
+
+	for _, node := range graph.Nodes {
 		if node.Kind == "policy" {
 			policies = append(policies, node)
 		}
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(policies)
 }
@@ -148,22 +167,39 @@ func ListPolicies(w http.ResponseWriter, r *http.Request) {
 func GetPolicy(w http.ResponseWriter, r *http.Request) {
 	policyID := r.URL.Query().Get("policy_id")
 	if policyID == "" {
-		// Try chi param if available
-		if param := r.Context().Value("policy_id"); param != nil {
-			policyID, _ = param.(string)
-		}
+		// Try chi URL param if available
+		policyID = chi.URLParam(r, "policy_id")
 	}
 	if policyID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "policy_id is required"})
 		return
 	}
-	policy, ok := GlobalGraph.Graph.Nodes[policyID]
+
+	// Parse environment from query parameter or use default
+	env := r.URL.Query().Get("environment")
+	if env == "" {
+		env = "default"
+	}
+
+	// Get the graph store that's used by policy creation
+	graphStore := getGraphStore()
+
+	// Get policy from the environment-specific graph
+	graph, err := graphStore.GetGraph(env)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "environment not found"})
+		return
+	}
+
+	policy, ok := graph.Nodes[policyID]
 	if !ok || policy.Kind != "policy" {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "policy not found"})
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(policy)
 }
