@@ -1,0 +1,8 @@
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=BVogb1sEPqA
+    command: ["redis-server", "--requirepass", "BVogb1sEPqA"]
