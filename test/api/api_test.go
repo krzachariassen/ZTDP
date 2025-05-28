@@ -12,7 +12,6 @@ import (
 	"github.com/krzachariassen/ZTDP/api/handlers"
 	"github.com/krzachariassen/ZTDP/api/server"
 	"github.com/krzachariassen/ZTDP/internal/graph"
-	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
 // --- Test router setup with backend selection ---
@@ -27,9 +26,6 @@ func newTestRouter(t *testing.T) http.Handler {
 	}
 
 	handlers.GlobalGraph = graph.NewGlobalGraph(backend)
-	// Set the graph-based policy validator
-	graphPolicyValidator := policies.NewGraphBasedPolicyValidator()
-	graph.SetPolicyValidator(graphPolicyValidator)
 	return server.NewRouter()
 }
 
@@ -529,5 +525,140 @@ func TestResourceCatalogAndLinking(t *testing.T) {
 	}
 	if bytes.Contains(workerResources, []byte("redis-cache")) {
 		t.Error("did not expect redis-cache in checkout-worker resource list")
+	}
+}
+
+func TestPolicyAPIEndpoints(t *testing.T) {
+	router := newTestRouter(t)
+
+	// Create a policy via API
+	policyReq := map[string]interface{}{
+		"operation":   "create_policy",
+		"name":        "api-policy-test",
+		"description": "API Policy Test",
+		"type":        "check",
+		"parameters":  map[string]interface{}{"foo": "bar"},
+	}
+	body, _ := json.Marshal(policyReq)
+	req := httptest.NewRequest("POST", "/v1/policies", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("failed to create policy via API, status: %d, body: %s", resp.Code, resp.Body.String())
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to parse policy creation response: %v", err)
+	}
+	policyID, ok := result["policy_id"].(string)
+	if !ok || policyID == "" {
+		t.Fatalf("policy_id missing in response")
+	}
+
+	// List policies
+	req = httptest.NewRequest("GET", "/v1/policies", nil)
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("failed to list policies, status: %d", resp.Code)
+	}
+	var policies []interface{}
+	if err := json.Unmarshal(resp.Body.Bytes(), &policies); err != nil {
+		t.Fatalf("failed to parse policies list: %v", err)
+	}
+	found := false
+	for _, p := range policies {
+		if m, ok := p.(map[string]interface{}); ok && m["id"] == policyID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("created policy not found in list")
+	}
+
+	// Get policy by ID
+	url := "/v1/policies/" + policyID
+	req = httptest.NewRequest("GET", url, nil)
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("failed to get policy by ID, status: %d", resp.Code)
+	}
+	var policy map[string]interface{}
+	if err := json.Unmarshal(resp.Body.Bytes(), &policy); err != nil {
+		t.Fatalf("failed to parse get policy response: %v", err)
+	}
+	if policy["id"] != policyID {
+		t.Errorf("get policy returned wrong id: %v", policy["id"])
+	}
+
+	// Create a check for the policy
+	checkReq := map[string]interface{}{
+		"operation":  "create_check",
+		"check_id":   "api-check-1",
+		"name":       "API Check 1",
+		"type":       "api-check-type",
+		"parameters": map[string]interface{}{"foo": "bar"},
+	}
+	body, _ = json.Marshal(checkReq)
+	req = httptest.NewRequest("POST", "/v1/policies", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("failed to create check via API, status: %d, body: %s", resp.Code, resp.Body.String())
+	}
+
+	// Satisfy the policy with the check
+	satisfyReq := map[string]interface{}{
+		"operation": "satisfy",
+		"check_id":  "api-check-1",
+		"policy_id": policyID,
+	}
+	body, _ = json.Marshal(satisfyReq)
+	req = httptest.NewRequest("POST", "/v1/policies", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("failed to satisfy policy via API, status: %d, body: %s", resp.Code, resp.Body.String())
+	}
+
+	// Update check status
+	updateReq := map[string]interface{}{
+		"operation": "update_check",
+		"check_id":  "api-check-1",
+		"status":    "succeeded",
+		"results":   map[string]interface{}{"foo": "bar"},
+	}
+	body, _ = json.Marshal(updateReq)
+	req = httptest.NewRequest("POST", "/v1/policies", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("failed to update check status via API, status: %d, body: %s", resp.Code, resp.Body.String())
+	}
+
+	// Negative: invalid operation
+	badReq := map[string]interface{}{
+		"operation": "not_a_real_op",
+	}
+	body, _ = json.Marshal(badReq)
+	req = httptest.NewRequest("POST", "/v1/policies", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code == http.StatusOK {
+		t.Errorf("expected error for invalid operation, got 200")
+	}
+
+	// Negative: get non-existent policy
+	req = httptest.NewRequest("GET", "/v1/policies/does-not-exist", nil)
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for non-existent policy, got %d", resp.Code)
 	}
 }

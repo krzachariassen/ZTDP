@@ -71,15 +71,6 @@ func (e *PolicyEvaluator) ValidateTransition(fromID, toID, edgeType, user string
 	return err
 }
 
-// Deprecated: validateWithLegacyPolicies is no longer used as part of the policy system simplification.
-// The system now only uses the graph-based policy model.
-// This method remains as a stub for backward compatibility and will be removed in a future version.
-func (e *PolicyEvaluator) validateWithLegacyPolicies(fromID, toID, edgeType, user string) error {
-	// This method is deprecated and will be removed in a future version.
-	// Currently returns nil to maintain backward compatibility.
-	return nil
-}
-
 // CreatePolicyNode creates a new policy node in the graph.
 func (e *PolicyEvaluator) CreatePolicyNode(name, description, policyType string, parameters map[string]interface{}) (*graph.Node, error) {
 	// Generate a unique ID for the policy
@@ -157,20 +148,16 @@ func (e *PolicyEvaluator) UpdateCheckStatus(checkID, status string, results map[
 		policies := g.GetPoliciesSatisfiedByCheck(checkID)
 
 		for _, policyID := range policies {
-			// Create a mutation representing the check update
-			mutation := common.Mutation{
-				Type: "update_check",
-				Node: &common.NodeView{
-					ID:       checkID,
-					Kind:     common.KindCheck,
-					Metadata: checkNode.Metadata,
-					Spec:     checkNode.Spec,
-				},
-				Context: map[string]interface{}{
-					"old_status": oldStatus,
-					"new_status": status,
-					"policy_id":  policyID,
-				},
+			// Create details representing the check update
+			details := map[string]interface{}{
+				"type":       "update_check",
+				"check_id":   checkID,
+				"kind":       common.KindCheck,
+				"metadata":   checkNode.Metadata,
+				"spec":       checkNode.Spec,
+				"old_status": oldStatus,
+				"new_status": status,
+				"policy_id":  policyID,
 			}
 
 			// Emit event for check update that affects a policy
@@ -178,7 +165,7 @@ func (e *PolicyEvaluator) UpdateCheckStatus(checkID, status string, results map[
 				policyID,
 				status == common.CheckStatusSucceeded,
 				fmt.Sprintf("Check %s status changed to %s", checkID, status),
-				mutation,
+				details,
 			)
 		}
 	}
@@ -208,28 +195,25 @@ func (e *PolicyEvaluator) SatisfyPolicy(checkID, policyID string) error {
 
 	// Emit event for the satisfaction relationship if event service is available
 	if e.eventService != nil {
-		mutation := common.Mutation{
-			Type: "satisfy_policy",
-			Edge: &common.EdgeView{
-				From: checkID,
-				To:   policyID,
-				Type: common.EdgeTypeSatisfies,
-			},
-			Context: map[string]interface{}{
-				"check_type":   checkNode.Metadata["type"],
-				"check_status": checkNode.Metadata["status"],
-				"policy_type":  policyNode.Metadata["type"],
-				"policy_name":  policyNode.Metadata["name"],
-			},
+		details := map[string]interface{}{
+			"type":      "satisfy_policy",
+			"from":      checkID,
+			"to":        policyID,
+			"edge_type": common.EdgeTypeSatisfies,
+		}
+		context := map[string]interface{}{
+			"check_type":   checkNode.Metadata["type"],
+			"check_status": checkNode.Metadata["status"],
+			"policy_type":  policyNode.Metadata["type"],
+			"policy_name":  policyNode.Metadata["name"],
+			"check_id":     checkID,
+			"check_name":   checkNode.Metadata["name"],
 		}
 
 		e.eventService.EmitPolicyCheck(
 			policyID,
-			mutation,
-			map[string]interface{}{
-				"check_id":   checkID,
-				"check_name": checkNode.Metadata["name"],
-			},
+			details,
+			context,
 		)
 	}
 

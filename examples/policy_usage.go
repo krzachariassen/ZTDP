@@ -4,33 +4,13 @@ package example
 import (
 	"fmt"
 
-	"github.com/krzachariassen/ZTDP/internal/common"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
-// CustomPolicyValidator demonstrates how to implement a validator using the graph-based policy system
-type CustomPolicyValidator struct {
-	// Add any needed dependencies here
-}
-
-// NewCustomPolicyValidator creates a new policy validator
-func NewCustomPolicyValidator() *CustomPolicyValidator {
-	return &CustomPolicyValidator{}
-}
-
-// ValidateMutation implements the common.PolicyValidator interface
-// It uses the graph-based policy system to validate mutations
-func (v *CustomPolicyValidator) ValidateMutation(view common.GraphView, mutation common.Mutation) error {
-	// This is a compatibility adapter for the legacy interface
-	// It performs validation using graph-based policies
-
-	// In practice, this would call into graph-specific policy validation
-	// The full graph-based policy implementation is handled in the graph package
-	// And this adapter merely provides compatibility with the legacy interface
-
-	return nil
-}
+// Note: Legacy policy validators have been removed in favor of graph-based policies.
+// Policy validation is now handled directly by the graph's IsTransitionAllowed method.
+// This example demonstrates the modern approach to policy enforcement.
 
 // Example usage function to demonstrate the integration
 func ExampleIntegration() {

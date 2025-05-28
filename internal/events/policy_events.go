@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/krzachariassen/ZTDP/internal/common"
 )
 
 // PolicyEventService handles policy-related event emissions
@@ -24,7 +23,7 @@ func NewPolicyEventService(eventBus *EventBus, sourceID string) *PolicyEventServ
 // EmitPolicyCheck sends an event when a policy check is initiated
 func (s *PolicyEventService) EmitPolicyCheck(
 	policyID string,
-	mutation common.Mutation,
+	details map[string]interface{},
 	context map[string]interface{},
 ) error {
 	event := Event{
@@ -36,8 +35,8 @@ func (s *PolicyEventService) EmitPolicyCheck(
 		Timestamp: time.Now().UnixNano(),
 		ID:        uuid.New().String(),
 		Payload: map[string]interface{}{
-			"mutation": mutation,
-			"context":  context,
+			"details": details,
+			"context": context,
 		},
 	}
 
@@ -49,7 +48,7 @@ func (s *PolicyEventService) EmitPolicyCheckResult(
 	policyID string,
 	result bool,
 	reason string,
-	mutation common.Mutation,
+	details map[string]interface{},
 ) error {
 	status := "approved"
 	if !result {
@@ -65,9 +64,9 @@ func (s *PolicyEventService) EmitPolicyCheckResult(
 		Timestamp: time.Now().UnixNano(),
 		ID:        uuid.New().String(),
 		Payload: map[string]interface{}{
-			"result":   result,
-			"reason":   reason,
-			"mutation": mutation,
+			"result":  result,
+			"reason":  reason,
+			"details": details,
 		},
 	}
 
