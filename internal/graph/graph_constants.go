@@ -22,6 +22,7 @@ const (
 	EdgeTypeOwns       = common.EdgeTypeOwns
 	EdgeTypeHasVersion = common.EdgeTypeHasVersion
 	EdgeTypeDeploy     = common.EdgeTypeDeploy
+	EdgeTypeCreate     = "create"
 	EdgeTypeUses       = common.EdgeTypeUses
 	EdgeTypeInstanceOf = common.EdgeTypeInstanceOf
 	EdgeTypeRequires   = common.EdgeTypeRequires
@@ -38,3 +39,22 @@ const (
 	CheckStatusSucceeded = common.CheckStatusSucceeded
 	CheckStatusFailed    = common.CheckStatusFailed
 )
+
+// Allowed edge types for the platform
+var AllowedEdgeTypes = map[string]struct{}{
+	EdgeTypeOwns:       {},
+	EdgeTypeHasVersion: {},
+	EdgeTypeDeploy:     {},
+	EdgeTypeCreate:     {},
+	EdgeTypeUses:       {},
+	EdgeTypeInstanceOf: {},
+	EdgeTypeRequires:   {},
+	EdgeTypeSatisfies:  {},
+	// Add more as needed
+}
+
+// IsValidEdgeType returns true if the edge type is allowed
+func IsValidEdgeType(edgeType string) bool {
+	_, ok := AllowedEdgeTypes[edgeType]
+	return ok
+}

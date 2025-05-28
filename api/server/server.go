@@ -62,6 +62,8 @@ func NewRouter() http.Handler {
 		r.Handle("/graph.html", http.FileServer(http.Dir("static")))
 		r.Handle("/graph-modern.html", http.FileServer(http.Dir("static")))
 		r.Handle("/graph-modern.css", http.FileServer(http.Dir("static")))
+		// Application plan retrieval
+		v1.Get("/applications/{app_name}/plan", handlers.GetPlan)
 	})
 	return r
 }
