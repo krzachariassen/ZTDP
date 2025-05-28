@@ -6,8 +6,9 @@ import (
 )
 
 type Edge struct {
-	To   string `json:"to"`
-	Type string `json:"type"`
+	To       string                 `json:"to"`
+	Type     string                 `json:"type"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type Graph struct {
@@ -46,6 +47,9 @@ func (g *Graph) GetNode(id string) (*Node, error) {
 }
 
 func (g *Graph) AddEdge(fromID, toID, relType string) error {
+	if !IsValidEdgeType(relType) {
+		return fmt.Errorf("invalid edge type: %s", relType)
+	}
 	if _, ok := g.Nodes[fromID]; !ok {
 		return fmt.Errorf("source node %s does not exist", fromID)
 	}

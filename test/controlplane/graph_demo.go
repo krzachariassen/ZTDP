@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/resources"
+	"github.com/krzachariassen/ZTDP/internal/utils"
 )
 
 func main() {
@@ -283,6 +285,44 @@ func main() {
 		fmt.Printf("❌ Failed to save global graph after policy integration: %v\n", err)
 	} else {
 		fmt.Println("✅ Saved global graph with policy nodes/edges to backend.")
+	}
+
+	// --- Validate plan endpoint for demo application ---
+	fmt.Println("\n🚦 Validating /v1/applications/checkout/plan endpoint...")
+	resp, err := http.Get("http://localhost:8080/v1/applications/checkout/plan")
+	if err != nil {
+		fmt.Printf("❌ Failed to call plan endpoint: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		fmt.Printf("❌ Plan endpoint returned status %d\n", resp.StatusCode)
+		return
+	}
+	var plan []string
+	if err := utils.DecodeJSON(resp.Body, &plan); err != nil {
+		fmt.Printf("❌ Failed to decode plan response: %v\n", err)
+		return
+	}
+	fmt.Printf("✅ Plan for 'checkout': %v\n", plan)
+	// Example assertion: plan should contain at least the application and its services
+	expected := []string{"checkout", "checkout-api", "checkout-worker"}
+	match := true
+	for _, id := range expected {
+		found := false
+		for _, pid := range plan {
+			if pid == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			fmt.Printf("❌ Expected node '%s' not found in plan!\n", id)
+			match = false
+		}
+	}
+	if match {
+		fmt.Println("✅ Plan contains all expected nodes.")
 	}
 }
 
