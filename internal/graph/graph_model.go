@@ -6,20 +6,20 @@ import (
 )
 
 type Edge struct {
-	To   string
-	Type string
+	To   string `json:"to"`
+	Type string `json:"type"`
 }
 
 type Graph struct {
-	Nodes map[string]*Node
-	Edges map[string][]Edge
+	Nodes map[string]*Node  `json:"nodes"`
+	Edges map[string][]Edge `json:"edges"`
 }
 
 type Node struct {
-	ID       string
-	Kind     string
-	Metadata map[string]interface{}
-	Spec     map[string]interface{}
+	ID       string                 `json:"id"`
+	Kind     string                 `json:"kind"`
+	Metadata map[string]interface{} `json:"metadata"`
+	Spec     map[string]interface{} `json:"spec"`
 }
 
 func NewGraph() *Graph {
