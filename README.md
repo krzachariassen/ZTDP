@@ -1,36 +1,68 @@
 # Zero Touch Developer Platform (ZTDP)
 
-ZTDP is a next-generation internal developer platform that redefines how teams deliver, govern, and operate cloud-native applications and infrastructure. It is designed for organizations that want to move fast, stay secure, and eliminate friction—without sacrificing control or compliance.
+**A next-generation internal developer platform that models your entire application landscape as a live graph.**
+
+ZTDP eliminates the friction between intent and outcome—deploy applications, enforce policies, and understand dependencies through a single, unified platform. No more YAML wrestling, no more manual gates, no more hidden dependencies.
 
 ---
 
-## 🚀 Why ZTDP? (The Value Proposition)
+## 🚀 The Problem We Solve
 
-**ZTDP is not just another platform.** It is a radical leap forward for platform engineering, built to solve the real pain points of modern teams:
+Modern platform engineering faces the same challenges everywhere:
 
-- **True Dependency Awareness:** Model your entire application, infrastructure, and policy landscape as a live, queryable graph. No more hidden dependencies or brittle pipelines—ZTDP understands and orchestrates everything, end-to-end.
-- **Policy-Driven Automation:** Enforce security, compliance, and operational policies at every step. Policies are first-class citizens, attached to transitions and enforced automatically—no more manual gates or out-of-band reviews.
-- **Event-Driven, Real-Time:** Every change, deployment, and policy check emits structured events. Integrate with your observability, security, and automation tools in real time.
-- **Composable Resource Providers:** Add, swap, or extend infrastructure types (Kubernetes, databases, cloud services) without changing your core platform logic.
-- **API-First:** Every feature is accessible via a clean, well-documented API. ZTDP is built for automation, integration, and developer experience from day one.
-- **Zero Touch, Zero Friction:** Go from intent to outcome with no manual steps, no portals, and no YAML. ZTDP is designed for both human and AI operators—deterministic, auditable, and safe.
+- **Hidden Dependencies**: Applications break because of invisible relationships
+- **Manual Bottlenecks**: Every deployment requires manual approvals and reviews  
+- **Policy Confusion**: Security and compliance policies are enforced inconsistently
+- **Tool Sprawl**: Different tools for different environments create complexity
+- **No Visibility**: Teams can't understand what's happening across their platform
+
+**ZTDP solves this by modeling everything as a graph.** Applications, services, environments, policies, and resources are nodes. Dependencies, deployments, and policy relationships are edges. The result? Complete visibility and zero-touch automation.
+
+---
+
+## ✨ What Makes ZTDP Different
+
+- **🧠 Graph-Native**: Everything is a node in a live, queryable graph—no more hidden dependencies
+- **🔒 Policy-First**: Security and compliance policies are enforced automatically at every transition  
+- **⚡ Zero Touch**: From intent to outcome with no manual steps or YAML files
+- **📊 Real-Time**: Every change emits events for complete observability and integration
+- **🔧 Composable**: Plug in new infrastructure types without changing core platform logic
+- **🤖 AI-Ready**: Designed for both human and AI operators with deterministic, auditable operations
+
+---
+
+## 🎯 Quick Demo
+
+```bash
+# Start the platform
+docker-compose up -d
+export ZTDP_GRAPH_BACKEND=redis REDIS_HOST=localhost:6379 REDIS_PASSWORD=BVogb1sEPqA
+go run ./cmd/api/main.go
+
+# Create an application
+curl -X POST http://localhost:8080/v1/applications \
+  -H "Content-Type: application/json" \
+  -d '{"metadata": {"name": "my-app", "owner": "team-x"}}'
+
+# Deploy the entire application 
+curl -X POST http://localhost:8080/v1/applications/my-app/deploy \
+  -H "Content-Type: application/json" \
+  -d '{"environment": "dev"}'
+
+# View the live graph
+open http://localhost:8080/static/graph-modern.html
+```
+
+**That's it.** No YAML, no manual steps, no complexity.
 
 ---
 
 ## 🏗️ How It Works
 
-1. **Model Everything as a Graph:**
-   - Applications, services, environments, resources, and policies are all nodes in a live graph.
-   - Edges represent dependencies, deployments, ownership, and policy relationships.
-2. **Express Intent via Contracts:**
-   - Submit structured contracts (JSON) to declare what you want—ZTDP figures out the rest.
-3. **Plan & Enforce:**
-   - The planner computes the correct execution order, respecting dependencies and policies.
-   - Policies are enforced automatically at every transition.
-4. **Event-Driven Execution:**
-   - Every operation emits events for observability, audit, and integration.
-5. **Composable Resource Providers:**
-   - Plug in new infrastructure types or swap backends with zero friction.
+1. **Model Everything as a Graph**: Applications, services, environments, and policies are nodes with relationship edges
+2. **Express Intent via JSON**: Submit structured contracts declaring what you want—ZTDP figures out the rest  
+3. **Plan & Enforce**: The planner computes execution order while enforcing policies automatically
+4. **Execute & Observe**: Every operation emits events for complete observability and integration
 
 ---
 
@@ -133,6 +165,7 @@ go test ./...
 | POST   | `/v1/applications/{app}/services/{service}/versions/{version}/deploy` | Deploy individual service version to environment |
 | GET    | `/v1/environments/{env}/deployments`                              | List deployments in an environment (uses 'deploy' edges)              |
 | GET    | `/v1/graph`                                                     | View current global DAG                         |
+| GET    | `/v1/logs/stream`                                               | Real-time log streaming                         |
 | GET    | `/v1/status`                                                    | Platform status                                 |
 | GET    | `/v1/healthz`                                                   | Health check                                    |
 
@@ -140,317 +173,32 @@ go test ./...
 
 ---
 
-## 🏗️ Example API Usage (with curl)
+## 📚 Documentation
 
-### 1. Create Environments
-```bash
-curl -X POST http://localhost:8080/v1/environments \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "dev", "owner": "platform-team" },
-    "spec": { "description": "Development environment" }
-  }'
+For detailed technical information, architecture deep-dives, and API documentation:
 
-curl -X POST http://localhost:8080/v1/environments \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "prod", "owner": "platform-team" },
-    "spec": { "description": "Production environment" }
-  }'
-```
+- **[System Architecture](docs/architecture.md)**: Complete system overview and component design
+- **[Policy System](docs/policy-architecture.md)**: Graph-based policy enforcement and compliance
+- **[Logging Architecture](docs/logging-architecture.md)**: Real-time event streaming and observability
+- **[Documentation Index](docs/README.md)**: Complete documentation guide
 
-### 2. Create Application
-```bash
-curl -X POST http://localhost:8080/v1/applications \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "checkout", "owner": "team-x" },
-    "spec": {
-      "description": "Handles checkout flows",
-      "tags": ["payments", "frontend"],
-      "lifecycle": {}
-    }
-  }'
-```
-
-### 3. Allow Application to Deploy to Environments
-```bash
-# Allow checkout app to deploy to dev
-dev_env="dev"
-curl -X POST http://localhost:8080/v1/applications/checkout/environments/$dev_env/allowed
-
-# Allow checkout app to deploy to prod
-prod_env="prod"
-curl -X POST http://localhost:8080/v1/applications/checkout/environments/$prod_env/allowed
-```
-
-### 4. Create Services for the Application
-```bash
-curl -X POST http://localhost:8080/v1/applications/checkout/services \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "checkout-api", "owner": "team-x" },
-    "spec": {
-      "application": "checkout",
-      "port": 8080,
-      "public": true
-    }
-  }'
-
-curl -X POST http://localhost:8080/v1/applications/checkout/services \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "checkout-worker", "owner": "team-x" },
-    "spec": {
-      "application": "checkout",
-      "port": 9090,
-      "public": false
-    }
-  }'
-```
-
-### 5. Create Service Versions
-```bash
-# Create a new version for a service
-curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "version": "1.0.0",
-    "config_ref": "default-config",
-    "owner": "team-x"
-  }'
-
-# Create another version for a service
-curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "version": "1.1.0",
-    "config_ref": "default-config",
-    "owner": "team-x"
-  }'
-```
-
-### 6. List Service Versions
-```bash
-curl -X GET http://localhost:8080/v1/applications/checkout/services/checkout-api/versions
-```
-
-### 7. Deploy a Service Version to an Environment
-```bash
-curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions/1.0.0/deploy \
-  -H "Content-Type: application/json" \
-  -d '{
-    "environment": "dev"
-  }'
-```
-
-### 8. List Deployments in an Environment
-```bash
-curl -X GET http://localhost:8080/v1/environments/dev/deployments
-```
-
-### 9. Deploy Services to Environments
-```bash
-# Deploy checkout-api to dev
-deploy_service="checkout-api"
-deploy_env="dev"
-curl -X POST http://localhost:8080/v1/applications/checkout/services/$deploy_service/environments/$deploy_env
-
-# Deploy checkout-api to prod
-prod_env="prod"
-curl -X POST http://localhost:8080/v1/applications/checkout/services/$deploy_service/environments/$prod_env
-
-# Deploy checkout-worker to dev
-worker_service="checkout-worker"
-curl -X POST http://localhost:8080/v1/applications/checkout/services/$worker_service/environments/$deploy_env
-```
-
-> **Note:** This operation now creates a `deploy` edge in the graph (previously `deployed_in`).
-
-### 10. Attempt to Deploy Service to Not-Allowed Environment (Should Fail)
-```bash
-# Remove prod from allowed environments for checkout (replace allowed list with only dev)
-curl -X PUT http://localhost:8080/v1/applications/checkout/environments/allowed \
-  -H "Content-Type: application/json" \
-  -d '["dev"]'
-
-# Try to deploy checkout-worker to prod (should fail with 403)
-curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-worker/environments/prod -v
-```
+**API Documentation:** [Swagger/OpenAPI](http://localhost:8080/swagger/index.html) (when running locally)
 
 ---
 
-## 🚀 Simple Application Deployment (NEW!)
+## 💡 Why Contribute?
 
-The easiest way to deploy applications is with our new single-endpoint deployment API:
-
-### Deploy Entire Application
-```bash
-# Deploy application to development environment
-curl -X POST http://localhost:8080/v1/applications/checkout/deploy \
-  -H "Content-Type: application/json" \
-  -d '{"environment": "dev"}'
-
-# Deploy application to production environment  
-curl -X POST http://localhost:8080/v1/applications/checkout/deploy \
-  -H "Content-Type: application/json" \
-  -d '{"environment": "prod", "version": "1.0.0"}'
-```
-
-**What happens internally:**
-1. ✅ Validates application and environment exist
-2. ✅ Enforces deployment policies 
-3. ✅ Generates deployment plan for all services
-4. ✅ Deploys all service versions in correct order
-5. ✅ Returns comprehensive deployment results
-
-**Response:**
-```json
-{
-  "application": "checkout",
-  "environment": "dev", 
-  "deployments": ["checkout-api:1.0.0", "checkout-worker:1.0.0"],
-  "skipped": [],
-  "failed": [],
-  "summary": {
-    "success": true,
-    "message": "Successfully deployed checkout to dev"
-  }
-}
-```
+ZTDP is for builders, dreamers, and those who want to change how platforms are delivered.  
+Whether you’re into Go, distributed systems, or just want to see what a zero-touch platform feels like—jump in, hack, and help us shape the future.
 
 ---
 
-## 🏗️ Detailed API Usage (Legacy/Advanced)
+## 📌 License
 
-### 1. Create Environments
-```bash
-curl -X POST http://localhost:8080/v1/environments \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "dev", "owner": "platform-team" },
-    "spec": { "description": "Development environment" }
-  }'
+TBD — Project is in private development. License terms will be clarified before any public release.
 
-curl -X POST http://localhost:8080/v1/environments \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "prod", "owner": "platform-team" },
-    "spec": { "description": "Production environment" }
-  }'
-```
+---
 
-### 2. Create Application
-```bash
-curl -X POST http://localhost:8080/v1/applications \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "checkout", "owner": "team-x" },
-    "spec": {
-      "description": "Handles checkout flows",
-      "tags": ["payments", "frontend"],
-      "lifecycle": {}
-    }
-  }'
-```
-
-### 3. Allow Application to Deploy to Environments
-```bash
-# Allow checkout app to deploy to dev
-dev_env="dev"
-curl -X POST http://localhost:8080/v1/applications/checkout/environments/$dev_env/allowed
-
-# Allow checkout app to deploy to prod
-prod_env="prod"
-curl -X POST http://localhost:8080/v1/applications/checkout/environments/$prod_env/allowed
-```
-
-### 4. Create Services for the Application
-```bash
-curl -X POST http://localhost:8080/v1/applications/checkout/services \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "checkout-api", "owner": "team-x" },
-    "spec": {
-      "application": "checkout",
-      "port": 8080,
-      "public": true
-    }
-  }'
-
-curl -X POST http://localhost:8080/v1/applications/checkout/services \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metadata": { "name": "checkout-worker", "owner": "team-x" },
-    "spec": {
-      "application": "checkout",
-      "port": 9090,
-      "public": false
-    }
-  }'
-```
-
-### 5. Create Service Versions
-```bash
-# Create a new version for a service
-curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "version": "1.0.0",
-    "config_ref": "default-config",
-    "owner": "team-x"
-  }'
-
-# Create another version for a service
-curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "version": "1.1.0",
-    "config_ref": "default-config",
-    "owner": "team-x"
-  }'
-```
-
-### 6. List Service Versions
-```bash
-curl -X GET http://localhost:8080/v1/applications/checkout/services/checkout-api/versions
-```
-
-### 7. Deploy a Service Version to an Environment
-```bash
-curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions/1.0.0/deploy \
-  -H "Content-Type: application/json" \
-  -d '{
-    "environment": "dev"
-  }'
-```
-
-### 8. List Deployments in an Environment
-```bash
-curl -X GET http://localhost:8080/v1/environments/dev/deployments
-```
-
-### 9. Deploy Services to Environments
-```bash
-# Deploy checkout-api to dev
-deploy_service="checkout-api"
-deploy_env="dev"
-curl -X POST http://localhost:8080/v1/applications/checkout/services/$deploy_service/environments/$deploy_env
-
-# Deploy checkout-api to prod
-prod_env="prod"
-curl -X POST http://localhost:8080/v1/applications/checkout/services/$deploy_service/environments/$prod_env
-
-# Deploy checkout-worker to dev
-worker_service="checkout-worker"
-curl -X POST http://localhost:8080/v1/applications/checkout/services/$worker_service/environments/$deploy_env
-```
-
-> **Note:** This operation now creates a `deploy` edge in the graph (previously `deployed_in`).
-
-### 10. Attempt to Deploy Service to Not-Allowed Environment (Should Fail)
-```bash
-# Remove prod from allowed environments for checkout (replace allowed list with only dev)
-curl -X PUT http://localhost:8080/v1/applications/checkout/environments/allowed \
-  -H "Content-Type: application/json" \
-  -d '["dev"]'
+> **Ready to build the future?**
+>
+> Clone, run, and let’s go! 🚀

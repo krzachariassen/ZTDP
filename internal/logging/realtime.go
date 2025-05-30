@@ -130,6 +130,33 @@ func (r *RealtimeLogSink) Write(entry LogEntry) error {
 	return nil
 }
 
+// BroadcastEvent broadcasts a structured event directly to all connected WebSocket clients
+func (r *RealtimeLogSink) BroadcastEvent(event map[string]interface{}) error {
+	if len(r.clients) == 0 {
+		return nil // No clients connected
+	}
+
+	// Add type indicator for frontend filtering
+	event["type"] = "event.structured"
+
+	// Broadcast to all clients
+	r.mu.RLock()
+	var failedClients []*websocket.Conn
+	for conn := range r.clients {
+		if err := conn.WriteJSON(event); err != nil {
+			failedClients = append(failedClients, conn)
+		}
+	}
+	r.mu.RUnlock()
+
+	// Remove failed clients
+	for _, conn := range failedClients {
+		r.UnregisterClient(conn)
+	}
+
+	return nil
+}
+
 // Close closes the real-time log sink
 func (r *RealtimeLogSink) Close() error {
 	r.mu.Lock()
