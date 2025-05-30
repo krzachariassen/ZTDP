@@ -3,6 +3,7 @@ package policies_test
 import (
 	"testing"
 
+	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/policies"
 )
@@ -66,11 +67,14 @@ func (m *MockGraphBackend) LoadGlobal() (*graph.Graph, error) {
 
 // A simple test to debug and verify policy enforcement
 func TestGraphPolicyEnforcement(t *testing.T) {
+	// Initialize event system for testing
+	events.InitializeEventBus(nil)
+
 	// Create a memory-backed graph with test backend
 	backend := NewMockGraphBackend()
 	graphStore := graph.NewGraphStore(backend)
 	env := "default"
-	
+
 	// Get the environment graph (already exists in mock)
 	g, err := backend.GetAll(env)
 	if err != nil {
@@ -168,17 +172,21 @@ func TestGraphPolicyEnforcement(t *testing.T) {
 	} else {
 		t.Logf("Got expected error: %v", testErr)
 	}
-	
+
 	// Test 3: Create a check node that satisfies the policy
 	checkNode := &graph.Node{
-		ID:   "check-dev-deployment",
+		ID:   "check-dev-deployment-checkout",
 		Kind: graph.KindCheck,
 		Metadata: map[string]interface{}{
-			"name":   "Dev Deployment Check",
+			"name":   "Dev Deployment Check for Checkout",
 			"type":   "deployment-verification",
 			"status": graph.CheckStatusSucceeded, // Mark as succeeded
 		},
-		Spec: map[string]interface{}{},
+		Spec: map[string]interface{}{
+			"application":  "checkout",
+			"required_env": "dev",
+			"target_env":   "prod",
+		},
 	}
 
 	err = g.AddNode(checkNode)

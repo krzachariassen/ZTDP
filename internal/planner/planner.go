@@ -2,6 +2,7 @@ package planner
 
 import (
 	"errors"
+	"sort"
 
 	"github.com/krzachariassen/ZTDP/internal/graph"
 )
@@ -41,8 +42,14 @@ func (p *Planner) PlanWithEdgeTypes(edgeTypes []string) ([]string, error) {
 		}
 	}
 	var queue []string
-	for id, deg := range inDegree {
-		if deg == 0 {
+	// Sort nodes to ensure deterministic order when multiple nodes have same in-degree
+	var nodeIDs []string
+	for id := range inDegree {
+		nodeIDs = append(nodeIDs, id)
+	}
+	sort.Strings(nodeIDs)
+	for _, id := range nodeIDs {
+		if inDegree[id] == 0 {
 			queue = append(queue, id)
 		}
 	}
@@ -51,17 +58,46 @@ func (p *Planner) PlanWithEdgeTypes(edgeTypes []string) ([]string, error) {
 		n := queue[0]
 		queue = queue[1:]
 		order = append(order, n)
+
+		// Collect nodes that become ready (in-degree 0) after processing current node
+		var newReadyNodes []string
 		for _, e := range p.Graph.Edges[n] {
 			if _, ok := typeSet[e.Type]; ok {
 				inDegree[e.To]--
 				if inDegree[e.To] == 0 {
-					queue = append(queue, e.To)
+					newReadyNodes = append(newReadyNodes, e.To)
 				}
 			}
 		}
+		// Sort newly ready nodes to ensure deterministic order
+		sort.Strings(newReadyNodes)
+		queue = append(queue, newReadyNodes...)
 	}
 	if len(order) != len(p.Graph.Nodes) {
 		return nil, errors.New("cycle detected or disconnected nodes in graph")
 	}
 	return order, nil
+}
+
+// ExtractApplicationSubgraph returns a subgraph containing only the nodes and edges relevant to the given application.
+func ExtractApplicationSubgraph(appName string, g *graph.Graph) *graph.Graph {
+	sub := graph.NewGraph()
+	visited := map[string]struct{}{}
+	var visit func(id string)
+	visit = func(id string) {
+		if _, ok := visited[id]; ok {
+			return
+		}
+		visited[id] = struct{}{}
+		if n, ok := g.Nodes[id]; ok {
+			nCopy := *n
+			sub.Nodes[id] = &nCopy
+			for _, e := range g.Edges[id] {
+				sub.Edges[id] = append(sub.Edges[id], e)
+				visit(e.To)
+			}
+		}
+	}
+	visit(appName)
+	return sub
 }

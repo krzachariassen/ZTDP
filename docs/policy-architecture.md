@@ -201,7 +201,7 @@ When policies are not satisfied, the API returns detailed error information:
   "message": "Policy 'policy-dev-before-prod' requires deployment to dev environment first",
   "details": {
     "policy_id": "policy-dev-before-prod",
-    "required_checks": ["check-dev-deployment"],
+    "required_checks": ["check-dev-deployment-checkout"],
     "missing_satisfactions": ["dev-deployment-verification"]
   }
 }

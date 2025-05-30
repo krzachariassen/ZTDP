@@ -127,10 +127,10 @@ go test ./...
 | GET    | `/v1/environments`                                              | List all environments                           |
 | POST   | `/v1/applications/{app}/environments/{env}/allowed`             | Allow an application to deploy to an environment|
 | GET    | `/v1/applications/{app}/environments/allowed`                   | List allowed environments for an application    |
-| POST   | `/v1/applications/{app}/services/{service}/environments/{env}`  | Deploy a service to an environment (creates a 'deploy' edge)              |
-| POST   | `/v1/applications/{app}/services/{service}/versions`              | Create a new service version                    |
-| GET    | `/v1/applications/{app}/services/{service}/versions`              | List all versions for a service                 |
-| POST   | `/v1/applications/{app}/services/{service}/versions/{version}/deploy` | Deploy a service version to an environment      |
+| POST   | `/v1/applications/{app}/deploy`                                 | **🆕 Deploy entire application to environment** |
+| GET    | `/v1/applications/{app}/plan`                                   | Get deployment plan for application             |
+| POST   | `/v1/applications/{app}/plan/apply/{env}`                       | Apply deployment plan to environment            |
+| POST   | `/v1/applications/{app}/services/{service}/versions/{version}/deploy` | Deploy individual service version to environment |
 | GET    | `/v1/environments/{env}/deployments`                              | List deployments in an environment (uses 'deploy' edges)              |
 | GET    | `/v1/graph`                                                     | View current global DAG                         |
 | GET    | `/v1/status`                                                    | Platform status                                 |
@@ -280,71 +280,177 @@ curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-wo
 
 ---
 
-## 🔄 Regenerating Swagger Docs
+## 🚀 Simple Application Deployment (NEW!)
 
-After updating handler annotations, run:
+The easiest way to deploy applications is with our new single-endpoint deployment API:
 
+### Deploy Entire Application
 ```bash
-swag init -g api/server/server.go
+# Deploy application to development environment
+curl -X POST http://localhost:8080/v1/applications/checkout/deploy \
+  -H "Content-Type: application/json" \
+  -d '{"environment": "dev"}'
+
+# Deploy application to production environment  
+curl -X POST http://localhost:8080/v1/applications/checkout/deploy \
+  -H "Content-Type: application/json" \
+  -d '{"environment": "prod", "version": "1.0.0"}'
+```
+
+**What happens internally:**
+1. ✅ Validates application and environment exist
+2. ✅ Enforces deployment policies 
+3. ✅ Generates deployment plan for all services
+4. ✅ Deploys all service versions in correct order
+5. ✅ Returns comprehensive deployment results
+
+**Response:**
+```json
+{
+  "application": "checkout",
+  "environment": "dev", 
+  "deployments": ["checkout-api:1.0.0", "checkout-worker:1.0.0"],
+  "skipped": [],
+  "failed": [],
+  "summary": {
+    "success": true,
+    "message": "Successfully deployed checkout to dev"
+  }
+}
 ```
 
 ---
 
-## 🔐 Secrets & State (Planned)
+## 🏗️ Detailed API Usage (Legacy/Advanced)
 
-- Secrets will be stored per environment and injected at runtime.
-- State (events, node status) will be tracked in Redis initially (deploy edges in the graph represent deployment intent and status).
+### 1. Create Environments
+```bash
+curl -X POST http://localhost:8080/v1/environments \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "dev", "owner": "platform-team" },
+    "spec": { "description": "Development environment" }
+  }'
 
----
+curl -X POST http://localhost:8080/v1/environments \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "prod", "owner": "platform-team" },
+    "spec": { "description": "Production environment" }
+  }'
+```
 
-## 🔐 Policy System & Event-Driven Architecture
+### 2. Create Application
+```bash
+curl -X POST http://localhost:8080/v1/applications \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "checkout", "owner": "team-x" },
+    "spec": {
+      "description": "Handles checkout flows",
+      "tags": ["payments", "frontend"],
+      "lifecycle": {}
+    }
+  }'
+```
 
-ZTDP features a comprehensive policy system that provides governance and compliance enforcement:
+### 3. Allow Application to Deploy to Environments
+```bash
+# Allow checkout app to deploy to dev
+dev_env="dev"
+curl -X POST http://localhost:8080/v1/applications/checkout/environments/$dev_env/allowed
 
-- **Graph-Based Policies**: Policies are represented as first-class nodes in the graph, enabling dynamic and contextual policy enforcement
-- **Transition-Level Enforcement**: Policies are attached to specific transitions (edges) between nodes, providing fine-grained control
-- **Automated Policy Enforcement**: Policy checks are automatically enforced during all graph operations, including deployments and state transitions
-- **Event-Driven Compliance**: Every policy evaluation and enforcement action generates events for auditing and monitoring
+# Allow checkout app to deploy to prod
+prod_env="prod"
+curl -X POST http://localhost:8080/v1/applications/checkout/environments/$prod_env/allowed
+```
 
-### Event System Architecture
+### 4. Create Services for the Application
+```bash
+curl -X POST http://localhost:8080/v1/applications/checkout/services \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "checkout-api", "owner": "team-x" },
+    "spec": {
+      "application": "checkout",
+      "port": 8080,
+      "public": true
+    }
+  }'
 
-ZTDP's event-driven architecture provides real-time visibility and integration capabilities:
+curl -X POST http://localhost:8080/v1/applications/checkout/services \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": { "name": "checkout-worker", "owner": "team-x" },
+    "spec": {
+      "application": "checkout",
+      "port": 9090,
+      "public": false
+    }
+  }'
+```
 
-- **Centralized Event Bus**: All platform operations emit structured events through a unified event system
-- **Graph Operation Events**: Node additions, updates, deletions, and edge changes generate events automatically
-- **Policy Events**: Policy checks, results, transition attempts, and approvals are all tracked as events
-- **Clean Architecture**: Event emitters are properly separated from business logic, enabling modular and testable code
+### 5. Create Service Versions
+```bash
+# Create a new version for a service
+curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": "1.0.0",
+    "config_ref": "default-config",
+    "owner": "team-x"
+  }'
 
-### Key Benefits
+# Create another version for a service
+curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": "1.1.0",
+    "config_ref": "default-config",
+    "owner": "team-x"
+  }'
+```
 
-- **Real-time Monitoring**: Track all platform operations as they happen
-- **Audit Trail**: Complete event history for compliance and debugging
-- **Integration Ready**: Events can be consumed by external systems for alerts, dashboards, and automation
-- **Policy Transparency**: All policy decisions are logged and auditable
+### 6. List Service Versions
+```bash
+curl -X GET http://localhost:8080/v1/applications/checkout/services/checkout-api/versions
+```
 
-### Documentation
+### 7. Deploy a Service Version to an Environment
+```bash
+curl -X POST http://localhost:8080/v1/applications/checkout/services/checkout-api/versions/1.0.0/deploy \
+  -H "Content-Type: application/json" \
+  -d '{
+    "environment": "dev"
+  }'
+```
 
-- **[Documentation Index](docs/README.md)**: Comprehensive guide to all ZTDP documentation
-- **[System Architecture](docs/architecture.md)**: Comprehensive overview of ZTDP's architecture, components, and design principles
-- **[Policy System](docs/policy-architecture.md)**: Detailed documentation of the graph-based policy system and event-driven enforcement
+### 8. List Deployments in an Environment
+```bash
+curl -X GET http://localhost:8080/v1/environments/dev/deployments
+```
 
-See [docs/policy-architecture.md](docs/policy-architecture.md) for detailed documentation and examples.
+### 9. Deploy Services to Environments
+```bash
+# Deploy checkout-api to dev
+deploy_service="checkout-api"
+deploy_env="dev"
+curl -X POST http://localhost:8080/v1/applications/checkout/services/$deploy_service/environments/$deploy_env
 
----
+# Deploy checkout-api to prod
+prod_env="prod"
+curl -X POST http://localhost:8080/v1/applications/checkout/services/$deploy_service/environments/$prod_env
 
-## 💡 Why Contribute?
+# Deploy checkout-worker to dev
+worker_service="checkout-worker"
+curl -X POST http://localhost:8080/v1/applications/checkout/services/$worker_service/environments/$deploy_env
+```
 
-ZTDP is for builders, dreamers, and those who want to change how platforms are delivered.  
-Whether you’re into Go, distributed systems, or just want to see what a zero-touch platform feels like—jump in, hack, and help us shape the future.
+> **Note:** This operation now creates a `deploy` edge in the graph (previously `deployed_in`).
 
----
-
-## 📌 License
-
-TBD — Project is in private development. License terms will be clarified before any public release.
-
----
-
-> **Ready to build the future?**
->
-> Clone, run, and let’s go! 🚀
+### 10. Attempt to Deploy Service to Not-Allowed Environment (Should Fail)
+```bash
+# Remove prod from allowed environments for checkout (replace allowed list with only dev)
+curl -X PUT http://localhost:8080/v1/applications/checkout/environments/allowed \
+  -H "Content-Type: application/json" \
+  -d '["dev"]'

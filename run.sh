@@ -5,6 +5,6 @@ export REDIS_PASSWORD=BVogb1sEPqA
 export REDIS_HOST=localhost:6379
 
 redis-cli -h localhost -a BVogb1sEPqA FLUSHALL
+go run ./cmd/api
 
 go run ./test/controlplane/graph_demo.go
-go run ./cmd/api

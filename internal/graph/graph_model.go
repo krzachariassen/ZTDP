@@ -3,6 +3,8 @@ package graph
 import (
 	"errors"
 	"fmt"
+
+	"github.com/krzachariassen/ZTDP/internal/contracts"
 )
 
 type Edge struct {
@@ -62,11 +64,14 @@ func (g *Graph) AddEdge(fromID, toID, relType string) error {
 		}
 	}
 
-	// Enforce policy for deploy edges
-	if relType == "deploy" {
-		if err := g.IsTransitionAllowed(fromID, toID, relType); err != nil {
-			return err
-		}
+	// Create and validate edge contract
+	if err := g.validateEdgeContract(fromID, toID, relType); err != nil {
+		return fmt.Errorf("edge validation failed: %w", err)
+	}
+
+	// Check policy requirements for this transition
+	if err := g.IsTransitionAllowed(fromID, toID, relType); err != nil {
+		return fmt.Errorf("policy validation failed: %w", err)
 	}
 
 	g.Edges[fromID] = append(g.Edges[fromID], Edge{To: toID, Type: relType})
@@ -80,5 +85,59 @@ func (g *Graph) UpdateNode(node *Node) error {
 		return fmt.Errorf("node with ID %s not found", node.ID)
 	}
 	g.Nodes[node.ID] = node
+	return nil
+}
+
+// validateEdgeContract validates an edge using the contract system
+func (g *Graph) validateEdgeContract(fromID, toID, relType string) error {
+	fromNode := g.Nodes[fromID]
+	toNode := g.Nodes[toID]
+
+	edgeContract := contracts.EdgeContract{
+		FromID:   fromID,
+		ToID:     toID,
+		Type:     relType,
+		FromKind: fromNode.Kind,
+		ToKind:   toNode.Kind,
+	}
+
+	// Validate the basic edge contract
+	if err := edgeContract.Validate(); err != nil {
+		return err
+	}
+
+	// Apply special validation rules that need full node data
+	return g.validateSpecialEdgeRules(fromNode, toNode, relType)
+}
+
+// validateSpecialEdgeRules applies special validation that requires full node data
+func (g *Graph) validateSpecialEdgeRules(fromNode, toNode *Node, edgeType string) error {
+	// Find the applicable rule
+	var applicableRule *contracts.EdgeValidationRule
+	for _, rule := range contracts.EdgeValidationRules {
+		if rule.FromKind == fromNode.Kind && rule.ToKind == toNode.Kind {
+			applicableRule = &rule
+			break
+		}
+	}
+
+	if applicableRule != nil && applicableRule.SpecialRules != nil {
+		// Convert nodes to the expected format for special rules
+		fromData := map[string]interface{}{
+			"id":       fromNode.ID,
+			"kind":     fromNode.Kind,
+			"metadata": fromNode.Metadata,
+			"spec":     fromNode.Spec,
+		}
+		toData := map[string]interface{}{
+			"id":       toNode.ID,
+			"kind":     toNode.Kind,
+			"metadata": toNode.Metadata,
+			"spec":     toNode.Spec,
+		}
+
+		return applicableRule.SpecialRules(fromData, toData)
+	}
+
 	return nil
 }

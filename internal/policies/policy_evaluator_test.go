@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/policies"
 )
@@ -77,6 +78,10 @@ func (m *MockGraphBackend) LoadGlobal() (*graph.Graph, error) {
 }
 
 func TestPolicyEvaluator(t *testing.T) {
+	// Initialize event system for testing
+	eventTransport := events.NewMemoryTransport()
+	events.InitializeEventBus(eventTransport)
+
 	backend := NewMockGraphBackend()
 	graphStore := graph.NewGraphStore(backend)
 
