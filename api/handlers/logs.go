@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -62,48 +63,105 @@ func createEventHandler(logger *logging.Logger, component, message string) event
 			eventLogger = eventLogger.WithContext(k, v)
 		}
 
+		// Create structured log entry for the WebSocket
+		logEntry := map[string]interface{}{
+			"timestamp": time.Unix(0, event.Timestamp).Format("2006-01-02T15:04:05.000Z07:00"),
+			"level":     "INFO",
+			"component": component,
+			"event": map[string]interface{}{
+				"type":    string(event.Type),
+				"source":  event.Source,
+				"subject": event.Subject,
+				"payload": event.Payload,
+			},
+		}
+
 		// Determine the appropriate log level and message based on event type and payload
 		eventType := string(event.Type)
 		if eventType == "application.created" {
-			eventLogger.Info("✅ %s: %s", message, event.Subject)
+			logEntry["message"] = fmt.Sprintf("🎯 Application Created: %s", event.Subject)
+			logEntry["event_category"] = "Application Created"
+			eventLogger.Info("🎯 Application Created: %s", event.Subject)
 		} else if eventType == "application.updated" {
 			// Check if this is actually a deployment or policy event from the payload
 			if eventPayloadType, ok := event.Payload["type"].(string); ok {
 				switch eventPayloadType {
 				case "deployment_requested":
+					logEntry["message"] = fmt.Sprintf("🚀 Deployment Requested: %s", event.Subject)
+					logEntry["event_category"] = "Deployment"
 					eventLogger.Info("🚀 Deployment Requested: %s", event.Subject)
 				case "deployment_started":
+					logEntry["message"] = fmt.Sprintf("📦 Deployment Started: %s", event.Subject)
+					logEntry["event_category"] = "Deployment"
 					eventLogger.Info("📦 Deployment Started: %s", event.Subject)
 				case "deployment_completed":
+					logEntry["message"] = fmt.Sprintf("✅ Deployment Completed: %s", event.Subject)
+					logEntry["event_category"] = "Deployment"
+					logEntry["level"] = "SUCCESS"
 					eventLogger.Info("✅ Deployment Completed: %s", event.Subject)
 				case "deployment_failed":
+					logEntry["message"] = fmt.Sprintf("❌ Deployment Failed: %s", event.Subject)
+					logEntry["event_category"] = "Deployment"
+					logEntry["level"] = "ERROR"
 					eventLogger.Warn("❌ Deployment Failed: %s", event.Subject)
 				case "transition_attempt":
+					logEntry["message"] = fmt.Sprintf("🔒 Policy Transition Attempt: %s", event.Subject)
+					logEntry["event_category"] = "Policy"
 					eventLogger.Info("🔒 Policy Transition Attempt: %s", event.Subject)
 				case "transition_success":
+					logEntry["message"] = fmt.Sprintf("✅ Policy Transition Approved: %s", event.Subject)
+					logEntry["event_category"] = "Policy"
+					logEntry["level"] = "SUCCESS"
 					eventLogger.Info("✅ Policy Transition Approved: %s", event.Subject)
 				case "transition_failure":
+					logEntry["message"] = fmt.Sprintf("❌ Policy Transition Rejected: %s", event.Subject)
+					logEntry["event_category"] = "Policy"
+					logEntry["level"] = "WARN"
 					eventLogger.Warn("❌ Policy Transition Rejected: %s", event.Subject)
 				case "policy_check":
+					logEntry["message"] = fmt.Sprintf("🔍 Policy Check: %s", event.Subject)
+					logEntry["event_category"] = "Policy"
 					eventLogger.Info("🔍 Policy Check: %s", event.Subject)
 				case "policy_check_result":
 					if success, ok := event.Payload["success"].(bool); ok && success {
+						logEntry["message"] = fmt.Sprintf("✅ Policy Check Passed: %s", event.Subject)
+						logEntry["event_category"] = "Policy"
+						logEntry["level"] = "SUCCESS"
 						eventLogger.Info("✅ Policy Check Passed: %s", event.Subject)
 					} else {
+						logEntry["message"] = fmt.Sprintf("❌ Policy Check Failed: %s", event.Subject)
+						logEntry["event_category"] = "Policy"
+						logEntry["level"] = "WARN"
 						eventLogger.Warn("❌ Policy Check Failed: %s", event.Subject)
 					}
 				case "resource_provision_completed":
+					logEntry["message"] = fmt.Sprintf("🔧 Resource Provisioned: %s", event.Subject)
+					logEntry["event_category"] = "Resource"
+					logEntry["level"] = "SUCCESS"
 					eventLogger.Info("🔧 Resource Provisioned: %s", event.Subject)
 				default:
+					logEntry["message"] = fmt.Sprintf("📝 %s: %s", message, event.Subject)
+					logEntry["event_category"] = "Application Updated"
 					eventLogger.Info("📝 %s: %s", message, event.Subject)
 				}
 			} else {
+				logEntry["message"] = fmt.Sprintf("📝 %s: %s", message, event.Subject)
+				logEntry["event_category"] = "Application Updated"
 				eventLogger.Info("📝 %s: %s", message, event.Subject)
 			}
 		} else if eventType == "application.deleted" {
-			eventLogger.Info("🗑️  %s: %s", message, event.Subject)
+			logEntry["message"] = fmt.Sprintf("🗑️ %s: %s", message, event.Subject)
+			logEntry["event_category"] = "Application Deleted"
+			eventLogger.Info("🗑️ %s: %s", message, event.Subject)
 		} else {
+			logEntry["message"] = fmt.Sprintf("📝 %s: %s", message, event.Subject)
+			logEntry["event_category"] = "Other"
 			eventLogger.Info("📝 %s: %s", message, event.Subject)
+		}
+
+		// Send structured event to WebSocket clients
+		if realtimeLogSink != nil {
+			realtimeLogSink.BroadcastEvent(logEntry)
 		}
 
 		return nil

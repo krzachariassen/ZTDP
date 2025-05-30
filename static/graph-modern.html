@@ -1080,14 +1080,30 @@
             </select>
           </div>
           <div class="filter-group">
+            <label>Event Type:</label>
+            <select id="logEventTypeFilter" class="filter-select">
+              <option value="">All Events</option>
+              <option value="Application Created">Application Created</option>
+              <option value="Application Updated">Application Updated</option>
+              <option value="Application Deleted">Application Deleted</option>
+              <option value="Deployment">Deployment Events</option>
+              <option value="Policy">Policy Events</option>
+              <option value="Resource">Resource Events</option>
+              <option value="Connection">Connection Events</option>
+            </select>
+          </div>
+          <div class="filter-group">
             <label>Component:</label>
             <select id="logComponentFilter" class="filter-select">
               <option value="">All Components</option>
-              <option value="graph">Graph</option>
-              <option value="policy">Policy</option>
+              <option value="application">Application</option>
               <option value="deployment">Deployment</option>
+              <option value="policy">Policy</option>
               <option value="resource">Resource</option>
-              <option value="api">API</option>
+              <option value="websocket">WebSocket</option>
+              <option value="event-subscriber">Event Subscriber</option>
+              <option value="logs-websocket">Logs WebSocket</option>
+              <option value="system">System</option>
             </select>
           </div>
           <div class="filter-group">
@@ -2598,6 +2614,7 @@ const transformGraphData = (data) => {
         this.logsEmpty = document.getElementById('logsEmpty');
         this.logsList = document.getElementById('logsList');
         this.logLevelFilter = document.getElementById('logLevelFilter');
+        this.logEventTypeFilter = document.getElementById('logEventTypeFilter');
         this.logComponentFilter = document.getElementById('logComponentFilter');
         this.logSearchFilter = document.getElementById('logSearchFilter');
       }
@@ -2621,6 +2638,7 @@ const transformGraphData = (data) => {
         
         // Filter event listeners
         this.logLevelFilter.addEventListener('change', () => this.applyFilters());
+        this.logEventTypeFilter.addEventListener('change', () => this.applyFilters());
         this.logComponentFilter.addEventListener('change', () => this.applyFilters());
         this.logSearchFilter.addEventListener('input', () => this.applyFilters());
       }
@@ -2646,8 +2664,15 @@ const transformGraphData = (data) => {
           
           this.ws.onmessage = (event) => {
             try {
-              const logEntry = JSON.parse(event.data);
-              this.addLogEntry(logEntry.level, logEntry.message, logEntry.component, logEntry.timestamp);
+              const data = JSON.parse(event.data);
+              
+              // Handle structured events with full event details
+              if (data.type === 'event.structured' && data.event) {
+                this.addStructuredEvent(data);
+              } else {
+                // Handle regular log entries
+                this.addLogEntry(data.level, data.message, data.component, data.timestamp, data.details);
+              }
             } catch (err) {
               console.error('Failed to parse log message:', err);
             }
@@ -2701,14 +2726,40 @@ const transformGraphData = (data) => {
         this.toggleConnect.innerHTML = `<i class="fa-solid ${iconClass}"></i> ${text}`;
       }
       
-      addLogEntry(level, message, component = '', timestamp = null) {
+      addLogEntry(level, message, component = '', timestamp = null, details = null) {
         const logEntry = {
           id: Date.now() + Math.random(),
           level: level,
           message: message,
           component: component,
           timestamp: timestamp || new Date().toISOString(),
-          visible: true
+          details: details,
+          visible: true,
+          type: 'log'
+        };
+        
+        this.logs.unshift(logEntry);
+        
+        // Limit logs to 1000 entries
+        if (this.logs.length > 1000) {
+          this.logs = this.logs.slice(0, 1000);
+        }
+        
+        this.renderLogs();
+        this.scrollToTop();
+      }
+
+      addStructuredEvent(data) {
+        const logEntry = {
+          id: Date.now() + Math.random(),
+          level: data.level || 'INFO',
+          message: data.message,
+          component: data.component,
+          timestamp: data.timestamp || new Date().toISOString(),
+          event_category: data.event_category || 'Other',
+          event: data.event,
+          visible: true,
+          type: 'event'
         };
         
         this.logs.unshift(logEntry);
@@ -2729,6 +2780,7 @@ const transformGraphData = (data) => {
       
       applyFilters() {
         const levelFilter = this.logLevelFilter.value;
+        const eventTypeFilter = this.logEventTypeFilter.value;
         const componentFilter = this.logComponentFilter.value;
         const searchFilter = this.logSearchFilter.value.toLowerCase();
         
@@ -2736,6 +2788,10 @@ const transformGraphData = (data) => {
           let visible = true;
           
           if (levelFilter && log.level !== levelFilter) {
+            visible = false;
+          }
+          
+          if (eventTypeFilter && !this.matchesEventType(log, eventTypeFilter)) {
             visible = false;
           }
           
@@ -2752,6 +2808,54 @@ const transformGraphData = (data) => {
         
         this.renderLogs();
       }
+
+      matchesEventType(log, eventTypeFilter) {
+        // Check event_category first for structured events
+        if (log.event_category) {
+          if (eventTypeFilter === log.event_category) return true;
+          
+          // Handle category groupings
+          if (eventTypeFilter === 'Deployment' && 
+              (log.event_category === 'Deployment' || log.message.includes('Deployment'))) {
+            return true;
+          }
+          if (eventTypeFilter === 'Policy' && 
+              (log.event_category === 'Policy' || log.message.includes('Policy'))) {
+            return true;
+          }
+          if (eventTypeFilter === 'Resource' && 
+              (log.event_category === 'Resource' || log.message.includes('Resource'))) {
+            return true;
+          }
+          if (eventTypeFilter === 'Connection' && 
+              (log.event_category === 'Connection' || log.message.includes('connected') || log.message.includes('Connected'))) {
+            return true;
+          }
+        }
+        
+        // Fallback to message matching for regular logs
+        const message = log.message.toLowerCase();
+        switch (eventTypeFilter) {
+          case 'Application Created':
+            return message.includes('application created');
+          case 'Application Updated':
+            return message.includes('application updated');
+          case 'Application Deleted':
+            return message.includes('application deleted');
+          case 'Deployment':
+            return message.includes('deployment') || message.includes('deploy');
+          case 'Policy':
+            return message.includes('policy') || message.includes('transition');
+          case 'Resource':
+            return message.includes('resource') || message.includes('provision');
+          case 'Connection':
+            return message.includes('connect') || message.includes('websocket');
+          default:
+            return true;
+        }
+      }
+      
+
       
       renderLogs() {
         const visibleLogs = this.logs.filter(log => log.visible);
@@ -2773,16 +2877,68 @@ const transformGraphData = (data) => {
           const time = new Date(log.timestamp).toLocaleTimeString();
           const componentTag = log.component ? `<span class="log-component">${log.component}</span>` : '';
           
-          return `
-            <div class="log-entry log-${log.level.toLowerCase()}">
-              <div class="log-header">
-                <span class="log-level">${log.level}</span>
-                ${componentTag}
-                <span class="log-time">${time}</span>
+          // Enhanced rendering for structured events
+          if (log.type === 'event' && log.event) {
+            const eventTypeTag = log.event_category ? `<span class="log-event-type ${log.event_category.toLowerCase().replace(/\s+/g, '-')}">${log.event_category}</span>` : '';
+            const hasDetails = log.event && (log.event.payload || log.event.source !== log.component);
+            
+            return `
+              <div class="log-entry log-${log.level.toLowerCase()} ${hasDetails ? 'log-expandable' : ''}" 
+                   data-log-id="${log.id}" ${hasDetails ? 'onclick="logsManager.toggleLogDetails(this)"' : ''}>
+                <div class="log-header">
+                  <span class="log-level">${log.level}</span>
+                  ${eventTypeTag}
+                  ${componentTag}
+                  <span class="log-time">${time}</span>
+                  ${hasDetails ? '<i class="fa-solid fa-chevron-down log-expand-icon"></i>' : ''}
+                </div>
+                <div class="log-message">${this.escapeHtml(log.message)}</div>
+                ${hasDetails ? `
+                <div class="log-details" style="display: none;">
+                  <div class="log-details-content">
+                    <div class="log-detail-section">
+                      <h4>Event Details</h4>
+                      <div class="log-detail-grid">
+                        <div class="log-detail-item">
+                          <span class="log-detail-key">Type</span>
+                          <span class="log-detail-value">${this.escapeHtml(log.event.type || 'N/A')}</span>
+                        </div>
+                        <div class="log-detail-item">
+                          <span class="log-detail-key">Source</span>
+                          <span class="log-detail-value">${this.escapeHtml(log.event.source || 'N/A')}</span>
+                        </div>
+                        <div class="log-detail-item">
+                          <span class="log-detail-key">Subject</span>
+                          <span class="log-detail-value">${this.escapeHtml(log.event.subject || 'N/A')}</span>
+                        </div>
+                      </div>
+                    </div>
+                    ${log.event.payload && Object.keys(log.event.payload).length > 0 ? `
+                    <div class="log-detail-section">
+                      <h4>Payload</h4>
+                      <div class="log-payload">
+                        <pre>${this.escapeHtml(JSON.stringify(log.event.payload, null, 2))}</pre>
+                      </div>
+                    </div>
+                    ` : ''}
+                  </div>
+                </div>
+                ` : ''}
               </div>
-              <div class="log-message">${this.escapeHtml(log.message)}</div>
-            </div>
-          `;
+            `;
+          } else {
+            // Regular log entry
+            return `
+              <div class="log-entry log-${log.level.toLowerCase()}">
+                <div class="log-header">
+                  <span class="log-level">${log.level}</span>
+                  ${componentTag}
+                  <span class="log-time">${time}</span>
+                </div>
+                <div class="log-message">${this.escapeHtml(log.message)}</div>
+              </div>
+            `;
+          }
         }).join('');
       }
       
@@ -2811,6 +2967,21 @@ const transformGraphData = (data) => {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      toggleLogDetails(element) {
+        const details = element.querySelector('.log-details');
+        const icon = element.querySelector('.log-expand-icon');
+        
+        if (details.style.display === 'none') {
+          details.style.display = 'block';
+          icon.className = 'fa-solid fa-chevron-up log-expand-icon';
+          element.classList.add('log-expanded');
+        } else {
+          details.style.display = 'none';
+          icon.className = 'fa-solid fa-chevron-down log-expand-icon';
+          element.classList.remove('log-expanded');
+        }
       }
     }
     
