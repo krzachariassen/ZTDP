@@ -2,15 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/krzachariassen/ZTDP/internal/contracts"
-	"github.com/krzachariassen/ZTDP/internal/graph"
-	"github.com/krzachariassen/ZTDP/internal/resources"
+	servicecore "github.com/krzachariassen/ZTDP/internal/service"
 )
 
 // CreateService godoc
@@ -20,35 +15,25 @@ import (
 // @Accept       json
 // @Produce      json
 // @Param        app_name  path      string                  true  "Application name"
-// @Param        service   body      contracts.ServiceContract true  "Service payload"
-// @Success      201  {object}  contracts.ServiceContract
+// @Param        service   body      map[string]interface{} true  "Service payload"
+// @Success      201  {object}  map[string]interface{}
 // @Failure      400  {object}  map[string]string
 // @Router       /v1/applications/{app_name}/services [post]
 func CreateService(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app_name")
-	var svc contracts.ServiceContract
-	if err := json.NewDecoder(r.Body).Decode(&svc); err != nil {
+	var svcData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&svcData); err != nil {
 		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if svc.Spec.Application != appName {
-		WriteJSONError(w, "Service must be linked to the specified application", http.StatusBadRequest)
-		return
-	}
-	if err := svc.Validate(); err != nil {
+	serviceService := servicecore.NewServiceService(GlobalGraph)
+	createdSvc, err := serviceService.CreateService(appName, svcData)
+	if err != nil {
 		WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	node, _ := graph.ResolveContract(svc)
-	GlobalGraph.AddNode(node)
-	// Add edge with relationship type 'owns'
-	GlobalGraph.AddEdge(appName, svc.Metadata.Name, "owns")
-	if err := GlobalGraph.Save(); err != nil {
-		WriteJSONError(w, "Failed to save service", http.StatusInternalServerError)
-		return
-	}
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(svc)
+	json.NewEncoder(w).Encode(createdSvc)
 }
 
 // ListServices godoc
@@ -57,23 +42,15 @@ func CreateService(w http.ResponseWriter, r *http.Request) {
 // @Tags         services
 // @Produce      json
 // @Param        app_name  path      string  true  "Application name"
-// @Success      200  {array}   contracts.ServiceContract
+// @Success      200  {array}   map[string]interface{}
 // @Router       /v1/applications/{app_name}/services [get]
 func ListServices(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app_name")
-	services := []contracts.ServiceContract{}
-	for _, node := range GlobalGraph.Graph.Nodes {
-		if node.Kind == "service" {
-			contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
-				Name:  node.Metadata["name"].(string),
-				Owner: node.Metadata["owner"].(string),
-			})
-			if err == nil {
-				if svc, ok := contract.(*contracts.ServiceContract); ok && svc.Spec.Application == appName {
-					services = append(services, *svc)
-				}
-			}
-		}
+	serviceService := servicecore.NewServiceService(GlobalGraph)
+	services, err := serviceService.ListServices(appName)
+	if err != nil {
+		WriteJSONError(w, "Failed to get services", http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(services)
@@ -86,32 +63,20 @@ func ListServices(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        app_name     path      string  true  "Application name"
 // @Param        service_name path      string  true  "Service name"
-// @Success      200  {object}  contracts.ServiceContract
+// @Success      200  {object}  map[string]interface{}
 // @Failure      404  {object}  map[string]string
 // @Router       /v1/applications/{app_name}/services/{service_name} [get]
 func GetService(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app_name")
 	serviceName := chi.URLParam(r, "service_name")
-	node, ok := GlobalGraph.Graph.Nodes[serviceName]
-	if !ok || node.Kind != "service" {
-		WriteJSONError(w, "Service not found", http.StatusNotFound)
-		return
-	}
-	contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
-		Name:  node.Metadata["name"].(string),
-		Owner: node.Metadata["owner"].(string),
-	})
+	serviceService := servicecore.NewServiceService(GlobalGraph)
+	service, err := serviceService.GetService(appName, serviceName)
 	if err != nil {
-		WriteJSONError(w, "Invalid service contract", http.StatusInternalServerError)
-		return
-	}
-	svc, ok := contract.(*contracts.ServiceContract)
-	if !ok || svc.Spec.Application != appName {
-		WriteJSONError(w, "Service not found for this application", http.StatusNotFound)
+		WriteJSONError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(svc)
+	json.NewEncoder(w).Encode(service)
 }
 
 // CreateServiceVersion godoc
@@ -123,61 +88,27 @@ func GetService(w http.ResponseWriter, r *http.Request) {
 // @Param        app_name     path  string  true  "Application name"
 // @Param        service_name path  string  true  "Service name"
 // @Param        version      body  object  true  "Service version payload"
-// @Success      201  {object}  contracts.ServiceVersionContract
+// @Success      201  {object}  map[string]interface{}
 // @Failure      400  {object}  map[string]string
 // @Router       /v1/applications/{app_name}/services/{service_name}/versions [post]
 func CreateServiceVersion(w http.ResponseWriter, r *http.Request) {
 	serviceName := chi.URLParam(r, "service_name")
-	if _, ok := GlobalGraph.Graph.Nodes[serviceName]; !ok {
-		WriteJSONError(w, "Service does not exist", http.StatusBadRequest)
+
+	var versionData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&versionData); err != nil {
+		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	var req struct {
-		Version   string `json:"version"`
-		ConfigRef string `json:"config_ref"`
-		Owner     string `json:"owner"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		body, _ := io.ReadAll(r.Body)
-		WriteJSONError(w, "Invalid JSON: "+string(body), http.StatusBadRequest)
-		return
-	}
-	if req.Version == "" {
-		WriteJSONError(w, "Version is required", http.StatusBadRequest)
-		return
-	}
-	id := serviceName + ":" + req.Version
-	if existingNode, exists := GlobalGraph.Graph.Nodes[id]; exists {
-		w.WriteHeader(http.StatusOK)
-		var existingVer contracts.ServiceVersionContract
-		b, _ := json.Marshal(existingNode)
-		_ = json.Unmarshal(b, &existingVer)
-		json.NewEncoder(w).Encode(existingVer)
-		return
-	}
-	ver := contracts.ServiceVersionContract{
-		IDValue:   id,
-		Name:      serviceName,
-		Owner:     req.Owner,
-		Version:   req.Version,
-		ConfigRef: req.ConfigRef,
-		CreatedAt: time.Now(),
-	}
-	if err := ver.Validate(); err != nil {
+
+	serviceService := servicecore.NewServiceService(GlobalGraph)
+	createdVersion, err := serviceService.CreateServiceVersion(serviceName, versionData)
+	if err != nil {
 		WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	node, _ := graph.ResolveContract(ver)
-	GlobalGraph.AddNode(node)
-	// Debug log to confirm node creation
-	fmt.Printf("[DEBUG] Created service version node with ID: %s, Kind: %s\n", node.ID, node.Kind)
-	GlobalGraph.AddEdge(serviceName, id, "has_version")
-	if err := GlobalGraph.Save(); err != nil {
-		WriteJSONError(w, "Failed to save service version", http.StatusInternalServerError)
-		return
-	}
+
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(ver)
+	json.NewEncoder(w).Encode(createdVersion)
 }
 
 // ListServiceVersions godoc
@@ -187,20 +118,15 @@ func CreateServiceVersion(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        app_name     path  string  true  "Application name"
 // @Param        service_name path  string  true  "Service name"
-// @Success      200  {array}  contracts.ServiceVersionContract
+// @Success      200  {array}  map[string]interface{}
 // @Router       /v1/applications/{app_name}/services/{service_name}/versions [get]
 func ListServiceVersions(w http.ResponseWriter, r *http.Request) {
 	serviceName := chi.URLParam(r, "service_name")
-	versions := []contracts.ServiceVersionContract{}
-	for _, edge := range GlobalGraph.Graph.Edges[serviceName] {
-		if edge.Type == "has_version" {
-			if node, ok := GlobalGraph.Graph.Nodes[edge.To]; ok && node.Kind == "service_version" {
-				var ver contracts.ServiceVersionContract
-				b, _ := json.Marshal(node)
-				_ = json.Unmarshal(b, &ver)
-				versions = append(versions, ver)
-			}
-		}
+	serviceService := servicecore.NewServiceService(GlobalGraph)
+	versions, err := serviceService.ListServiceVersions(serviceName)
+	if err != nil {
+		WriteJSONError(w, "Failed to get service versions", http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(versions)

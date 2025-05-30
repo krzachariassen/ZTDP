@@ -42,19 +42,25 @@ func TestGlobalGraph_Apply_MemoryBackend(t *testing.T) {
 	svcNode, _ := ResolveContract(svc)
 	gg.AddNode(svcNode)
 
-	if err := gg.AddEdge("checkout-api", "checkout", "owns"); err != nil {
+	if err := gg.AddEdge("checkout", "checkout-api", "owns"); err != nil {
 		t.Fatalf("failed to add edge: %v", err)
 	}
 
-	applied, err := gg.Apply("dev")
-	if err != nil {
-		t.Fatalf("apply failed: %v", err)
+	// Save the graph to backend
+	if err := gg.Save(); err != nil {
+		t.Fatalf("save failed: %v", err)
 	}
 
-	if len(applied.Nodes) != 2 {
-		t.Errorf("expected 2 nodes, got %d", len(applied.Nodes))
+	// Get the current graph state
+	currentGraph, err := gg.Graph()
+	if err != nil {
+		t.Fatalf("getting current graph failed: %v", err)
 	}
-	if len(applied.Edges["checkout-api"]) != 1 || applied.Edges["checkout-api"][0].To != "checkout" || applied.Edges["checkout-api"][0].Type != "owns" {
-		t.Errorf("expected edge checkout-api --> checkout not found")
+
+	if len(currentGraph.Nodes) != 2 {
+		t.Errorf("expected 2 nodes, got %d", len(currentGraph.Nodes))
+	}
+	if len(currentGraph.Edges["checkout"]) != 1 || currentGraph.Edges["checkout"][0].To != "checkout-api" || currentGraph.Edges["checkout"][0].Type != "owns" {
+		t.Errorf("expected edge checkout --> checkout-api not found")
 	}
 }

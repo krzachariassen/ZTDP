@@ -11,8 +11,8 @@ func TestAddEdge_ValidAndInvalidTypes(t *testing.T) {
 	g.AddNode(n1)
 	g.AddNode(n2)
 
-	// Valid edge type
-	err := g.AddEdge("a", "b", EdgeTypeDeploy)
+	// Valid edge type - applications can own services
+	err := g.AddEdge("a", "b", EdgeTypeOwns)
 	if err != nil {
 		t.Errorf("expected valid edge type, got error: %v", err)
 	}

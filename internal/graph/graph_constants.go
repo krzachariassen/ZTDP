@@ -50,6 +50,7 @@ var AllowedEdgeTypes = map[string]struct{}{
 	EdgeTypeInstanceOf: {},
 	EdgeTypeRequires:   {},
 	EdgeTypeSatisfies:  {},
+	"allowed_in":       {}, // Policy edge type for environment access
 	// Add more as needed
 }
 

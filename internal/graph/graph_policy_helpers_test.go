@@ -10,16 +10,16 @@ func TestPolicyHelpers(t *testing.T) {
 	t.Run("AttachPolicyToTransition", func(t *testing.T) {
 		g := graph.NewGraph()
 
-		// Create source and target nodes
+		// Create source and target nodes for a realistic deployment scenario
 		srcNode := &graph.Node{
-			ID:       "app-1",
-			Kind:     graph.KindApplication,
-			Metadata: map[string]interface{}{"name": "App 1"},
+			ID:       "checkout-api:1.0.0",
+			Kind:     graph.KindServiceVersion,
+			Metadata: map[string]interface{}{"name": "checkout-api", "version": "1.0.0"},
 			Spec:     map[string]interface{}{},
 		}
 
 		targetNode := &graph.Node{
-			ID:       "env-prod",
+			ID:       "prod",
 			Kind:     graph.KindEnvironment,
 			Metadata: map[string]interface{}{"name": "Production"},
 			Spec:     map[string]interface{}{},
@@ -30,7 +30,7 @@ func TestPolicyHelpers(t *testing.T) {
 			Kind: graph.KindPolicy,
 			Metadata: map[string]interface{}{
 				"name":        "Must scan before deployment",
-				"description": "Application must be scanned before deployment",
+				"description": "Service version must be scanned before deployment",
 				"type":        graph.PolicyTypeCheck,
 			},
 			Spec: map[string]interface{}{},
@@ -64,16 +64,16 @@ func TestPolicyHelpers(t *testing.T) {
 	t.Run("IsTransitionAllowed", func(t *testing.T) {
 		g := graph.NewGraph()
 
-		// Create source and target nodes
+		// Create source and target nodes for service version deployment
 		srcNode := &graph.Node{
-			ID:       "app-1",
-			Kind:     graph.KindApplication,
-			Metadata: map[string]interface{}{"name": "App 1"},
+			ID:       "checkout-api:2.0.0",
+			Kind:     graph.KindServiceVersion,
+			Metadata: map[string]interface{}{"name": "checkout-api", "version": "2.0.0"},
 			Spec:     map[string]interface{}{},
 		}
 
 		targetNode := &graph.Node{
-			ID:       "env-prod",
+			ID:       "prod",
 			Kind:     graph.KindEnvironment,
 			Metadata: map[string]interface{}{"name": "Production"},
 			Spec:     map[string]interface{}{},

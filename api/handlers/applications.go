@@ -5,9 +5,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/krzachariassen/ZTDP/internal/application"
 	"github.com/krzachariassen/ZTDP/internal/contracts"
-	"github.com/krzachariassen/ZTDP/internal/graph"
-	"github.com/krzachariassen/ZTDP/internal/resources"
 )
 
 // CreateApplication godoc
@@ -26,16 +25,15 @@ func CreateApplication(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if err := app.Validate(); err != nil {
+
+	// Create application service - simple and clean!
+	appService := application.NewService(GlobalGraph)
+
+	if err := appService.CreateApplication(app); err != nil {
 		WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	node, _ := graph.ResolveContract(app)
-	GlobalGraph.AddNode(node)
-	if err := GlobalGraph.Save(); err != nil {
-		WriteJSONError(w, "Failed to save application", http.StatusInternalServerError)
-		return
-	}
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(app)
 }
@@ -48,20 +46,13 @@ func CreateApplication(w http.ResponseWriter, r *http.Request) {
 // @Success      200  {array}  contracts.ApplicationContract
 // @Router       /v1/applications [get]
 func ListApplications(w http.ResponseWriter, r *http.Request) {
-	apps := []contracts.ApplicationContract{}
-	for _, node := range GlobalGraph.Graph.Nodes {
-		if node.Kind == "application" {
-			contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
-				Name:  node.Metadata["name"].(string),
-				Owner: node.Metadata["owner"].(string),
-			})
-			if err == nil {
-				if app, ok := contract.(*contracts.ApplicationContract); ok {
-					apps = append(apps, *app)
-				}
-			}
-		}
+	appService := application.NewService(GlobalGraph)
+	apps, err := appService.ListApplications()
+	if err != nil {
+		WriteJSONError(w, "Failed to get applications: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(apps)
 }
@@ -77,24 +68,14 @@ func ListApplications(w http.ResponseWriter, r *http.Request) {
 // @Router       /v1/applications/{app_name} [get]
 func GetApplication(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app_name")
-	node, ok := GlobalGraph.Graph.Nodes[appName]
-	if !ok || node.Kind != "application" {
-		WriteJSONError(w, "Application not found", http.StatusNotFound)
-		return
-	}
-	contract, err := resources.LoadNode(node.Kind, node.Spec, contracts.Metadata{
-		Name:  node.Metadata["name"].(string),
-		Owner: node.Metadata["owner"].(string),
-	})
+
+	appService := application.NewService(GlobalGraph)
+	app, err := appService.GetApplication(appName)
 	if err != nil {
-		WriteJSONError(w, "Invalid application contract", http.StatusInternalServerError)
+		WriteJSONError(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	app, ok := contract.(*contracts.ApplicationContract)
-	if !ok {
-		WriteJSONError(w, "Invalid application contract", http.StatusInternalServerError)
-		return
-	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(app)
 }
@@ -121,16 +102,36 @@ func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Application name mismatch", http.StatusBadRequest)
 		return
 	}
-	if err := app.Validate(); err != nil {
+
+	appService := application.NewService(GlobalGraph)
+
+	if err := appService.UpdateApplication(appName, app); err != nil {
 		WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	node, _ := graph.ResolveContract(app)
-	GlobalGraph.AddNode(node)
-	if err := GlobalGraph.Save(); err != nil {
-		WriteJSONError(w, "Failed to save application", http.StatusInternalServerError)
-		return
-	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(app)
+}
+
+// DeleteApplication godoc
+// @Summary      Delete an application
+// @Description  Deletes an existing application resource
+// @Tags         applications
+// @Param        app_name  path      string  true  "Application name"
+// @Success      204
+// @Failure      404  {object}  map[string]string
+// @Router       /v1/applications/{app_name} [delete]
+func DeleteApplication(w http.ResponseWriter, r *http.Request) {
+	// NOT IMPLEMENTED
+	//appName := chi.URLParam(r, "app_name")
+	//
+	//appService := application.NewService(GlobalGraph)
+	//
+	//if err := appService.DeleteApplication(appName); err != nil {
+	//	WriteJSONError(w, err.Error(), http.StatusNotFound)
+	//	return
+	//}
+	//
+	//w.WriteHeader(http.StatusNoContent)
 }

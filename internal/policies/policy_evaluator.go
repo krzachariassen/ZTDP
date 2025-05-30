@@ -21,9 +21,8 @@ type GraphStoreInterface interface {
 // that can satisfy those policies. The policy system is based on a directed graph
 // model where policies are attached to transitions (edges) between nodes.
 type PolicyEvaluator struct {
-	graphStore   GraphStoreInterface
-	environment  string
-	eventService *events.PolicyEventService
+	graphStore  GraphStoreInterface
+	environment string
 }
 
 // NewPolicyEvaluator creates a new policy evaluator with the given graph store.
@@ -31,25 +30,20 @@ func NewPolicyEvaluator(graphStore GraphStoreInterface, environment string) *Pol
 	return &PolicyEvaluator{
 		graphStore:  graphStore,
 		environment: environment,
-		// Event service will be set by SetEventService
 	}
-}
-
-// SetEventService sets the event service for policy-related events
-func (e *PolicyEvaluator) SetEventService(eventService *events.PolicyEventService) {
-	e.eventService = eventService
 }
 
 // ValidateTransition checks if a transition (adding an edge) is allowed based on attached policies.
 // This method uses the graph-based policy model.
 func (e *PolicyEvaluator) ValidateTransition(fromID, toID, edgeType, user string) error {
-	// Emit transition attempt event if event service is available
-	if e.eventService != nil {
-		if err := e.eventService.EmitTransitionAttempt(fromID, toID, edgeType, user); err != nil {
-			// Log but continue - event failure shouldn't block the transition
-			fmt.Printf("Warning: Failed to emit transition attempt event: %v\n", err)
-		}
-	}
+	// Emit transition attempt event
+	events.GlobalEventBus.Emit(events.EventTypeApplicationCreated, "policy-evaluator", fmt.Sprintf("%s->%s", fromID, toID), map[string]interface{}{
+		"type":      "transition_attempt",
+		"from_id":   fromID,
+		"to_id":     toID,
+		"edge_type": edgeType,
+		"user":      user,
+	})
 
 	// Check if the transition is allowed based on the graph-based policy model
 	g, err := e.graphStore.GetGraph(e.environment)
@@ -60,13 +54,26 @@ func (e *PolicyEvaluator) ValidateTransition(fromID, toID, edgeType, user string
 	err = g.IsTransitionAllowed(fromID, toID, edgeType)
 
 	// Emit result event
-	if e.eventService != nil {
-		if err != nil {
-			e.eventService.EmitTransitionResult(fromID, toID, edgeType, user, false, err.Error())
-		} else {
-			e.eventService.EmitTransitionResult(fromID, toID, edgeType, user, true, "All policies satisfied")
-		}
+	resultType := "transition_success"
+	if err != nil {
+		resultType = "transition_failure"
 	}
+
+	events.GlobalEventBus.Emit(events.EventTypeApplicationUpdated, "policy-evaluator", fmt.Sprintf("%s->%s", fromID, toID), map[string]interface{}{
+		"type":      resultType,
+		"from_id":   fromID,
+		"to_id":     toID,
+		"edge_type": edgeType,
+		"user":      user,
+		"success":   err == nil,
+		"error": func() string {
+			if err != nil {
+				return err.Error()
+			} else {
+				return ""
+			}
+		}(),
+	})
 
 	return err
 }
@@ -143,30 +150,20 @@ func (e *PolicyEvaluator) UpdateCheckStatus(checkID, status string, results map[
 
 	// Find associated policies (what this check is satisfying)
 	g, err := e.graphStore.GetGraph(e.environment)
-	if err == nil && e.eventService != nil {
+	if err == nil {
 		// Look for check-satisfies->policy edges
 		policies := g.GetPoliciesSatisfiedByCheck(checkID)
 
 		for _, policyID := range policies {
-			// Create details representing the check update
-			details := map[string]interface{}{
-				"type":       "update_check",
+			// Emit event for check update that affects a policy
+			events.GlobalEventBus.Emit(events.EventTypeApplicationUpdated, "policy-evaluator", policyID, map[string]interface{}{
+				"type":       "policy_check_result",
 				"check_id":   checkID,
-				"kind":       common.KindCheck,
-				"metadata":   checkNode.Metadata,
-				"spec":       checkNode.Spec,
+				"policy_id":  policyID,
 				"old_status": oldStatus,
 				"new_status": status,
-				"policy_id":  policyID,
-			}
-
-			// Emit event for check update that affects a policy
-			e.eventService.EmitPolicyCheckResult(
-				policyID,
-				status == common.CheckStatusSucceeded,
-				fmt.Sprintf("Check %s status changed to %s", checkID, status),
-				details,
-			)
+				"success":    status == common.CheckStatusSucceeded,
+			})
 		}
 	}
 
@@ -193,29 +190,16 @@ func (e *PolicyEvaluator) SatisfyPolicy(checkID, policyID string) error {
 		return fmt.Errorf("policy node not found: %w", err)
 	}
 
-	// Emit event for the satisfaction relationship if event service is available
-	if e.eventService != nil {
-		details := map[string]interface{}{
-			"type":      "satisfy_policy",
-			"from":      checkID,
-			"to":        policyID,
-			"edge_type": common.EdgeTypeSatisfies,
-		}
-		context := map[string]interface{}{
-			"check_type":   checkNode.Metadata["type"],
-			"check_status": checkNode.Metadata["status"],
-			"policy_type":  policyNode.Metadata["type"],
-			"policy_name":  policyNode.Metadata["name"],
-			"check_id":     checkID,
-			"check_name":   checkNode.Metadata["name"],
-		}
-
-		e.eventService.EmitPolicyCheck(
-			policyID,
-			details,
-			context,
-		)
-	}
+	// Emit event for the satisfaction relationship
+	events.GlobalEventBus.Emit(events.EventTypeApplicationCreated, "policy-evaluator", policyID, map[string]interface{}{
+		"type":        "policy_check",
+		"check_id":    checkID,
+		"policy_id":   policyID,
+		"check_type":  checkNode.Metadata["type"],
+		"check_name":  checkNode.Metadata["name"],
+		"policy_type": policyNode.Metadata["type"],
+		"policy_name": policyNode.Metadata["name"],
+	})
 
 	// Use the graph's helper method to create the satisfies relationship
 	err = g.MarkPolicySatisfiedByCheck(checkID, policyID)

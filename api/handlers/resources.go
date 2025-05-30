@@ -2,52 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/krzachariassen/ZTDP/internal/contracts"
-	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/resources"
 )
-
-const resourceCatalogNodeID = "resource-catalog"
-const resourceCatalogKind = "resource_register"
-
-// ensureResourceCatalogRoot ensures the resource catalog root node exists in the graph
-func ensureResourceCatalogRoot(g *graph.GlobalGraph) {
-	if _, ok := g.Graph.Nodes[resourceCatalogNodeID]; !ok {
-		root := &graph.Node{
-			ID:   resourceCatalogNodeID,
-			Kind: resourceCatalogKind,
-			Metadata: map[string]interface{}{
-				"name":  resourceCatalogNodeID,
-				"owner": "platform-team",
-			},
-			Spec: map[string]interface{}{
-				"description": "Root node for all resource types in the platform",
-			},
-		}
-		g.AddNode(root)
-	}
-}
-
-// Repairs the resource catalog: ensures all resource_type nodes are owned by the catalog root
-func repairResourceCatalogRelationships(g *graph.GlobalGraph) {
-	ensureResourceCatalogRoot(g)
-	for _, node := range g.Graph.Nodes {
-		if node.Kind == "resource_type" {
-			hasEdge := false
-			for _, edge := range g.Graph.Edges[resourceCatalogNodeID] {
-				if edge.To == node.ID && edge.Type == "owns" {
-					hasEdge = true
-					break
-				}
-			}
-			if !hasEdge {
-				g.AddEdge(resourceCatalogNodeID, node.ID, "owns")
-			}
-		}
-	}
-}
 
 // CreateResource godoc
 // @Summary      Create a new resource (from catalog)
@@ -60,106 +20,62 @@ func repairResourceCatalogRelationships(g *graph.GlobalGraph) {
 // @Failure      400  {object}  map[string]string
 // @Router       /v1/resources [post]
 func CreateResource(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Kind     string                 `json:"kind"`
-		Metadata map[string]interface{} `json:"metadata"`
-		Spec     map[string]interface{} `json:"spec"`
-	}
+	var req resources.ResourceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if req.Kind != "resource_type" && req.Kind != "resource" {
-		WriteJSONError(w, "Invalid kind for resource catalog", http.StatusBadRequest)
+
+	resourceService := resources.NewService(GlobalGraph)
+	response, err := resourceService.CreateResource(req)
+	if err != nil {
+		WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	// Validate required metadata fields
-	nameVal, nameOk := req.Metadata["name"].(string)
-	ownerVal, ownerOk := req.Metadata["owner"].(string)
-	if !nameOk || nameVal == "" {
-		WriteJSONError(w, "Resource metadata 'name' is required", http.StatusBadRequest)
-		return
-	}
-	if req.Kind == "resource_type" && (!ownerOk || ownerVal == "") {
-		WriteJSONError(w, "Resource type metadata 'owner' is required", http.StatusBadRequest)
-		return
-	}
-	if req.Kind == "resource" && !ownerOk {
-		// For resource instances, allow owner to be empty (optional), but always set to string
-		ownerVal = ""
-	}
-
-	// Build the contract
-	var node *graph.Node
-	if req.Kind == "resource_type" {
-		resourceType := contracts.ResourceTypeContract{}
-		metadata := contracts.Metadata{
-			Name:  nameVal,
-			Owner: ownerVal,
-		}
-		resourceType.Metadata = metadata
-		if specBytes, err := json.Marshal(req.Spec); err == nil {
-			json.Unmarshal(specBytes, &resourceType.Spec)
-		}
-		node, _ = graph.ResolveContract(resourceType)
-	} else {
-		resource := contracts.ResourceContract{}
-		metadata := contracts.Metadata{
-			Name:  nameVal,
-			Owner: ownerVal,
-		}
-		resource.Metadata = metadata
-		if specBytes, err := json.Marshal(req.Spec); err == nil {
-			json.Unmarshal(specBytes, &resource.Spec)
-		}
-		node, _ = graph.ResolveContract(resource)
-	}
-
-	g := GlobalGraph
-	ensureResourceCatalogRoot(g)
-	g.AddNode(node)
-
-	// If this is a resource_type, add an 'owns' edge from the catalog root
-	if node.Kind == "resource_type" {
-		g.AddEdge(resourceCatalogNodeID, node.ID, "owns")
-	}
-
-	repairResourceCatalogRelationships(g)
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(node)
+	json.NewEncoder(w).Encode(response)
 }
 
 // AddResourceToApplication godoc
-// @Summary      Add a resource to an application
-// @Description  Creates an 'owns' edge from application to resource
+// @Summary      Create a resource instance for an application
+// @Description  Creates a named resource instance for an application based on a catalog resource. Uses predictable naming (app-resource) by default, or custom name via query parameter. Operation is idempotent - returns success if resource already exists.
 // @Tags         resources
 // @Produce      json
 // @Param        app_name      path  string  true  "Application name"
-// @Param        resource_name path  string  true  "Resource name"
-// @Success      201  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
+// @Param        resource_name path  string  true  "Resource name from catalog"
+// @Param        instance_name query string  false "Custom instance name (defaults to app-resource format)"
+// @Success      201  {object}  map[string]interface{}  "Resource instance created"
+// @Success      200  {object}  map[string]interface{}  "Resource instance already exists"
+// @Failure      404  {object}  map[string]string       "Application or catalog resource not found"
+// @Failure      409  {object}  map[string]string       "Name conflict with existing non-resource node"
 // @Router       /v1/applications/{app_name}/resources/{resource_name} [post]
 func AddResourceToApplication(w http.ResponseWriter, r *http.Request) {
+	appName := chi.URLParam(r, "app_name")
 	resourceName := chi.URLParam(r, "resource_name")
-	appNode, appOk := GlobalGraph.Graph.Nodes[chi.URLParam(r, "app_name")]
-	_, resOk := GlobalGraph.Graph.Nodes[resourceName]
-	if !appOk || appNode.Kind != "application" {
-		WriteJSONError(w, "Application not found", http.StatusNotFound)
+	instanceName := r.URL.Query().Get("instance_name")
+
+	resourceService := resources.NewService(GlobalGraph)
+	response, err := resourceService.AddResourceToApplication(appName, resourceName, instanceName)
+	if err != nil {
+		if err.Error() == "application not found" || err.Error() == "resource not found in catalog" {
+			WriteJSONError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if err.Error() == "a node with this name already exists but is not a resource" {
+			WriteJSONError(w, err.Error(), http.StatusConflict)
+			return
+		}
+		WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if !resOk {
-		WriteJSONError(w, "Resource not found", http.StatusNotFound)
-		return
+
+	if response.Status == "exists" {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusCreated)
 	}
-	GlobalGraph.AddEdge(chi.URLParam(r, "app_name"), resourceName, "owns")
-	if err := GlobalGraph.Save(); err != nil {
-		WriteJSONError(w, "Failed to save graph", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"status": "resource added to application"})
+	json.NewEncoder(w).Encode(response)
 }
 
 // LinkServiceToResource godoc
@@ -174,25 +90,30 @@ func AddResourceToApplication(w http.ResponseWriter, r *http.Request) {
 // @Failure      404  {object}  map[string]string
 // @Router       /v1/applications/{app_name}/services/{service_name}/resources/{resource_name} [post]
 func LinkServiceToResource(w http.ResponseWriter, r *http.Request) {
+	appName := chi.URLParam(r, "app_name")
 	serviceName := chi.URLParam(r, "service_name")
 	resourceName := chi.URLParam(r, "resource_name")
-	serviceNode, svcOk := GlobalGraph.Graph.Nodes[serviceName]
-	_, resOk := GlobalGraph.Graph.Nodes[resourceName]
-	if !svcOk || serviceNode.Kind != "service" {
-		WriteJSONError(w, "Service not found", http.StatusNotFound)
+
+	resourceService := resources.NewService(GlobalGraph)
+	response, err := resourceService.LinkServiceToResource(appName, serviceName, resourceName)
+	if err != nil {
+		if err.Error() == "application not found" || err.Error() == "service not found" {
+			WriteJSONError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if fmt.Sprintf("resource instance not found in application: %v", err) == err.Error() {
+			WriteJSONError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if !resOk {
-		WriteJSONError(w, "Resource not found", http.StatusNotFound)
-		return
-	}
-	GlobalGraph.AddEdge(serviceName, resourceName, "uses")
-	if err := GlobalGraph.Save(); err != nil {
-		WriteJSONError(w, "Failed to save graph", http.StatusInternalServerError)
-		return
-	}
+
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"status": "service linked to resource"})
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":               response.Message,
+		"resource_instance_id": response.InstanceName,
+	})
 }
 
 // ListResources godoc
@@ -203,21 +124,14 @@ func LinkServiceToResource(w http.ResponseWriter, r *http.Request) {
 // @Success      200  {array}  map[string]interface{}
 // @Router       /v1/resources [get]
 func ListResources(w http.ResponseWriter, r *http.Request) {
-	repairResourceCatalogRelationships(GlobalGraph)
-	resources := []map[string]interface{}{}
-	for _, node := range GlobalGraph.Graph.Nodes {
-		if node.Kind == "resource" || node.Kind == "resource_type" {
-			resource := map[string]interface{}{
-				"id":       node.ID,
-				"kind":     node.Kind,
-				"metadata": node.Metadata,
-				"spec":     node.Spec,
-			}
-			resources = append(resources, resource)
-		}
+	resourceService := resources.NewService(GlobalGraph)
+	resourceList, err := resourceService.ListResources()
+	if err != nil {
+		WriteJSONError(w, "Failed to get resources", http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resources)
+	json.NewEncoder(w).Encode(resourceList)
 }
 
 // ListApplicationResources godoc
@@ -231,27 +145,20 @@ func ListResources(w http.ResponseWriter, r *http.Request) {
 // @Router       /v1/applications/{app_name}/resources [get]
 func ListApplicationResources(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app_name")
-	appNode, appOk := GlobalGraph.Graph.Nodes[appName]
-	if !appOk || appNode.Kind != "application" {
-		WriteJSONError(w, "Application not found", http.StatusNotFound)
+
+	resourceService := resources.NewService(GlobalGraph)
+	resourceList, err := resourceService.ListApplicationResources(appName)
+	if err != nil {
+		if err.Error() == "application not found" {
+			WriteJSONError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		WriteJSONError(w, "Failed to get application resources", http.StatusInternalServerError)
 		return
 	}
-	resources := []map[string]interface{}{}
-	for _, edge := range GlobalGraph.Graph.Edges[appName] {
-		if edge.Type == "owns" {
-			if node, ok := GlobalGraph.Graph.Nodes[edge.To]; ok && node.Kind == "resource" {
-				resource := map[string]interface{}{
-					"id":       node.ID,
-					"kind":     node.Kind,
-					"metadata": node.Metadata,
-					"spec":     node.Spec,
-				}
-				resources = append(resources, resource)
-			}
-		}
-	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resources)
+	json.NewEncoder(w).Encode(resourceList)
 }
 
 // ListServiceResources godoc
@@ -266,25 +173,18 @@ func ListApplicationResources(w http.ResponseWriter, r *http.Request) {
 // @Router       /v1/applications/{app_name}/services/{service_name}/resources [get]
 func ListServiceResources(w http.ResponseWriter, r *http.Request) {
 	serviceName := chi.URLParam(r, "service_name")
-	serviceNode, svcOk := GlobalGraph.Graph.Nodes[serviceName]
-	if !svcOk || serviceNode.Kind != "service" {
-		WriteJSONError(w, "Service not found", http.StatusNotFound)
+
+	resourceService := resources.NewService(GlobalGraph)
+	resourceList, err := resourceService.ListServiceResources(serviceName)
+	if err != nil {
+		if err.Error() == "service not found" {
+			WriteJSONError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		WriteJSONError(w, "Failed to get service resources", http.StatusInternalServerError)
 		return
 	}
-	resources := []map[string]interface{}{}
-	for _, edge := range GlobalGraph.Graph.Edges[serviceName] {
-		if edge.Type == "uses" {
-			if node, ok := GlobalGraph.Graph.Nodes[edge.To]; ok && node.Kind == "resource" {
-				resource := map[string]interface{}{
-					"id":       node.ID,
-					"kind":     node.Kind,
-					"metadata": node.Metadata,
-					"spec":     node.Spec,
-				}
-				resources = append(resources, resource)
-			}
-		}
-	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resources)
+	json.NewEncoder(w).Encode(resourceList)
 }

@@ -74,7 +74,9 @@
     .content {
       display: grid;
       grid-template-columns: 1fr 350px;
+      grid-template-rows: 1fr 300px;
       height: calc(100vh - 130px);
+      gap: 1px;
     }
     
     #graph {
@@ -82,6 +84,8 @@
       width: 100%;
       background-color: white;
       position: relative;
+      grid-column: 1;
+      grid-row: 1;
     }
     
     .panel {
@@ -89,6 +93,17 @@
       padding: 1rem;
       border-left: 1px solid #e5e7eb;
       overflow-y: auto;
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .logs-panel {
+      background: var(--panel-bg);
+      border-top: 1px solid #e5e7eb;
+      grid-column: 1 / -1;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
     }
     
     .panel-title {
@@ -586,6 +601,255 @@
     .color-resource_register { background-color: #FFD700; }
     .color-policy { background-color: #EF4444; }
   </style>
+  
+  <style>
+    /* Real-time logs panel styles */
+    .logs-header {
+      padding: 1rem;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: white;
+    }
+
+    .logs-title {
+      font-weight: 600;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+    }
+
+    .logs-title i {
+      margin-right: 0.5rem;
+      color: var(--primary);
+    }
+
+    .logs-controls {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .connection-status {
+      display: flex;
+      align-items: center;
+      font-size: 0.875rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    .connection-status.connected {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .connection-status.disconnected {
+      background: #fecaca;
+      color: #991b1b;
+    }
+
+    .connection-status.connecting {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 0.375rem;
+    }
+
+    .status-dot.connected {
+      background: #22c55e;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.disconnected {
+      background: #ef4444;
+    }
+
+    .status-dot.connecting {
+      background: #f59e0b;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .logs-content {
+      flex: 1;
+      overflow-y: auto;
+      background: #f9fafb;
+      padding: 0.5rem;
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .log-entry {
+      margin-bottom: 0.25rem;
+      padding: 0.375rem 0.5rem;
+      border-radius: 4px;
+      background: white;
+      border-left: 3px solid #e5e7eb;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+
+    .log-entry:hover {
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .log-entry.level-INFO {
+      border-left-color: var(--primary);
+    }
+
+    .log-entry.level-SUCCESS {
+      border-left-color: var(--success);
+    }
+
+    .log-entry.level-WARN {
+      border-left-color: var(--warning);
+    }
+
+    .log-entry.level-ERROR {
+      border-left-color: var(--danger);
+    }
+
+    .log-timestamp {
+      color: #6b7280;
+      font-size: 0.75rem;
+      white-space: nowrap;
+      min-width: 80px;
+    }
+
+    .log-level {
+      font-weight: 600;
+      font-size: 0.75rem;
+      padding: 0.125rem 0.375rem;
+      border-radius: 3px;
+      min-width: 65px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .log-level.INFO {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .log-level.SUCCESS {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .log-level.WARN {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .log-level.ERROR {
+      background: #fecaca;
+      color: #991b1b;
+    }
+
+    .log-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .log-message {
+      font-weight: 500;
+      color: #111827;
+      margin-bottom: 0.125rem;
+    }
+
+    .log-details {
+      font-size: 0.75rem;
+      color: #6b7280;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .log-detail {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .log-detail i {
+      width: 12px;
+      font-size: 0.7rem;
+    }
+
+    .logs-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      color: var(--gray);
+      font-style: italic;
+    }
+
+    .logs-empty i {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      opacity: 0.5;
+    }
+
+    .logs-filter {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .logs-filter select {
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      outline: none;
+    }
+
+    .btn-toggle {
+      background: var(--panel-bg);
+      border: 1px solid #d1d5db;
+      color: #374151;
+    }
+
+    .btn-toggle.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary-dark);
+    }
+
+    /* Mobile responsiveness for logs */
+    @media (max-width: 768px) {
+      .content {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto 250px;
+      }
+      
+      .panel {
+        grid-column: 1;
+        grid-row: 2;
+        border-left: none;
+        border-top: 1px solid #e5e7eb;
+        max-height: 200px;
+      }
+      
+      .logs-panel {
+        grid-row: 3;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -773,6 +1037,70 @@
           The selection includes upward relationships (owns, has_version) and downward 
           relationships (deploy, uses, instance_of) automatically, showing the complete
           path from applications to resources.
+        </div>
+      </div>
+      
+      <!-- Logs Panel -->
+      <div class="logs-panel">
+        <div class="logs-header">
+          <div class="logs-title">
+            <i class="fa-solid fa-stream"></i>
+            Real-time Logs
+          </div>
+          <div class="logs-controls">
+            <div class="connection-status" id="connectionStatus">
+              <span class="status-dot disconnected"></span>
+              <span class="status-text">Disconnected</span>
+            </div>
+            <div class="logs-actions">
+              <button id="toggleConnect" class="btn btn-sm">
+                <i class="fa-solid fa-plug"></i>
+                Connect
+              </button>
+              <button id="clearLogs" class="btn btn-sm btn-secondary">
+                <i class="fa-solid fa-trash"></i>
+                Clear
+              </button>
+              <button id="toggleLogs" class="btn btn-sm btn-secondary">
+                <i class="fa-solid fa-chevron-up"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="logs-filters" id="logsFilters">
+          <div class="filter-group">
+            <label>Level:</label>
+            <select id="logLevelFilter" class="filter-select">
+              <option value="">All Levels</option>
+              <option value="ERROR">Error</option>
+              <option value="WARN">Warning</option>
+              <option value="INFO">Info</option>
+              <option value="SUCCESS">Success</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Component:</label>
+            <select id="logComponentFilter" class="filter-select">
+              <option value="">All Components</option>
+              <option value="graph">Graph</option>
+              <option value="policy">Policy</option>
+              <option value="deployment">Deployment</option>
+              <option value="resource">Resource</option>
+              <option value="api">API</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <input type="text" id="logSearchFilter" class="filter-input" placeholder="Search logs...">
+          </div>
+        </div>
+        
+        <div class="logs-content" id="logsContent">
+          <div class="logs-empty" id="logsEmpty">
+            <i class="fa-solid fa-circle-info"></i>
+            <p>Connect to view real-time logs</p>
+          </div>
+          <div class="logs-list" id="logsList"></div>
         </div>
       </div>
     </div>
@@ -2242,6 +2570,259 @@ const transformGraphData = (data) => {
             </div>
           </div>`;
       });
+
+    // Real-time Logs WebSocket Client
+    class LogsManager {
+      constructor() {
+        this.ws = null;
+        this.isConnected = false;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 5;
+        this.reconnectDelay = 1000;
+        this.logs = [];
+        this.isVisible = true;
+        
+        this.initializeElements();
+        this.setupEventListeners();
+      }
+      
+      initializeElements() {
+        this.connectionStatus = document.getElementById('connectionStatus');
+        this.statusDot = this.connectionStatus.querySelector('.status-dot');
+        this.statusText = this.connectionStatus.querySelector('.status-text');
+        this.toggleConnect = document.getElementById('toggleConnect');
+        this.clearLogs = document.getElementById('clearLogs');
+        this.toggleLogs = document.getElementById('toggleLogs');
+        this.logsFilters = document.getElementById('logsFilters');
+        this.logsContent = document.getElementById('logsContent');
+        this.logsEmpty = document.getElementById('logsEmpty');
+        this.logsList = document.getElementById('logsList');
+        this.logLevelFilter = document.getElementById('logLevelFilter');
+        this.logComponentFilter = document.getElementById('logComponentFilter');
+        this.logSearchFilter = document.getElementById('logSearchFilter');
+      }
+      
+      setupEventListeners() {
+        this.toggleConnect.addEventListener('click', () => {
+          if (this.isConnected) {
+            this.disconnect();
+          } else {
+            this.connect();
+          }
+        });
+        
+        this.clearLogs.addEventListener('click', () => {
+          this.clearAllLogs();
+        });
+        
+        this.toggleLogs.addEventListener('click', () => {
+          this.toggleLogsVisibility();
+        });
+        
+        // Filter event listeners
+        this.logLevelFilter.addEventListener('change', () => this.applyFilters());
+        this.logComponentFilter.addEventListener('change', () => this.applyFilters());
+        this.logSearchFilter.addEventListener('input', () => this.applyFilters());
+      }
+      
+      connect() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          return;
+        }
+        
+        try {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const wsUrl = `${protocol}//${window.location.host}/v1/logs/stream`;
+          
+          this.ws = new WebSocket(wsUrl);
+          
+          this.ws.onopen = () => {
+            this.isConnected = true;
+            this.reconnectAttempts = 0;
+            this.updateConnectionStatus('connected', 'Connected');
+            this.updateConnectButton('Disconnect', 'fa-plug-circle-xmark');
+            this.addLogEntry('SUCCESS', 'WebSocket connected successfully', 'system');
+          };
+          
+          this.ws.onmessage = (event) => {
+            try {
+              const logEntry = JSON.parse(event.data);
+              this.addLogEntry(logEntry.level, logEntry.message, logEntry.component, logEntry.timestamp);
+            } catch (err) {
+              console.error('Failed to parse log message:', err);
+            }
+          };
+          
+          this.ws.onclose = () => {
+            this.isConnected = false;
+            this.updateConnectionStatus('disconnected', 'Disconnected');
+            this.updateConnectButton('Connect', 'fa-plug');
+            this.addLogEntry('WARN', 'WebSocket connection closed', 'system');
+            
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+              setTimeout(() => {
+                this.reconnectAttempts++;
+                this.addLogEntry('INFO', `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`, 'system');
+                this.connect();
+              }, this.reconnectDelay * this.reconnectAttempts);
+            }
+          };
+          
+          this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            this.addLogEntry('ERROR', 'WebSocket connection error', 'system');
+          };
+          
+        } catch (err) {
+          console.error('Failed to create WebSocket connection:', err);
+          this.addLogEntry('ERROR', `Failed to connect: ${err.message}`, 'system');
+        }
+      }
+      
+      disconnect() {
+        if (this.ws) {
+          this.ws.close();
+          this.ws = null;
+        }
+        this.isConnected = false;
+        this.updateConnectionStatus('disconnected', 'Disconnected');
+        this.updateConnectButton('Connect', 'fa-plug');
+        this.addLogEntry('INFO', 'Manually disconnected', 'system');
+      }
+      
+      updateConnectionStatus(status, text) {
+        this.statusDot.className = `status-dot ${status}`;
+        this.statusText.textContent = text;
+      }
+      
+      updateConnectButton(text, iconClass) {
+        const icon = this.toggleConnect.querySelector('i');
+        icon.className = `fa-solid ${iconClass}`;
+        this.toggleConnect.innerHTML = `<i class="fa-solid ${iconClass}"></i> ${text}`;
+      }
+      
+      addLogEntry(level, message, component = '', timestamp = null) {
+        const logEntry = {
+          id: Date.now() + Math.random(),
+          level: level,
+          message: message,
+          component: component,
+          timestamp: timestamp || new Date().toISOString(),
+          visible: true
+        };
+        
+        this.logs.unshift(logEntry);
+        
+        // Limit logs to 1000 entries
+        if (this.logs.length > 1000) {
+          this.logs = this.logs.slice(0, 1000);
+        }
+        
+        this.renderLogs();
+        this.scrollToTop();
+      }
+      
+      clearAllLogs() {
+        this.logs = [];
+        this.renderLogs();
+      }
+      
+      applyFilters() {
+        const levelFilter = this.logLevelFilter.value;
+        const componentFilter = this.logComponentFilter.value;
+        const searchFilter = this.logSearchFilter.value.toLowerCase();
+        
+        this.logs.forEach(log => {
+          let visible = true;
+          
+          if (levelFilter && log.level !== levelFilter) {
+            visible = false;
+          }
+          
+          if (componentFilter && log.component !== componentFilter) {
+            visible = false;
+          }
+          
+          if (searchFilter && !log.message.toLowerCase().includes(searchFilter)) {
+            visible = false;
+          }
+          
+          log.visible = visible;
+        });
+        
+        this.renderLogs();
+      }
+      
+      renderLogs() {
+        const visibleLogs = this.logs.filter(log => log.visible);
+        
+        if (visibleLogs.length === 0) {
+          this.logsEmpty.style.display = 'flex';
+          this.logsList.style.display = 'none';
+          this.logsEmpty.innerHTML = `
+            <i class="fa-solid fa-circle-info"></i>
+            <p>${this.logs.length === 0 ? 'No logs yet' : 'No logs match current filters'}</p>
+          `;
+          return;
+        }
+        
+        this.logsEmpty.style.display = 'none';
+        this.logsList.style.display = 'block';
+        
+        this.logsList.innerHTML = visibleLogs.map(log => {
+          const time = new Date(log.timestamp).toLocaleTimeString();
+          const componentTag = log.component ? `<span class="log-component">${log.component}</span>` : '';
+          
+          return `
+            <div class="log-entry log-${log.level.toLowerCase()}">
+              <div class="log-header">
+                <span class="log-level">${log.level}</span>
+                ${componentTag}
+                <span class="log-time">${time}</span>
+              </div>
+              <div class="log-message">${this.escapeHtml(log.message)}</div>
+            </div>
+          `;
+        }).join('');
+      }
+      
+      toggleLogsVisibility() {
+        this.isVisible = !this.isVisible;
+        const icon = this.toggleLogs.querySelector('i');
+        
+        if (this.isVisible) {
+          this.logsFilters.style.display = 'flex';
+          this.logsContent.style.display = 'block';
+          icon.className = 'fa-solid fa-chevron-up';
+        } else {
+          this.logsFilters.style.display = 'none';
+          this.logsContent.style.display = 'none';
+          icon.className = 'fa-solid fa-chevron-down';
+        }
+      }
+      
+      scrollToTop() {
+        if (this.logsList.firstChild) {
+          this.logsList.scrollTop = 0;
+        }
+      }
+      
+      escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+    }
+    
+    // Initialize logs manager
+    const logsManager = new LogsManager();
+    
+    // Auto-connect on page load
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        logsManager.connect();
+      }, 1000);
+    });
   </script>
 </body>
 </html>
