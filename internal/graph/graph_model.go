@@ -141,3 +141,53 @@ func (g *Graph) validateSpecialEdgeRules(fromNode, toNode *Node, edgeType string
 
 	return nil
 }
+
+// GetEdge retrieves an edge by constructing an edge ID from fromID, toID, and edgeType
+func (g *Graph) GetEdge(edgeID string) (*Edge, bool) {
+	// Try to find edge by searching through all edges
+	// EdgeID format expected: "fromID-toID-type" or "fromID-toID"
+	for fromID, edges := range g.Edges {
+		for i := range edges {
+			// Try multiple formats for edge identification
+			fullID := fmt.Sprintf("%s-%s-%s", fromID, edges[i].To, edges[i].Type)
+			shortID := fmt.Sprintf("%s-%s", fromID, edges[i].To)
+
+			if fullID == edgeID || shortID == edgeID {
+				return &edges[i], true
+			}
+		}
+	}
+	return nil, false
+}
+
+// UpdateEdge updates an existing edge in the graph
+func (g *Graph) UpdateEdge(edge *Edge) error {
+	// Find the edge by searching through all edges
+	for fromID, edges := range g.Edges {
+		for i := range edges {
+			// Check if this is the edge we want to update
+			// We'll match based on To and Type fields
+			if edges[i].To == edge.To && edges[i].Type == edge.Type {
+				// Update the edge
+				g.Edges[fromID][i] = *edge
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("edge not found for update")
+}
+
+// GetEdgeByFromToType retrieves an edge by explicit from, to, and type parameters
+func (g *Graph) GetEdgeByFromToType(fromID, toID, edgeType string) (*Edge, bool) {
+	edges, exists := g.Edges[fromID]
+	if !exists {
+		return nil, false
+	}
+
+	for i := range edges {
+		if edges[i].To == toID && edges[i].Type == edgeType {
+			return &edges[i], true
+		}
+	}
+	return nil, false
+}

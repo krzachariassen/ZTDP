@@ -157,3 +157,51 @@ func (gg *GlobalGraph) AttachPolicyToTransition(fromID, toID, edgeType, policyID
 	// Save back to backend
 	return gg.Backend.SaveGlobal(currentGraph)
 }
+
+// GetEdge retrieves an edge from the global graph
+func (gg *GlobalGraph) GetEdge(edgeID string) (*Edge, bool) {
+	gg.mu.Lock()
+	defer gg.mu.Unlock()
+
+	// Get current graph state
+	currentGraph, err := gg.Backend.LoadGlobal()
+	if err != nil {
+		return nil, false
+	}
+
+	return currentGraph.GetEdge(edgeID)
+}
+
+// UpdateEdge updates an edge in the global graph
+func (gg *GlobalGraph) UpdateEdge(edge *Edge) error {
+	gg.mu.Lock()
+	defer gg.mu.Unlock()
+
+	// Get current graph state
+	currentGraph, err := gg.Backend.LoadGlobal()
+	if err != nil {
+		return err
+	}
+
+	// Update the edge
+	if err := currentGraph.UpdateEdge(edge); err != nil {
+		return err
+	}
+
+	// Save back to backend
+	return gg.Backend.SaveGlobal(currentGraph)
+}
+
+// GetEdgeByFromToType retrieves an edge by explicit from, to, and type parameters
+func (gg *GlobalGraph) GetEdgeByFromToType(fromID, toID, edgeType string) (*Edge, bool) {
+	gg.mu.Lock()
+	defer gg.mu.Unlock()
+
+	// Get current graph state
+	currentGraph, err := gg.Backend.LoadGlobal()
+	if err != nil {
+		return nil, false
+	}
+
+	return currentGraph.GetEdgeByFromToType(fromID, toID, edgeType)
+}
