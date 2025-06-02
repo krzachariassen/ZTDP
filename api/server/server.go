@@ -78,6 +78,15 @@ func SetupRoutes(r *chi.Mux) {
 		v1.Get("/policies/{policy_id}", handlers.GetPolicy)
 
 		// =============================================================================
+		// AI ENDPOINTS
+		// =============================================================================
+		v1.Post("/ai/plans/generate", handlers.AIGeneratePlan)
+		v1.Post("/ai/policies/evaluate", handlers.AIEvaluatePolicy)
+		v1.Post("/ai/plans/optimize", handlers.AIOptimizePlan)
+		v1.Get("/ai/provider/status", handlers.AIProviderStatus)
+		v1.Get("/ai/metrics", handlers.AIMetrics)
+
+		// =============================================================================
 		// REAL-TIME LOGS & EVENTS
 		// =============================================================================
 		v1.Get("/logs/stream", handlers.LogsWebSocket)

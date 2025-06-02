@@ -25,11 +25,16 @@ func PolicyHandler(w http.ResponseWriter, r *http.Request) {
 		env = "default"
 	}
 
-	// Parse request body
+	// Parse and validate request body
 	var req policies.PolicyOperationRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteJSONError(w, "Invalid request format: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Basic validation
+	if req.Operation == "" {
+		WriteJSONError(w, "Operation is required", http.StatusBadRequest)
 		return
 	}
 
@@ -39,29 +44,18 @@ func PolicyHandler(w http.ResponseWriter, r *http.Request) {
 	// Create policy service
 	policyService := policies.NewService(getGraphStore(), env)
 
-	// Execute operation
+	// Execute operation - let service handle all business logic
 	response, err := policyService.ExecuteOperation(req, user)
 	if err != nil {
 		WriteJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Set appropriate status code based on response
-	statusCode := http.StatusOK
-	if !response.Success {
-		statusCode = http.StatusBadRequest
-	}
-
+	// Service determines the response format and status
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-
-	// Return appropriate response format
-	if response.Success && response.Data != nil {
-		// For successful operations, return the data directly
-		json.NewEncoder(w).Encode(response.Data)
-	} else {
-		// For errors or operations without data, return the full response
-		json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		WriteJSONError(w, "Failed to encode response", http.StatusInternalServerError)
+		return
 	}
 }
 

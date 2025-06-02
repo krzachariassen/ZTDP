@@ -930,7 +930,7 @@
       
       <div class="panel">
         <div class="panel-title">
-          Node Details
+          Details
           <div class="panel-tabs">
             <button class="panel-tab active" data-tab="details">Details</button>
             <button class="panel-tab" data-tab="relations">Relations</button>
@@ -939,7 +939,7 @@
         <div id="details-content" class="tab-content active" data-tab="details">
           <div class="empty-state">
             <i class="fa-solid fa-circle-info"></i>
-            <p>Click on a node to see details</p>
+            <p>Click on a node or edge to see details</p>
           </div>
         </div>
         <div id="relations-content" class="tab-content" data-tab="relations">
@@ -1384,6 +1384,7 @@
     
     // Global variables to track state
     let selectedNode = null;
+    let selectedEdge = null;
     let enableChainHighlight = true; // By default, enable chain highlighting
     
     // Create a mini-graph instance for the relations view
@@ -1702,13 +1703,195 @@
       detailsEl.innerHTML = html;
     }
 
-    // Show empty state when no node is selected
+    // Function to render edge details
+    function renderEdgeDetails(edge) {
+      const detailsEl = document.getElementById('details-content');
+      const edgeData = edge.data();
+      const metadata = edgeData.metadata || {};
+      
+      // Get source and target node info
+      const sourceNode = edge.source();
+      const targetNode = edge.target();
+      const sourceName = sourceNode.data('label') || sourceNode.id();
+      const targetName = targetNode.data('label') || targetNode.id();
+      const edgeType = edgeData.label || edgeData.type || 'Unknown';
+      
+      // Define icon and color based on edge type
+      let iconClass, colorClass;
+      switch(edgeType.toLowerCase()) {
+        case 'deploy':
+        case 'deployment':
+          iconClass = 'fa-solid fa-rocket';
+          colorClass = 'color-deployment';
+          break;
+        case 'uses':
+        case 'depends_on':
+          iconClass = 'fa-solid fa-link';
+          colorClass = 'color-dependency';
+          break;
+        case 'has_version':
+          iconClass = 'fa-solid fa-code-branch';
+          colorClass = 'color-version';
+          break;
+        case 'owns':
+          iconClass = 'fa-solid fa-user-shield';
+          colorClass = 'color-ownership';
+          break;
+        case 'instance_of':
+          iconClass = 'fa-solid fa-copy';
+          colorClass = 'color-instance';
+          break;
+        default:
+          iconClass = 'fa-solid fa-arrow-right';
+          colorClass = 'color-edge';
+      }
+      
+      // Start building HTML
+      let html = `
+        <div class="edge-detail-header">
+          <div class="edge-icon ${colorClass}">
+            <i class="${iconClass}"></i>
+          </div>
+          <div class="edge-title">
+            ${edgeType}
+            <div class="edge-connection">
+              ${sourceName} → ${targetName}
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Add basic edge information
+      html += `<div class="detail-section">
+        <div class="section-title">Connection</div>
+        <table class="detail-table">
+          <tr>
+            <td>Type</td>
+            <td>${edgeType}</td>
+          </tr>
+          <tr>
+            <td>Source</td>
+            <td>${sourceName}</td>
+          </tr>
+          <tr>
+            <td>Target</td>
+            <td>${targetName}</td>
+          </tr>
+        </table>
+      </div>`;
+      
+      // Add deployment metadata section if it exists
+      if (metadata.deployment) {
+        const deploymentMeta = metadata.deployment;
+        html += `<div class="detail-section">
+          <div class="section-title">Deployment Status</div>
+          <table class="detail-table">`;
+        
+        if (deploymentMeta.status) {
+          const statusClass = `status-${deploymentMeta.status.toLowerCase().replace('_', '-')}`;
+          html += `<tr>
+            <td>Status</td>
+            <td><span class="status-badge ${statusClass}">${deploymentMeta.status}</span></td>
+          </tr>`;
+        }
+        
+        if (deploymentMeta.message) {
+          html += `<tr>
+            <td>Message</td>
+            <td>${deploymentMeta.message}</td>
+          </tr>`;
+        }
+        
+        if (deploymentMeta.last_updated) {
+          const lastUpdated = new Date(deploymentMeta.last_updated).toLocaleString();
+          html += `<tr>
+            <td>Last Updated</td>
+            <td>${lastUpdated}</td>
+          </tr>`;
+        }
+        
+        if (deploymentMeta.progress !== undefined) {
+          const progressPercent = Math.round(deploymentMeta.progress * 100);
+          html += `<tr>
+            <td>Progress</td>
+            <td>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: ${progressPercent}%"></div>
+              </div>
+              <span class="progress-text">${progressPercent}%</span>
+            </td>
+          </tr>`;
+        }
+        
+        if (deploymentMeta.progress_message) {
+          html += `<tr>
+            <td>Progress Message</td>
+            <td>${deploymentMeta.progress_message}</td>
+          </tr>`;
+        }
+        
+        html += `</table></div>`;
+        
+        // Add deployment events if they exist
+        if (deploymentMeta.events && deploymentMeta.events.length > 0) {
+          html += `<div class="detail-section">
+            <div class="section-title">Deployment Events</div>
+            <div class="events-list">`;
+          
+          deploymentMeta.events.slice(0, 5).forEach(event => {
+            const eventTime = new Date(event.timestamp).toLocaleTimeString();
+            const levelClass = `event-${event.level.toLowerCase()}`;
+            html += `
+              <div class="event-item ${levelClass}">
+                <div class="event-header">
+                  <span class="event-level">${event.level}</span>
+                  <span class="event-time">${eventTime}</span>
+                </div>
+                <div class="event-message">${event.message}</div>
+              </div>
+            `;
+          });
+          
+          if (deploymentMeta.events.length > 5) {
+            html += `<div class="event-item more-events">
+              +${deploymentMeta.events.length - 5} more events
+            </div>`;
+          }
+          
+          html += `</div></div>`;
+        }
+      }
+      
+      // Add all metadata section if there's additional metadata
+      if (Object.keys(metadata).length > 0) {
+        html += `<div class="detail-section">
+          <div class="section-title">Metadata</div>
+          <table class="detail-table">`;
+        
+        for (const [key, value] of Object.entries(metadata)) {
+          if (key !== 'deployment') { // Skip deployment metadata as it's shown above
+            html += `<tr>
+              <td>${key}</td>
+              <td>${typeof value === 'object' ? 
+                `<div class="detail-value">${formatJSON(value)}</div>` : 
+                value}</td>
+            </tr>`;
+          }
+        }
+        
+        html += `</table></div>`;
+      }
+      
+      detailsEl.innerHTML = html;
+    }
+
+    // Show empty state when no element is selected
     function showEmptyDetails() {
       const detailsEl = document.getElementById('details-content');
       detailsEl.innerHTML = `
         <div class="empty-state">
           <i class="fa-solid fa-circle-info"></i>
-          <p>Click on a node to see details</p>
+          <p>Click on a node or edge to see details</p>
         </div>
       `;
     }
@@ -2287,25 +2470,34 @@ const transformGraphData = (data) => {
         
         // Create edges with better error handling
         const edges = [];
-        for (const [from, edgeList] of Object.entries(data.Edges)) {
+        for (const [from, edgeList] of Object.entries(data.Edges || data.edges)) {
           // Handle both array and object formats
           const edgesToProcess = Array.isArray(edgeList) ? edgeList : [edgeList];
           edgesToProcess.forEach(edge => {
             // Support all possible property names
             const to = edge.to || edge.To || edge.target || edge.Target;
             const type = edge.type || edge.Type || edge.kind || edge.Kind || edge.label;
+            const metadata = edge.metadata || edge.Metadata || {};
             // Use ID if present, else fallback to from-to-type
             const edgeId = edge.ID || edge.id || `${from}-${to}-${type}`;
             if (!to || !type) {
               console.warn("Edge missing required properties:", edge);
               return; // Skip this edge
             }
+            
+            console.log(`Creating edge ${edgeId} with metadata:`, metadata);
+            
             edges.push({
               data: {
                 id: edgeId,
                 source: from,
                 target: to,
-                label: type
+                label: type,
+                metadata: metadata,
+                details: {
+                  type: type,
+                  metadata: metadata
+                }
               }
             });
           });
@@ -2470,14 +2662,50 @@ const transformGraphData = (data) => {
           // No notification for node selection
         });
         
+        // Edge tap event
+        cy.on('tap', 'edge', function(evt) {
+          const edge = evt.target;
+          
+          // Clear any existing highlighting classes
+          cy.elements().removeClass('highlighted highlighted-edge chain-node chain-edge faded hover-faded');
+          
+          // Highlight the selected edge
+          edge.addClass('highlighted-edge');
+          
+          // Also highlight the connected nodes
+          const sourceNode = edge.source();
+          const targetNode = edge.target();
+          sourceNode.addClass('highlighted');
+          targetNode.addClass('highlighted');
+          
+          // Store reference to selected edge
+          selectedEdge = edge;
+          selectedNode = null; // Clear node selection
+          
+          // Show edge details
+          renderEdgeDetails(edge);
+          
+          // Clear relations view since it's node-specific
+          const relationsEl = document.getElementById('relations-content');
+          relationsEl.innerHTML = `
+            <div class="empty-state">
+              <i class="fa-solid fa-circle-info"></i>
+              <p>Relations view is only available for nodes</p>
+            </div>
+          `;
+          
+          // No notification for edge selection
+        });
+
         // Tap on background (canvas)
         cy.on('tap', function(evt) {
           if (evt.target === cy) {
             // Clear all highlight, chain, and faded classes
             cy.elements().removeClass('highlighted highlighted-edge faded chain-node chain-edge hover-faded');
             
-            // Reset selected node reference
+            // Reset selected references
             selectedNode = null;
+            selectedEdge = null;
             
             // Clear details panel
             showEmptyDetails();
