@@ -13,7 +13,6 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/logging"
-	"github.com/krzachariassen/ZTDP/internal/planner"
 )
 
 // DeploymentResult represents the result of a deployment operation
@@ -41,26 +40,22 @@ type DeploymentSummary struct {
 // Engine handles application deployments with policy enforcement using Event-Driven Architecture
 type Engine struct {
 	graph   *graph.GlobalGraph
-	aiBrain *ai.AIBrain
+	brain   *ai.AIBrain
+	planner DeploymentPlanner
 	logger  *logging.Logger
 }
 
 // NewEngine creates a new event-driven deployment engine
-func NewEngine(g *graph.GlobalGraph) *Engine {
+func NewEngine(g *graph.GlobalGraph, brain *ai.AIBrain) *Engine {
 	logger := logging.GetLogger().ForComponent("deployment-engine")
 
-	// Try to create AI brain - if it fails, we'll fall back to traditional planning
-	aiBrain, err := ai.NewAIBrainWithOpenAI(g)
-	if err != nil {
-		logger.Warn("⚠️ Failed to initialize AI brain, will use traditional planning: %v", err)
-		aiBrain = nil
-	} else {
-		logger.Info("🧠 AI brain initialized for intelligent deployment planning")
-	}
+	// Create AI deployment planner - simplified interface, AI discovers edges automatically
+	planner := NewAIDeploymentPlanner(g, brain.GetProvider())
 
 	return &Engine{
 		graph:   g,
-		aiBrain: aiBrain,
+		brain:   brain,
+		planner: planner,
 		logger:  logger,
 	}
 }
@@ -116,17 +111,10 @@ func (e *Engine) ExecuteApplicationDeployment(appName, environment string) (*Dep
 	// Note: We do NOT create application→environment deploy edges.
 	// Deployment edges are created from individual service_version and resource nodes to environments.
 
-	// Generate execution plan for the application using AI reasoning
-	plan, err := e.generateAIDeploymentPlan(appName, []string{"deploy", "create", "owns"})
+	// Generate execution plan for the application - AI automatically discovers dependencies
+	plan, err := e.generateDeploymentPlan(appName)
 	if err != nil {
-		e.logger.Warn("AI planning failed, falling back to traditional planner: %v", err)
-		// Fallback to traditional planning if AI fails
-		subgraph := planner.ExtractApplicationSubgraph(appName, currentGraph)
-		p := planner.NewPlanner(subgraph)
-		plan, err = p.PlanWithEdgeTypes([]string{"deploy", "create", "owns"})
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate deployment plan: %v", err)
-		}
+		return nil, fmt.Errorf("failed to generate AI deployment plan: %v", err)
 	}
 
 	// Collect services and resources for the deployment
@@ -416,13 +404,9 @@ func (e *Engine) HandleServiceDeploymentCompleted(serviceID, environment string,
 	}
 }
 
-// generateAIDeploymentPlan uses AI brain to generate intelligent deployment plans
-func (e *Engine) generateAIDeploymentPlan(appName string, edgeTypes []string) ([]string, error) {
-	if e.aiBrain == nil {
-		return nil, fmt.Errorf("AI brain not available")
-	}
-
-	e.logger.Info("🧠 Generating AI deployment plan for application: %s", appName)
+// generateDeploymentPlan uses simplified AI planner - automatically discovers edges
+func (e *Engine) generateDeploymentPlan(appName string) ([]string, error) {
+	e.logger.Info("🧠 Generating simplified AI deployment plan for application: %s", appName)
 
 	// Allow longer timeout for AI plan generation (configurable via environment)
 	timeout := 2 * time.Minute
@@ -435,66 +419,6 @@ func (e *Engine) generateAIDeploymentPlan(appName string, edgeTypes []string) ([
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Generate AI plan
-	planResponse, err := e.aiBrain.GenerateDeploymentPlan(ctx, appName, edgeTypes)
-	if err != nil {
-		return nil, fmt.Errorf("AI plan generation failed: %w", err)
-	}
-
-	// Convert AI plan to deployment order
-	order := make([]string, 0, len(planResponse.Plan.Steps))
-	stepMap := make(map[string]*ai.DeploymentStep)
-
-	// Build step map for dependency resolution
-	for _, step := range planResponse.Plan.Steps {
-		stepMap[step.ID] = step
-	}
-
-	// Process steps in dependency order
-	processed := make(map[string]bool)
-	processing := make(map[string]bool)
-
-	for _, step := range planResponse.Plan.Steps {
-		if !processed[step.ID] {
-			if err := e.processStepDependencies(step, stepMap, processed, processing, &order); err != nil {
-				return nil, fmt.Errorf("dependency resolution failed: %w", err)
-			}
-		}
-	}
-
-	e.logger.Info("✅ AI plan generated with %d steps (confidence: %.2f): %s",
-		len(order), planResponse.Confidence, planResponse.Reasoning)
-
-	return order, nil
-}
-
-// processStepDependencies recursively processes step dependencies for AI plans
-func (e *Engine) processStepDependencies(step *ai.DeploymentStep, stepMap map[string]*ai.DeploymentStep,
-	processed, processing map[string]bool, order *[]string) error {
-
-	if processing[step.ID] {
-		return fmt.Errorf("circular dependency detected involving step: %s", step.ID)
-	}
-
-	if processed[step.ID] {
-		return nil
-	}
-
-	processing[step.ID] = true
-
-	// Process dependencies first
-	for _, depID := range step.Dependencies {
-		if depStep, exists := stepMap[depID]; exists {
-			if err := e.processStepDependencies(depStep, stepMap, processed, processing, order); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Add this step to the order
-	*order = append(*order, step.Target)
-	processed[step.ID] = true
-	processing[step.ID] = false
-
-	return nil
+	// Use simplified planner - AI automatically discovers all dependencies
+	return e.planner.Deploy(ctx, appName)
 }

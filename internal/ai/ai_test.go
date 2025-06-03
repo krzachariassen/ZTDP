@@ -39,6 +39,31 @@ func (m *MockAIProvider) Close() error {
 	return args.Error(0)
 }
 
+func (m *MockAIProvider) ChatWithPlatform(ctx context.Context, query *ConversationalQuery) (*ConversationalResponse, error) {
+	args := m.Called(ctx, query)
+	return args.Get(0).(*ConversationalResponse), args.Error(1)
+}
+
+func (m *MockAIProvider) PredictImpact(ctx context.Context, request *ImpactAnalysisRequest) (*ImpactPrediction, error) {
+	args := m.Called(ctx, request)
+	return args.Get(0).(*ImpactPrediction), args.Error(1)
+}
+
+func (m *MockAIProvider) IntelligentTroubleshooting(ctx context.Context, incident *IncidentContext) (*TroubleshootingResponse, error) {
+	args := m.Called(ctx, incident)
+	return args.Get(0).(*TroubleshootingResponse), args.Error(1)
+}
+
+func (m *MockAIProvider) ProactiveOptimization(ctx context.Context, scope *OptimizationScope) (*OptimizationRecommendations, error) {
+	args := m.Called(ctx, scope)
+	return args.Get(0).(*OptimizationRecommendations), args.Error(1)
+}
+
+func (m *MockAIProvider) LearningFromFailures(ctx context.Context, outcome *DeploymentOutcome) (*LearningInsights, error) {
+	args := m.Called(ctx, outcome)
+	return args.Get(0).(*LearningInsights), args.Error(1)
+}
+
 // TestAIBrain tests the core AI brain functionality
 func TestAIBrain(t *testing.T) {
 	// Create test graph
@@ -77,14 +102,9 @@ func TestAIBrain(t *testing.T) {
 
 		// Setup mock expectations
 		mockProvider.On("GeneratePlan", mock.Anything, mock.Anything).Return(expectedResponse, nil)
-		mockProvider.On("GetProviderInfo").Return(&ProviderInfo{
-			Name:         "mock-provider",
-			Version:      "1.0.0",
-			Capabilities: []string{"planning", "evaluation"},
-		})
 
-		// Test plan generation
-		response, err := brain.GenerateDeploymentPlan(context.Background(), "test-app", []string{"deploy", "owns"})
+		// Test plan generation with AI discovering edges automatically (AI-first principle)
+		response, err := brain.GenerateDeploymentPlan(context.Background(), "test-app", nil) // Let AI discover all edge types
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -98,11 +118,11 @@ func TestAIBrain(t *testing.T) {
 	t.Run("EvaluateDeploymentPolicies", func(t *testing.T) {
 		// Setup mock response
 		expectedEvaluation := &PolicyEvaluation{
-			Compliant:   true,
-			Violations:  []string{},
-			Suggestions: []string{"Consider adding health checks"},
-			Reasoning:   "All policies satisfied",
-			Confidence:  0.9,
+			Compliant:       true,
+			Violations:      []PolicyViolation{},
+			Recommendations: []string{"Consider adding health checks"},
+			Reasoning:       "All policies satisfied",
+			Confidence:      0.9,
 		}
 
 		mockProvider.On("EvaluatePolicy", mock.Anything, mock.Anything).Return(expectedEvaluation, nil)
@@ -120,75 +140,67 @@ func TestAIBrain(t *testing.T) {
 	})
 }
 
-// TestAIPlanner tests the AI planner adapter
+// TestAIPlanner tests the deprecated AI planner adapter compatibility
 func TestAIPlanner(t *testing.T) {
 	// Create test components
-	globalGraph := createTestGraph()
 	mockProvider := &MockAIProvider{}
-	brain := NewAIBrain(mockProvider, globalGraph)
 
 	// Create test subgraph
 	subgraph := createTestSubgraph()
 
-	// Create AI planner
-	planner := NewAIPlanner(brain, subgraph, "test-app")
+	// Create AI planner (deprecated but still used in tests for compatibility)
+	planner := NewAIPlanner(mockProvider, subgraph, "test-app")
 
-	t.Run("PlanWithEdgeTypes", func(t *testing.T) {
-		// Setup mock response
-		expectedResponse := &PlanningResponse{
-			Plan: &DeploymentPlan{
-				Steps: []*DeploymentStep{
-					{
-						ID:           "step-1",
-						Action:       "deploy",
-						Target:       "service-1",
-						Dependencies: []string{},
-						Reasoning:    "Deploy first service",
-					},
-					{
-						ID:           "step-2",
-						Action:       "deploy",
-						Target:       "service-2",
-						Dependencies: []string{"step-1"},
-						Reasoning:    "Deploy second service after first",
-					},
+	t.Run("PlannerCompatibility", func(t *testing.T) {
+		// Test that the deprecated planner still provides basic functionality
+		assert.NotNil(t, planner)
+		assert.Equal(t, "test-app", planner.GetApplicationID())
+		assert.NotNil(t, planner.GetSubgraph())
+		assert.Equal(t, 3, len(planner.GetSubgraph().Nodes)) // app + 2 services
+	})
+
+	t.Run("ConvertPlanToOrder", func(t *testing.T) {
+		// Test the plan conversion utility
+		plan := &DeploymentPlan{
+			Steps: []*DeploymentStep{
+				{
+					ID:           "step-1",
+					Action:       "deploy",
+					Target:       "service-1",
+					Dependencies: []string{},
+					Reasoning:    "Deploy first service",
 				},
-				Strategy: "rolling",
+				{
+					ID:           "step-2",
+					Action:       "deploy",
+					Target:       "service-2",
+					Dependencies: []string{"step-1"},
+					Reasoning:    "Deploy second service after first",
+				},
 			},
-			Reasoning:  "Sequential deployment for safety",
-			Confidence: 0.9,
+			Strategy: "rolling",
 		}
 
-		// Setup mock expectations
-		mockProvider.On("GeneratePlan", mock.Anything, mock.Anything).Return(expectedResponse, nil)
-		mockProvider.On("GetProviderInfo").Return(&ProviderInfo{
-			Name:         "mock-provider",
-			Version:      "1.0.0",
-			Capabilities: []string{"planning", "evaluation"},
-		})
-
-		// Test planning
-		order, err := planner.PlanWithEdgeTypes([]string{"deploy", "owns"})
+		// Test the conversion helper function
+		order, err := planner.convertPlanToOrder(plan)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 2, len(order))
 		assert.Equal(t, "service-1", order[0])
 		assert.Equal(t, "service-2", order[1])
-
-		mockProvider.AssertExpectations(t)
 	})
 
-	t.Run("FallbackPlan", func(t *testing.T) {
-		// Test fallback when AI fails
-		mockProvider.On("GeneratePlan", mock.Anything, mock.Anything).Return(nil, assert.AnError)
+	t.Run("InvalidPlanHandling", func(t *testing.T) {
+		// Test error handling for invalid plans
+		_, err := planner.convertPlanToOrder(nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid deployment plan")
 
-		order, err := planner.PlanWithEdgeTypes([]string{"deploy"})
-
-		// Should not error - should use fallback
-		assert.NoError(t, err)
-		assert.Greater(t, len(order), 0)
-
-		mockProvider.AssertExpectations(t)
+		// Test empty plan
+		emptyPlan := &DeploymentPlan{Steps: []*DeploymentStep{}}
+		_, err = planner.convertPlanToOrder(emptyPlan)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid deployment plan")
 	})
 }
 

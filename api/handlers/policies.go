@@ -42,7 +42,7 @@ func PolicyHandler(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromRequest(r)
 
 	// Create policy service
-	policyService := policies.NewService(getGraphStore(), env)
+	policyService := policies.NewService(getGraphStore(), getGlobalGraph(), env)
 
 	// Execute operation - let service handle all business logic
 	response, err := policyService.ExecuteOperation(req, user)
@@ -68,7 +68,7 @@ func ListPolicies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create policy service
-	policyService := policies.NewService(getGraphStore(), env)
+	policyService := policies.NewService(getGraphStore(), getGlobalGraph(), env)
 
 	// Get policies
 	policyList, err := policyService.ListPolicies()
@@ -100,7 +100,7 @@ func GetPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create policy service
-	policyService := policies.NewService(getGraphStore(), env)
+	policyService := policies.NewService(getGraphStore(), getGlobalGraph(), env)
 
 	// Get policy
 	policy, err := policyService.GetPolicy(policyID)

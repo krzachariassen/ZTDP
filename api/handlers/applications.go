@@ -98,10 +98,8 @@ func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if app.Metadata.Name != appName {
-		WriteJSONError(w, "Application name mismatch", http.StatusBadRequest)
-		return
-	}
+	// Auto-populate application name from URL parameter to eliminate redundant validation
+	app.Metadata.Name = appName
 
 	appService := application.NewService(GlobalGraph)
 

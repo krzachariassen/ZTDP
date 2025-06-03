@@ -30,3 +30,8 @@ func getGraphStore() *graph.GraphStore {
 	})
 	return graphStore
 }
+
+// getGlobalGraph returns the initialized global graph instance
+func getGlobalGraph() *graph.GlobalGraph {
+	return GlobalGraph
+}

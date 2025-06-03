@@ -3,6 +3,7 @@ package deployments
 import (
 	"testing"
 
+	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 )
@@ -20,8 +21,15 @@ func TestEngine_ExecuteApplicationDeployment(t *testing.T) {
 	// Setup test application
 	setupTestApplication(globalGraph)
 
-	// Create deployment engine
-	engine := NewEngine(globalGraph)
+	// Create AI brain for simplified planner
+	brain, err := ai.NewAIBrainFromConfig(globalGraph)
+	if err != nil {
+		// For tests, use a mock or skip AI brain if not available
+		t.Skipf("AI brain not available for testing: %v", err)
+	}
+
+	// Create deployment engine with AI brain
+	engine := NewEngine(globalGraph, brain)
 
 	t.Run("Successful deployment", func(t *testing.T) {
 		result, err := engine.ExecuteApplicationDeployment("test-app", "dev")

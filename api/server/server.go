@@ -20,7 +20,7 @@ func SetupRoutes(r *chi.Mux) {
 		// =============================================================================
 		// SYSTEM ENDPOINTS
 		// =============================================================================
-		v1.Get("/healthz", handlers.HealthCheck)
+		v1.Get("/health", handlers.HealthCheck)
 		v1.Get("/status", handlers.Status)
 		v1.Get("/graph", handlers.GetGraph)
 
