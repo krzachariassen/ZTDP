@@ -20,9 +20,9 @@ The ZTDP (Zero Touch Deployment Platform) has been enhanced with an AI-native pl
                                 │                       │
                                 ▼                       ▼
                        ┌─────────────────┐    ┌─────────────────┐
-                       │  Traditional    │    │  GPT Models     │
+                       │  AI-Native      │    │  GPT Models     │
                        │  Planner        │    │  (GPT-4)        │
-                       │  (Fallback)     │    │                 │
+                       │                 │    │                 │
                        └─────────────────┘    └─────────────────┘
 ```
 
@@ -69,23 +69,21 @@ curl -X POST /v1/deployments \
 2. **Authentication & Authorization**: Ensures developer has permissions
 3. **Deployment Engine Invocation**: Calls the deployment engine
 
-### Phase 3: AI-Enhanced Deployment Engine
+### Phase 3: AI-Native Deployment Engine
 
-The deployment engine (`internal/deployments/engine.go`) now follows this AI-first approach:
+The deployment engine (`internal/deployments/engine.go`) follows this AI-first approach:
 
 ```go
-// 1. Initialize AI Brain (with fallback)
+// 1. Initialize AI Brain (required for AI-native system)
 brain, err := ai.NewAIBrainFromConfig(engine.globalGraph)
 if err != nil {
-    // Fall back to traditional planning
-    return engine.executeFallbackDeployment(request)
+    return fmt.Errorf("AI service unavailable: %w", err)
 }
 
 // 2. Generate AI deployment plan
 planResponse, err := brain.GenerateDeploymentPlan(ctx, applicationID, edgeTypes)
 if err != nil {
-    // AI failed, fall back to traditional planning
-    return engine.executeFallbackDeployment(request)
+    return fmt.Errorf("AI plan generation failed: %w", err)
 }
 
 // 3. Execute AI-generated plan
@@ -303,31 +301,30 @@ The system provides several monitoring endpoints:
    }
    ```
 
-## Fallback and Error Handling
+## Error Handling and Reliability
 
-### Graceful Degradation
+### AI-Native Error Handling
 
-The system implements multiple layers of fallback:
+The system implements robust error handling for AI operations:
 
-1. **AI Provider Unavailable**: Falls back to traditional deterministic planning
-2. **API Timeout**: Uses cached plans or traditional algorithms
+1. **AI Provider Unavailable**: System requires AI provider for operation - will return clear error messages
+2. **API Timeout**: Configurable timeouts with detailed error reporting
 3. **Invalid AI Response**: Validates and sanitizes AI output before execution
-4. **Partial AI Failure**: Combines AI insights with traditional planning
+4. **Malformed JSON**: Graceful parsing with structured fallback responses
 
 ### Error Scenarios
 
 ```go
 // AI Brain initialization failure
-if err := ai.NewAIBrainFromConfig(graph); err != nil {
-    logger.Warn("⚠️ Failed to initialize AI brain, will use traditional planning: %v", err)
-    return traditionalPlanner.Plan(applicationID)
+brain, err := ai.NewAIBrainFromConfig(graph)
+if err != nil {
+    return fmt.Errorf("AI service unavailable: %w", err)
 }
 
 // AI planning failure
 planResponse, err := brain.GenerateDeploymentPlan(ctx, applicationID, edgeTypes)
 if err != nil {
-    logger.Warn("AI planning failed, falling back to traditional planner: %v", err)
-    return traditionalPlanner.Plan(applicationID)
+    return fmt.Errorf("AI plan generation failed: %w", err)
 }
 ```
 

@@ -28,18 +28,11 @@ export AI_PROVIDER="openai"
 
 ## How It Works
 
-### Traditional vs AI Deployment
+### AI-Native Deployment
 
-**Before (Traditional)**:
-```
-Developer Request → Static Topological Sort → Deploy
-```
-
-**Now (AI-Enhanced)**:
+**AI-Only Approach**:
 ```
 Developer Request → AI Analysis → Intelligent Plan → Deploy
-                      ↓ (fallback)
-                   Traditional Plan
 ```
 
 ### AI Decision Process

@@ -1,70 +1,30 @@
 package ai
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/logging"
 )
 
-// AIPlanner replaces the hard-coded planner with AI-driven planning
-// It maintains compatibility with the existing planner interface while using AI reasoning
+// AIPlanner is deprecated - use deployments.AIDeploymentPlanner instead
+// This maintains compatibility for existing tests but should be replaced
 type AIPlanner struct {
-	brain     *AIBrain
-	subgraph  *graph.Graph
-	logger    *logging.Logger
-	appID     string
-	edgeTypes []string
+	provider AIProvider
+	subgraph *graph.Graph
+	logger   *logging.Logger
+	appID    string
 }
 
-// NewAIPlanner creates a new AI-driven planner instance
-// This replaces the traditional NewPlanner() function
-func NewAIPlanner(brain *AIBrain, subgraph *graph.Graph, appID string) *AIPlanner {
+// NewAIPlanner creates a new AI-driven planner instance (deprecated)
+// Use deployments.NewAIDeploymentPlanner instead for new code
+func NewAIPlanner(provider AIProvider, subgraph *graph.Graph, appID string) *AIPlanner {
 	return &AIPlanner{
-		brain:     brain,
-		subgraph:  subgraph,
-		logger:    logging.GetLogger().ForComponent("ai-planner"),
-		appID:     appID,
-		edgeTypes: []string{"deploy", "create", "owns"}, // Default edge types
+		provider: provider,
+		subgraph: subgraph,
+		logger:   logging.GetLogger().ForComponent("ai-planner-deprecated"),
+		appID:    appID,
 	}
-}
-
-// PlanWithEdgeTypes generates an AI-driven deployment plan
-// This replaces the hard-coded topological sort in the original planner
-func (p *AIPlanner) PlanWithEdgeTypes(edgeTypes []string) ([]string, error) {
-	p.logger.Info("🧠 AI Planner generating deployment plan for %s with edge types: %v", p.appID, edgeTypes)
-
-	p.edgeTypes = edgeTypes
-
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*30) // 30 second timeout
-	defer cancel()
-
-	// Generate AI plan
-	planResponse, err := p.brain.GenerateDeploymentPlan(ctx, p.appID, edgeTypes)
-	if err != nil {
-		p.logger.Error("❌ AI plan generation failed: %v", err)
-		// Fallback to basic ordering if AI fails
-		return p.fallbackPlan()
-	}
-
-	// Convert AI plan to deployment order
-	order, err := p.convertPlanToOrder(planResponse.Plan)
-	if err != nil {
-		p.logger.Error("❌ Failed to convert AI plan to order: %v", err)
-		return p.fallbackPlan()
-	}
-
-	p.logger.Info("✅ AI Planner generated deployment order with %d steps (confidence: %.2f)",
-		len(order), planResponse.Confidence)
-
-	// Log the reasoning for transparency
-	if planResponse.Reasoning != "" {
-		p.logger.Info("🎯 AI Reasoning: %s", planResponse.Reasoning)
-	}
-
-	return order, nil
 }
 
 // GetSubgraph returns the application subgraph
@@ -139,30 +99,6 @@ func (p *AIPlanner) processStepDependencies(step *DeploymentStep, stepMap map[st
 	return nil
 }
 
-// fallbackPlan provides a simple fallback when AI planning fails
-func (p *AIPlanner) fallbackPlan() ([]string, error) {
-	p.logger.Warn("🔄 Using fallback planning due to AI failure")
-
-	// Simple topological sort as fallback
-	order := make([]string, 0)
-
-	// Add nodes in a basic order: services first, then other components
-	for _, node := range p.subgraph.Nodes {
-		if node.Kind == "service" {
-			order = append(order, node.ID)
-		}
-	}
-
-	// Add non-service nodes
-	for _, node := range p.subgraph.Nodes {
-		if node.Kind != "service" {
-			order = append(order, node.ID)
-		}
-	}
-
-	return order, nil
-}
-
 // ExtractApplicationSubgraph extracts the application subgraph for AI planning
 // This replaces the original planner.ExtractApplicationSubgraph function
 func ExtractApplicationSubgraph(globalGraph *graph.GlobalGraph, appID string) (*graph.Graph, error) {
@@ -232,4 +168,30 @@ func addConnectedNodes(source *graph.Graph, target *graph.Graph, nodeID string, 
 			}
 		}
 	}
+}
+
+// Helper functions for extracting graph data
+
+// extractNodes converts graph nodes to the format expected by PlanningContext
+func extractNodes(subgraph *graph.Graph) []*graph.Node {
+	nodes := make([]*graph.Node, 0, len(subgraph.Nodes))
+	for _, node := range subgraph.Nodes {
+		nodes = append(nodes, node)
+	}
+	return nodes
+}
+
+// extractEdges converts graph edges to the format expected by PlanningContext
+func extractEdges(subgraph *graph.Graph) []*graph.Edge {
+	edges := make([]*graph.Edge, 0)
+	for _, edgeList := range subgraph.Edges {
+		for _, edge := range edgeList {
+			edges = append(edges, &graph.Edge{
+				To:       edge.To,
+				Type:     edge.Type,
+				Metadata: edge.Metadata,
+			})
+		}
+	}
+	return edges
 }

@@ -1,26 +1,45 @@
 package policies
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/logging"
 )
 
 // Service wraps PolicyEvaluator and provides business logic methods for policy operations
+// Enhanced with AI-first policy evaluation capabilities
 type Service struct {
-	evaluator  *PolicyEvaluator
-	graphStore GraphStoreInterface
-	env        string
+	evaluator   *PolicyEvaluator
+	aiEvaluator *Evaluator // AI-first evaluator
+	graphStore  GraphStoreInterface
+	globalGraph *graph.GlobalGraph
+	env         string
+	logger      *logging.Logger
 }
 
-// NewService creates a new policy service
-func NewService(graphStore GraphStoreInterface, env string) *Service {
+// NewService creates a new policy service with AI capabilities
+func NewService(graphStore GraphStoreInterface, globalGraph *graph.GlobalGraph, env string) *Service {
 	evaluator := NewPolicyEvaluator(graphStore, env)
 
+	// Initialize AI brain for policy evaluation (required for AI-native system)
+	brain, err := ai.NewAIBrainFromConfig(globalGraph)
+	var aiProvider ai.AIProvider
+	if err == nil && brain != nil {
+		aiProvider = brain.GetProvider()
+	}
+
+	aiEvaluator := NewEvaluator(aiProvider, globalGraph, env)
+
 	return &Service{
-		evaluator:  evaluator,
-		graphStore: graphStore,
-		env:        env,
+		evaluator:   evaluator,
+		aiEvaluator: aiEvaluator,
+		graphStore:  graphStore,
+		globalGraph: globalGraph,
+		env:         env,
+		logger:      logging.GetLogger().ForComponent("policy-service"),
 	}
 }
 
@@ -202,4 +221,41 @@ func (s *Service) GetPolicy(policyID string) (*graph.Node, error) {
 	}
 
 	return policy, nil
+}
+
+// EvaluateDeploymentPolicies provides AI-powered policy evaluation for deployments
+// This is the AI-first approach to policy evaluation with intelligent reasoning
+func (s *Service) EvaluateDeploymentPolicies(ctx context.Context, applicationID string, environmentID string) (*ai.PolicyEvaluation, error) {
+	s.logger.Info("🔍 Evaluating deployment policies: %s -> %s", applicationID, environmentID)
+
+	// Use AI-first evaluator
+	evaluation, err := s.aiEvaluator.EvaluateDeploymentPolicies(ctx, applicationID, environmentID)
+	if err != nil {
+		s.logger.Error("❌ AI policy evaluation failed: %v", err)
+		return nil, fmt.Errorf("policy evaluation failed: %w", err)
+	}
+
+	s.logger.Info("✅ Policy evaluation completed (compliant: %t)", evaluation.Compliant)
+	return evaluation, nil
+}
+
+// ValidateTransitionWithAI uses AI to validate complex policy transitions
+// This provides intelligent reasoning about policy compliance beyond simple rules
+func (s *Service) ValidateTransitionWithAI(ctx context.Context, fromID, toID, edgeType, user string) (*ai.PolicyEvaluation, error) {
+	s.logger.Info("🔍 Validating transition with AI: %s -> %s", fromID, toID)
+
+	// Use AI-first evaluator for transition validation
+	evaluation, err := s.aiEvaluator.ValidateTransition(ctx, fromID, toID, edgeType, user)
+	if err != nil {
+		s.logger.Error("❌ AI transition validation failed: %v", err)
+		return nil, fmt.Errorf("transition validation failed: %w", err)
+	}
+
+	s.logger.Info("✅ Transition validation completed (allowed: %t)", evaluation.Compliant)
+	return evaluation, nil
+}
+
+// HasAICapabilities returns whether AI policy evaluation is available
+func (s *Service) HasAICapabilities() bool {
+	return s.aiEvaluator != nil
 }

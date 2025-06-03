@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,14 +12,14 @@ func TestSetDeploymentStatus(t *testing.T) {
 	tests := []struct {
 		name        string
 		metadata    map[string]interface{}
-		status      contracts.DeploymentStatus
+		status      DeploymentStatus
 		message     string
 		expectError bool
 	}{
 		{
 			name:        "Set status on empty metadata",
 			metadata:    map[string]interface{}{},
-			status:      contracts.StatusPending,
+			status:      StatusPending,
 			message:     "Deployment queued",
 			expectError: false,
 		},
@@ -28,17 +27,17 @@ func TestSetDeploymentStatus(t *testing.T) {
 			name: "Update existing status with valid transition",
 			metadata: map[string]interface{}{
 				DeploymentMetadataKey: map[string]interface{}{
-					"status": string(contracts.StatusPending),
+					"status": string(StatusPending),
 				},
 			},
-			status:      contracts.StatusInProgress,
+			status:      StatusInProgress,
 			message:     "Starting deployment",
 			expectError: false,
 		},
 		{
 			name:        "Invalid status should fail",
 			metadata:    map[string]interface{}{},
-			status:      contracts.DeploymentStatus("invalid"),
+			status:      DeploymentStatus("invalid"),
 			message:     "Should fail",
 			expectError: true,
 		},
@@ -46,10 +45,10 @@ func TestSetDeploymentStatus(t *testing.T) {
 			name: "Invalid transition should fail",
 			metadata: map[string]interface{}{
 				DeploymentMetadataKey: map[string]interface{}{
-					"status": string(contracts.StatusSucceeded),
+					"status": string(StatusSucceeded),
 				},
 			},
-			status:      contracts.StatusInProgress,
+			status:      StatusInProgress,
 			message:     "Should fail",
 			expectError: true,
 		},
@@ -84,7 +83,7 @@ func TestGetDeploymentStatus(t *testing.T) {
 	tests := []struct {
 		name            string
 		metadata        map[string]interface{}
-		expectedStatus  contracts.DeploymentStatus
+		expectedStatus  DeploymentStatus
 		expectedMessage string
 		expectedExists  bool
 	}{
@@ -99,11 +98,11 @@ func TestGetDeploymentStatus(t *testing.T) {
 			name: "Valid deployment metadata",
 			metadata: map[string]interface{}{
 				DeploymentMetadataKey: map[string]interface{}{
-					"status":  string(contracts.StatusInProgress),
+					"status":  string(StatusInProgress),
 					"message": "Deploying resources",
 				},
 			},
-			expectedStatus:  contracts.StatusInProgress,
+			expectedStatus:  StatusInProgress,
 			expectedMessage: "Deploying resources",
 			expectedExists:  true,
 		},
@@ -144,63 +143,63 @@ func TestValidateStatusTransition(t *testing.T) {
 	tests := []struct {
 		name        string
 		metadata    map[string]interface{}
-		newStatus   contracts.DeploymentStatus
+		newStatus   DeploymentStatus
 		expectError bool
 	}{
 		{
 			name:        "No existing status - any valid status allowed",
 			metadata:    map[string]interface{}{},
-			newStatus:   contracts.StatusPending,
+			newStatus:   StatusPending,
 			expectError: false,
 		},
 		{
 			name: "Valid transition: pending to in_progress",
 			metadata: map[string]interface{}{
 				DeploymentMetadataKey: map[string]interface{}{
-					"status": string(contracts.StatusPending),
+					"status": string(StatusPending),
 				},
 			},
-			newStatus:   contracts.StatusInProgress,
+			newStatus:   StatusInProgress,
 			expectError: false,
 		},
 		{
 			name: "Valid transition: in_progress to succeeded",
 			metadata: map[string]interface{}{
 				DeploymentMetadataKey: map[string]interface{}{
-					"status": string(contracts.StatusInProgress),
+					"status": string(StatusInProgress),
 				},
 			},
-			newStatus:   contracts.StatusSucceeded,
+			newStatus:   StatusSucceeded,
 			expectError: false,
 		},
 		{
 			name: "Valid transition: in_progress to failed",
 			metadata: map[string]interface{}{
 				DeploymentMetadataKey: map[string]interface{}{
-					"status": string(contracts.StatusInProgress),
+					"status": string(StatusInProgress),
 				},
 			},
-			newStatus:   contracts.StatusFailed,
+			newStatus:   StatusFailed,
 			expectError: false,
 		},
 		{
 			name: "Invalid transition: succeeded to in_progress",
 			metadata: map[string]interface{}{
 				DeploymentMetadataKey: map[string]interface{}{
-					"status": string(contracts.StatusSucceeded),
+					"status": string(StatusSucceeded),
 				},
 			},
-			newStatus:   contracts.StatusInProgress,
+			newStatus:   StatusInProgress,
 			expectError: true,
 		},
 		{
 			name: "Invalid transition: failed to in_progress",
 			metadata: map[string]interface{}{
 				DeploymentMetadataKey: map[string]interface{}{
-					"status": string(contracts.StatusFailed),
+					"status": string(StatusFailed),
 				},
 			},
-			newStatus:   contracts.StatusInProgress,
+			newStatus:   StatusInProgress,
 			expectError: true,
 		},
 	}
@@ -222,34 +221,34 @@ func TestDeploymentStatusWorkflow(t *testing.T) {
 	metadata := map[string]interface{}{}
 
 	// Start with pending
-	err := SetDeploymentStatus(metadata, contracts.StatusPending, "Deployment queued")
+	err := SetDeploymentStatus(metadata, StatusPending, "Deployment queued")
 	require.NoError(t, err)
 
 	status, message, exists := GetDeploymentStatus(metadata)
 	assert.True(t, exists)
-	assert.Equal(t, contracts.StatusPending, status)
+	assert.Equal(t, StatusPending, status)
 	assert.Equal(t, "Deployment queued", message)
 
 	// Move to in_progress
-	err = SetDeploymentStatus(metadata, contracts.StatusInProgress, "Starting deployment")
+	err = SetDeploymentStatus(metadata, StatusInProgress, "Starting deployment")
 	require.NoError(t, err)
 
 	status, message, exists = GetDeploymentStatus(metadata)
 	assert.True(t, exists)
-	assert.Equal(t, contracts.StatusInProgress, status)
+	assert.Equal(t, StatusInProgress, status)
 	assert.Equal(t, "Starting deployment", message)
 
 	// Complete successfully
-	err = SetDeploymentStatus(metadata, contracts.StatusSucceeded, "Deployment completed")
+	err = SetDeploymentStatus(metadata, StatusSucceeded, "Deployment completed")
 	require.NoError(t, err)
 
 	status, message, exists = GetDeploymentStatus(metadata)
 	assert.True(t, exists)
-	assert.Equal(t, contracts.StatusSucceeded, status)
+	assert.Equal(t, StatusSucceeded, status)
 	assert.Equal(t, "Deployment completed", message)
 
 	// Verify we can't go back to in_progress
-	err = SetDeploymentStatus(metadata, contracts.StatusInProgress, "Should fail")
+	err = SetDeploymentStatus(metadata, StatusInProgress, "Should fail")
 	assert.Error(t, err)
 }
 
@@ -258,7 +257,7 @@ func TestDeploymentStatusTimestamp(t *testing.T) {
 
 	// Set initial status
 	before := time.Now()
-	err := SetDeploymentStatus(metadata, contracts.StatusPending, "Test")
+	err := SetDeploymentStatus(metadata, StatusPending, "Test")
 	require.NoError(t, err)
 	after := time.Now()
 

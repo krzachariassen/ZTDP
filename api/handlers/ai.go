@@ -63,9 +63,9 @@ func AIGeneratePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default edge types
+	// Default edge types - let AI discover all edges automatically (AI-first principle)
 	if len(req.EdgeTypes) == 0 {
-		req.EdgeTypes = []string{"deploy", "create", "owns"}
+		req.EdgeTypes = nil // AI will discover all edge types automatically
 	}
 
 	// Default timeout
@@ -302,7 +302,361 @@ func AIMetrics(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(metrics)
 }
 
-// Helper function to get environment variable with default
+// *** REVOLUTIONARY AI API ENDPOINTS ***
+// These endpoints demonstrate groundbreaking AI capabilities impossible with traditional IDPs
+
+// AIChatRequest represents the request for conversational AI
+type AIChatRequest struct {
+	Query   string   `json:"query"`
+	Context string   `json:"context,omitempty"`
+	Scope   []string `json:"scope,omitempty"`
+	Session string   `json:"session,omitempty"`
+	Timeout int      `json:"timeout,omitempty"`
+}
+
+// AIImpactRequest represents the request for impact prediction
+type AIImpactRequest struct {
+	Changes     []map[string]interface{} `json:"changes"`
+	Environment string                   `json:"environment"`
+	Scope       string                   `json:"scope,omitempty"`
+	Timeframe   string                   `json:"timeframe,omitempty"`
+	Timeout     int                      `json:"timeout,omitempty"`
+}
+
+// AITroubleshootRequest represents the request for intelligent troubleshooting
+type AITroubleshootRequest struct {
+	IncidentID  string                   `json:"incident_id"`
+	Description string                   `json:"description"`
+	Symptoms    []string                 `json:"symptoms,omitempty"`
+	Timeline    []map[string]interface{} `json:"timeline,omitempty"`
+	Logs        []string                 `json:"logs,omitempty"`
+	Metrics     map[string]interface{}   `json:"metrics,omitempty"`
+	Environment string                   `json:"environment,omitempty"`
+	Timeout     int                      `json:"timeout,omitempty"`
+}
+
+// AIOptimizeRequest represents the request for proactive optimization
+type AIOptimizeRequest struct {
+	Target      string                 `json:"target"`
+	Areas       []string               `json:"areas,omitempty"`
+	Constraints map[string]interface{} `json:"constraints,omitempty"`
+	Goals       []string               `json:"goals,omitempty"`
+	Timeout     int                    `json:"timeout,omitempty"`
+}
+
+// AILearnRequest represents the request for learning from deployments
+type AILearnRequest struct {
+	DeploymentID string                 `json:"deployment_id"`
+	Success      bool                   `json:"success"`
+	Duration     string                 `json:"duration,omitempty"`
+	Issues       []string               `json:"issues,omitempty"`
+	Metrics      map[string]interface{} `json:"metrics,omitempty"`
+	Context      map[string]interface{} `json:"context,omitempty"`
+	Timeout      int                    `json:"timeout,omitempty"`
+}
+
+// AIChatWithPlatform godoc
+// @Summary      Chat with Platform using AI
+// @Description  Revolutionary conversational AI that allows natural language interaction with platform graph for insights and actions
+// @Tags         ai,revolutionary
+// @Accept       json
+// @Produce      json
+// @Param        request  body  AIChatRequest  true  "Chat request"
+// @Success      200  {object}  ai.ConversationalResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /v1/ai/chat [post]
+func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
+	var req AIChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Query == "" {
+		WriteJSONError(w, "query is required", http.StatusBadRequest)
+		return
+	}
+
+	// Default timeout
+	timeout := 60 * time.Second
+	if req.Timeout > 0 {
+		timeout = time.Duration(req.Timeout) * time.Second
+	}
+
+	// Create AI brain
+	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	if err != nil {
+		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Chat with platform using revolutionary AI
+	response, err := brain.ChatWithPlatform(ctx, req.Query, req.Context)
+	if err != nil {
+		WriteJSONError(w, "Conversational AI failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// AIPredictImpact godoc
+// @Summary      Predict deployment impact using AI
+// @Description  Revolutionary AI-driven impact prediction that simulates deployment consequences before they happen
+// @Tags         ai,revolutionary
+// @Accept       json
+// @Produce      json
+// @Param        request  body  AIImpactRequest  true  "Impact prediction request"
+// @Success      200  {object}  ai.ImpactPrediction
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /v1/ai/predict-impact [post]
+func AIPredictImpact(w http.ResponseWriter, r *http.Request) {
+	var req AIImpactRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Changes) == 0 {
+		WriteJSONError(w, "changes are required", http.StatusBadRequest)
+		return
+	}
+
+	if req.Environment == "" {
+		WriteJSONError(w, "environment is required", http.StatusBadRequest)
+		return
+	}
+
+	// Default timeout
+	timeout := 90 * time.Second
+	if req.Timeout > 0 {
+		timeout = time.Duration(req.Timeout) * time.Second
+	}
+
+	// Create AI brain
+	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	if err != nil {
+		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Convert API request to internal format
+	changes := make([]ai.ProposedChange, len(req.Changes))
+	for i, change := range req.Changes {
+		// Extract fields from map with safe defaults
+		changeType, _ := change["type"].(string)
+		target, _ := change["target"].(string)
+
+		changes[i] = ai.ProposedChange{
+			Type:     changeType,
+			Target:   target,
+			Details:  change,
+			Metadata: change,
+		}
+	}
+
+	// Predict impact using revolutionary AI
+	prediction, err := brain.PredictDeploymentImpact(ctx, changes, req.Environment)
+	if err != nil {
+		WriteJSONError(w, "Impact prediction failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(prediction)
+}
+
+// AITroubleshoot godoc
+// @Summary      Intelligent troubleshooting using AI
+// @Description  Revolutionary AI-driven root cause analysis and intelligent problem diagnosis beyond traditional monitoring
+// @Tags         ai,revolutionary
+// @Accept       json
+// @Produce      json
+// @Param        request  body  AITroubleshootRequest  true  "Troubleshooting request"
+// @Success      200  {object}  ai.TroubleshootingResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /v1/ai/troubleshoot [post]
+func AITroubleshoot(w http.ResponseWriter, r *http.Request) {
+	var req AITroubleshootRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.IncidentID == "" {
+		WriteJSONError(w, "incident_id is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.Description == "" {
+		WriteJSONError(w, "description is required", http.StatusBadRequest)
+		return
+	}
+
+	// Default timeout
+	timeout := 120 * time.Second
+	if req.Timeout > 0 {
+		timeout = time.Duration(req.Timeout) * time.Second
+	}
+
+	// Create AI brain
+	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	if err != nil {
+		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Perform intelligent troubleshooting using revolutionary AI
+	response, err := brain.IntelligentTroubleshooting(ctx, req.IncidentID, req.Description, req.Symptoms)
+	if err != nil {
+		WriteJSONError(w, "Intelligent troubleshooting failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// AIProactiveOptimize godoc
+// @Summary      Proactive optimization using AI
+// @Description  Revolutionary AI that continuously analyzes patterns and recommends architectural optimizations before problems occur
+// @Tags         ai,revolutionary
+// @Accept       json
+// @Produce      json
+// @Param        request  body  AIOptimizeRequest  true  "Proactive optimization request"
+// @Success      200  {object}  ai.OptimizationRecommendations
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /v1/ai/proactive-optimize [post]
+func AIProactiveOptimize(w http.ResponseWriter, r *http.Request) {
+	var req AIOptimizeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Target == "" {
+		WriteJSONError(w, "target is required", http.StatusBadRequest)
+		return
+	}
+
+	// Default timeout
+	timeout := 120 * time.Second
+	if req.Timeout > 0 {
+		timeout = time.Duration(req.Timeout) * time.Second
+	}
+
+	// Create AI brain
+	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	if err != nil {
+		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Default focus areas if not provided
+	focus := req.Areas
+	if len(focus) == 0 {
+		focus = []string{"performance", "reliability", "security", "cost"}
+	}
+
+	// Perform proactive optimization using revolutionary AI
+	recommendations, err := brain.ProactiveOptimization(ctx, req.Target, focus)
+	if err != nil {
+		WriteJSONError(w, "Proactive optimization failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(recommendations)
+}
+
+// AILearnFromDeployment godoc
+// @Summary      Learn from deployment outcomes using AI
+// @Description  Revolutionary AI that learns from deployment outcomes to continuously improve future deployments
+// @Tags         ai,revolutionary
+// @Accept       json
+// @Produce      json
+// @Param        request  body  AILearnRequest  true  "Learning request"
+// @Success      200  {object}  ai.LearningInsights
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /v1/ai/learn [post]
+func AILearnFromDeployment(w http.ResponseWriter, r *http.Request) {
+	var req AILearnRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.DeploymentID == "" {
+		WriteJSONError(w, "deployment_id is required", http.StatusBadRequest)
+		return
+	}
+
+	// Default timeout
+	timeout := 90 * time.Second
+	if req.Timeout > 0 {
+		timeout = time.Duration(req.Timeout) * time.Second
+	}
+
+	// Create AI brain
+	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	if err != nil {
+		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Parse duration if provided
+	var duration int64 = 0
+	if req.Duration != "" {
+		if parsedDuration, err := time.ParseDuration(req.Duration); err == nil {
+			duration = int64(parsedDuration.Seconds())
+		}
+	}
+
+	// Convert issues to DeploymentIssue structs
+	issues := make([]ai.DeploymentIssue, len(req.Issues))
+	for i, issue := range req.Issues {
+		issues[i] = ai.DeploymentIssue{
+			Type:        "error", // Default type
+			Description: issue,
+			Severity:    "medium",  // Default severity
+			Resolution:  "pending", // Default resolution
+			Timestamp:   time.Now().Format(time.RFC3339),
+		}
+	}
+
+	// Learn from deployment using revolutionary AI
+	insights, err := brain.LearnFromDeployment(ctx, req.DeploymentID, req.Success, duration, issues)
+	if err != nil {
+		WriteJSONError(w, "Learning from deployment failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(insights)
+}
+
+// Helper function to get environment variable with fallback
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

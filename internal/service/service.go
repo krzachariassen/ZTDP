@@ -113,9 +113,9 @@ func contractToMap(contract interface{}) map[string]interface{} {
 
 // Internal methods that work with contracts (actual existing logic)
 func (s *ServiceService) createServiceInternal(appName string, svc contracts.ServiceContract) error {
-	if svc.Spec.Application != appName {
-		return errors.New("service must be linked to the specified application")
-	}
+	// Auto-populate application from URL parameter to eliminate redundant validation
+	svc.Spec.Application = appName
+
 	if err := svc.Validate(); err != nil {
 		return err
 	}
