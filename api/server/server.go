@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/krzachariassen/ZTDP/api/handlers"
-	_ "github.com/krzachariassen/ZTDP/docs"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 

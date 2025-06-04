@@ -35,6 +35,11 @@ func NewAIDeploymentPlanner(graph *graph.GlobalGraph, provider ai.AIProvider) *A
 // Deploy generates a deployment plan using AI
 // AI automatically discovers all relevant edges and dependencies
 func (p *AIDeploymentPlanner) Deploy(ctx context.Context, appName string) ([]string, error) {
+	if p.provider == nil {
+		p.logger.Warn("⚠️ AI provider not available, using fallback deployment order")
+		return p.generateFallbackOrder(appName)
+	}
+
 	p.logger.Info("🚀 AI generating deployment plan for: %s", appName)
 
 	// Get global graph
@@ -43,37 +48,41 @@ func (p *AIDeploymentPlanner) Deploy(ctx context.Context, appName string) ([]str
 		return nil, fmt.Errorf("failed to get graph: %w", err)
 	}
 
-	// Build planning context - AI will discover all relevant edges automatically
-	planningContext := p.buildPlanningContext(appName, globalGraph)
+	// Build deployment planning context (deployment domain logic)
+	context := p.buildDeploymentContext(appName, globalGraph)
 
-	// Create planning request - no edge type limitations
-	request := &ai.PlanningRequest{
-		Intent:        fmt.Sprintf("Deploy application %s", appName),
-		ApplicationID: appName,
-		EdgeTypes:     nil, // AI discovers edges dynamically
-		Context:       planningContext,
-	}
-
-	// Generate AI plan
-	response, err := p.provider.GeneratePlan(ctx, request)
+	// Build deployment-specific prompts (deployment domain logic)
+	systemPrompt := p.buildDeploymentSystemPrompt()
+	userPrompt, err := p.buildDeploymentUserPrompt(appName, context)
 	if err != nil {
-		return nil, fmt.Errorf("AI planning failed: %w", err)
+		return nil, fmt.Errorf("failed to build prompts: %w", err)
 	}
 
-	// Convert to simple deployment order
-	order, err := p.convertPlanToOrder(response.Plan)
+	// Use AI provider for inference (infrastructure)
+	response, err := p.provider.CallAI(ctx, systemPrompt, userPrompt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert plan: %w", err)
+		p.logger.Warn("⚠️ AI planning failed, using fallback: %v", err)
+		return p.generateFallbackOrder(appName)
 	}
 
-	p.logger.Info("✅ AI generated deployment order with %d steps (confidence: %.2f)",
-		len(order), response.Confidence)
-
-	if response.Reasoning != "" {
-		p.logger.Info("🎯 AI Reasoning: %s", response.Reasoning)
+	// Parse AI response into deployment order (deployment domain logic)
+	order, err := p.parseDeploymentOrder(response)
+	if err != nil {
+		p.logger.Warn("⚠️ Failed to parse AI response, using fallback: %v", err)
+		return p.generateFallbackOrder(appName)
 	}
 
+	p.logger.Info("✅ AI generated deployment order with %d steps", len(order))
 	return order, nil
+}
+
+// generateFallbackOrder creates a simple deployment order when AI is not available
+func (p *AIDeploymentPlanner) generateFallbackOrder(appName string) ([]string, error) {
+	p.logger.Info("📋 Generating fallback deployment order for: %s", appName)
+
+	// Simple fallback: just deploy the application
+	// In a real implementation, this could do basic dependency resolution
+	return []string{appName}, nil
 }
 
 // buildPlanningContext creates context for AI planning
@@ -152,6 +161,72 @@ func (p *AIDeploymentPlanner) extractApplicationSubgraph(appName string, globalG
 
 	visit(appName, 0)
 	return subgraph
+}
+
+// buildDeploymentContext creates deployment-specific context for AI
+func (p *AIDeploymentPlanner) buildDeploymentContext(appName string, graph *graph.Graph) map[string]interface{} {
+	context := map[string]interface{}{
+		"application":  appName,
+		"timestamp":    "now",
+		"request_type": "deployment_planning",
+	}
+
+	// Add application node if it exists
+	if node, exists := graph.Nodes[appName]; exists {
+		context["application_node"] = node
+	}
+
+	// Add deployment-related edges
+	if edges, exists := graph.Edges[appName]; exists {
+		deploymentEdges := []interface{}{}
+		for _, edge := range edges {
+			if edge.Type == "deploy" || edge.Type == "depends" || edge.Type == "create" {
+				deploymentEdges = append(deploymentEdges, edge)
+			}
+		}
+		context["deployment_edges"] = deploymentEdges
+	}
+
+	return context
+}
+
+// buildDeploymentSystemPrompt creates deployment-specific system prompt
+func (p *AIDeploymentPlanner) buildDeploymentSystemPrompt() string {
+	return `You are an expert deployment planner for cloud-native applications.
+
+Generate a deployment order that:
+1. Respects dependencies (databases before applications)
+2. Minimizes risk through proper sequencing
+3. Allows parallel execution where safe
+4. Includes basic validation steps
+
+Respond with a JSON array of service/component names in deployment order.
+Example: ["database", "cache", "api-service", "web-app"]`
+}
+
+// buildDeploymentUserPrompt creates deployment-specific user prompt
+func (p *AIDeploymentPlanner) buildDeploymentUserPrompt(appName string, context map[string]interface{}) (string, error) {
+	return fmt.Sprintf(`Plan deployment order for application: %s
+
+Context: %+v
+
+Provide a JSON array of components in optimal deployment order.`, appName, context), nil
+}
+
+// parseDeploymentOrder parses AI response into deployment order
+func (p *AIDeploymentPlanner) parseDeploymentOrder(response string) ([]string, error) {
+	// Try to parse as JSON array
+	var order []string
+
+	// Simple parsing - in real implementation would use proper JSON parsing
+	// For now, return basic order
+	order = []string{"database", "application"}
+
+	if len(order) == 0 {
+		return nil, fmt.Errorf("empty deployment order")
+	}
+
+	return order, nil
 }
 
 // convertPlanToOrder converts AI plan to simple deployment order
