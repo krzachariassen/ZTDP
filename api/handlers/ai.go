@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/ai"
+	"github.com/krzachariassen/ZTDP/internal/deployments"
 )
 
 // AIGeneratePlanRequest represents the request for AI plan generation
@@ -16,9 +17,18 @@ type AIGeneratePlanRequest struct {
 	AppName   string   `json:"app_name"`
 	EdgeTypes []string `json:"edge_types,omitempty"`
 	Timeout   int      `json:"timeout,omitempty"` // Timeout in seconds
-}
+	// Default timeout
+	timeout := 60 * time.Second
+	if req.Timeout > 0 {
+		timeout = time.Duration(req.Timeout) * time.Second
+	}
 
-// AIEvaluatePolicyRequest represents the request for AI policy evaluation
+	// Create AI brain
+	brain, err := ai.NewPlatformAIFromConfig(GlobalGraph)
+	if err != nil {
+		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}uatePolicyRequest represents the request for AI policy evaluation
 type AIEvaluatePolicyRequest struct {
 	ApplicationID string `json:"application_id"`
 	EnvironmentID string `json:"environment_id"`
@@ -63,36 +73,61 @@ func AIGeneratePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default edge types - let AI discover all edges automatically (AI-first principle)
-	if len(req.EdgeTypes) == 0 {
-		req.EdgeTypes = nil // AI will discover all edge types automatically
-	}
-
 	// Default timeout
 	timeout := 30 * time.Second
 	if req.Timeout > 0 {
 		timeout = time.Duration(req.Timeout) * time.Second
 	}
 
-	// Create AI brain
-	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Generate AI plan
-	planResponse, err := brain.GenerateDeploymentPlan(ctx, req.AppName, req.EdgeTypes)
+	// Use deployment service instead of AI Brain
+	deploymentService, err := deployments.NewService(GlobalGraph, nil) // AI provider will be initialized internally
 	if err != nil {
-		WriteJSONError(w, "AI plan generation failed: "+err.Error(), http.StatusInternalServerError)
+		WriteJSONError(w, "Deployment service unavailable: "+err.Error(), http.StatusServiceUnavailable)
 		return
+	}
+
+	// Generate deployment plan using domain service
+	plan, err := deploymentService.GenerateDeploymentPlan(ctx, req.AppName, req.EdgeTypes)
+	if err != nil {
+		WriteJSONError(w, "Deployment plan generation failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Convert to legacy response format for backward compatibility
+	planResponse := &ai.PlanningResponse{
+		Plan: &ai.DeploymentPlan{
+			ApplicationName: req.AppName,
+			Steps:           convertPlanToDeploymentSteps(plan.Services),
+		},
+		Reasoning:  plan.Reasoning,
+		Confidence: plan.Confidence,
+		Metadata: map[string]interface{}{
+			"total_services": len(plan.Services),
+			"strategy":       plan.Strategy,
+		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(planResponse)
+}
+
+// Helper function to convert deployment results to legacy format
+func convertResultToDeploymentSteps(deployments []string) []*ai.DeploymentStep {
+	steps := make([]*ai.DeploymentStep, len(deployments))
+	for i, serviceName := range deployments {
+		steps[i] = &ai.DeploymentStep{
+			ServiceName: serviceName,
+			Action:      "deploy",
+			Metadata: map[string]interface{}{
+				"position": i + 1,
+				"total":    len(deployments),
+			},
+		}
+	}
+	return steps
 }
 
 // AIEvaluatePolicy godoc
@@ -124,7 +159,7 @@ func AIEvaluatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI brain
-	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	brain, err := ai.NewPlatformAIFromConfig(GlobalGraph)
 	if err != nil {
 		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
 		return
@@ -173,7 +208,7 @@ func AIOptimizePlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI brain
-	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	brain, err := ai.NewPlatformAIFromConfig(GlobalGraph)
 	if err != nil {
 		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
 		return
@@ -219,7 +254,7 @@ func AIOptimizePlan(w http.ResponseWriter, r *http.Request) {
 // @Router       /v1/ai/provider/status [get]
 func AIProviderStatus(w http.ResponseWriter, r *http.Request) {
 	// Try to create AI brain to check availability
-	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	brain, err := ai.NewPlatformAIFromConfig(GlobalGraph)
 
 	providerInfo := AIProviderInfo{
 		Available:    false,
@@ -385,7 +420,7 @@ func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI brain
-	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	brain, err := ai.NewPlatformAIFromConfig(GlobalGraph)
 	if err != nil {
 		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
 		return
@@ -440,7 +475,7 @@ func AIPredictImpact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI brain
-	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	brain, err := ai.NewPlatformAIFromConfig(GlobalGraph)
 	if err != nil {
 		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
 		return
@@ -510,7 +545,7 @@ func AITroubleshoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI brain
-	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	brain, err := ai.NewPlatformAIFromConfig(GlobalGraph)
 	if err != nil {
 		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
 		return
@@ -560,7 +595,7 @@ func AIProactiveOptimize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI brain
-	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	brain, err := ai.NewPlatformAIFromConfig(GlobalGraph)
 	if err != nil {
 		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
 		return
@@ -616,7 +651,7 @@ func AILearnFromDeployment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI brain
-	brain, err := ai.NewAIBrainFromConfig(GlobalGraph)
+	brain, err := ai.NewPlatformAIFromConfig(GlobalGraph)
 	if err != nil {
 		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
 		return

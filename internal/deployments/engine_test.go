@@ -22,7 +22,7 @@ func TestEngine_ExecuteApplicationDeployment(t *testing.T) {
 	setupTestApplication(globalGraph)
 
 	// Create AI brain for simplified planner
-	brain, err := ai.NewAIBrainFromConfig(globalGraph)
+	brain, err := ai.NewPlatformAIFromConfig(globalGraph)
 	if err != nil {
 		// For tests, use a mock or skip AI brain if not available
 		t.Skipf("AI brain not available for testing: %v", err)

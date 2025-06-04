@@ -11,52 +11,26 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/logging"
 )
 
-// AIBrain is the core AI reasoning engine for ZTDP
-// It replaces hard-coded planner logic with intelligent AI-driven planning
-type AIBrain struct {
+// PlatformAI is the core AI reasoning engine for ZTDP
+// It serves as the Core Platform Agent providing revolutionary AI capabilities
+// for conversational infrastructure management and multi-agent orchestration
+type PlatformAI struct {
 	provider AIProvider
 	logger   *logging.Logger
 	graph    *graph.GlobalGraph
 }
 
-// NewAIBrain creates a new AI brain instance with the specified provider
-func NewAIBrain(provider AIProvider, globalGraph *graph.GlobalGraph) *AIBrain {
-	return &AIBrain{
+// NewPlatformAI creates a new Core Platform Agent instance with the specified provider
+func NewPlatformAI(provider AIProvider, globalGraph *graph.GlobalGraph) *PlatformAI {
+	return &PlatformAI{
 		provider: provider,
-		logger:   logging.GetLogger().ForComponent("ai-brain"),
+		logger:   logging.GetLogger().ForComponent("platform-ai"),
 		graph:    globalGraph,
 	}
 }
 
-// NewAIBrainWithOpenAI creates an AI brain with OpenAI provider using environment configuration
-func NewAIBrainWithOpenAI(globalGraph *graph.GlobalGraph) (*AIBrain, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		return nil, fmt.Errorf("OPENAI_API_KEY environment variable is required")
-	}
-
-	config := DefaultOpenAIConfig()
-
-	// Allow model override via environment
-	if model := os.Getenv("OPENAI_MODEL"); model != "" {
-		config.Model = model
-	}
-
-	// Allow base URL override for custom deployments
-	if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
-		config.BaseURL = baseURL
-	}
-
-	provider, err := NewOpenAIProvider(config, apiKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create OpenAI provider: %w", err)
-	}
-
-	return NewAIBrain(provider, globalGraph), nil
-}
-
-// NewAIBrainFromConfig creates an AI brain using provider selection logic
-func NewAIBrainFromConfig(globalGraph *graph.GlobalGraph) (*AIBrain, error) {
+// NewPlatformAIFromConfig creates a Core Platform Agent using provider selection logic
+func NewPlatformAIFromConfig(globalGraph *graph.GlobalGraph) (*PlatformAI, error) {
 	providerName := os.Getenv("AI_PROVIDER")
 	if providerName == "" {
 		providerName = "openai" // default to OpenAI
@@ -64,29 +38,52 @@ func NewAIBrainFromConfig(globalGraph *graph.GlobalGraph) (*AIBrain, error) {
 
 	switch providerName {
 	case "openai":
-		return NewAIBrainWithOpenAI(globalGraph)
+		// Create OpenAI provider using environment configuration
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("OPENAI_API_KEY environment variable is required")
+		}
+
+		config := DefaultOpenAIConfig()
+
+		// Allow model override via environment
+		if model := os.Getenv("OPENAI_MODEL"); model != "" {
+			config.Model = model
+		}
+
+		// Allow base URL override for custom deployments
+		if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
+			config.BaseURL = baseURL
+		}
+
+		provider, err := NewOpenAIProvider(config, apiKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OpenAI provider: %w", err)
+		}
+
+		return NewPlatformAI(provider, globalGraph), nil
 	default:
 		return nil, fmt.Errorf("unsupported AI provider: %s (only 'openai' is supported in AI-native mode)", providerName)
 	}
 }
 
 // GetProvider returns the underlying AI provider
-func (brain *AIBrain) GetProvider() AIProvider {
+func (brain *PlatformAI) GetProvider() AIProvider {
 	return brain.provider
 }
 
 // Provider returns the AI provider instance for use in other components
-func (brain *AIBrain) Provider() AIProvider {
+func (brain *PlatformAI) Provider() AIProvider {
 	return brain.provider
 }
 
 // GetProviderInfo returns information about the current AI provider
-func (brain *AIBrain) GetProviderInfo() *ProviderInfo {
+func (brain *PlatformAI) GetProviderInfo() *ProviderInfo {
 	return brain.provider.GetProviderInfo()
 }
 
 // Close cleans up the AI brain resources
-func (brain *AIBrain) Close() error {
+func (brain *PlatformAI) Close() error {
 	brain.logger.Info("🔌 Closing AI Brain")
 	return brain.provider.Close()
 }
@@ -95,7 +92,7 @@ func (brain *AIBrain) Close() error {
 
 // ChatWithPlatform enables natural language conversation with the platform
 // This provides unprecedented insight into infrastructure state and relationships
-func (brain *AIBrain) ChatWithPlatform(ctx context.Context, query string, context string) (*ConversationalResponse, error) {
+func (brain *PlatformAI) ChatWithPlatform(ctx context.Context, query string, context string) (*ConversationalResponse, error) {
 	brain.logger.Info("💬 AI Brain processing conversational query: %s", query)
 
 	// Extract complete platform context for AI reasoning
@@ -131,7 +128,7 @@ func (brain *AIBrain) ChatWithPlatform(ctx context.Context, query string, contex
 
 // PredictDeploymentImpact analyzes potential impact before deployment
 // This enables proactive risk assessment impossible with traditional planning
-func (brain *AIBrain) PredictDeploymentImpact(ctx context.Context, changes []ProposedChange, environment string) (*ImpactPrediction, error) {
+func (brain *PlatformAI) PredictDeploymentImpact(ctx context.Context, changes []ProposedChange, environment string) (*ImpactPrediction, error) {
 	brain.logger.Info("🔮 AI Brain predicting impact of %d changes in %s", len(changes), environment)
 
 	// Extract environment context for impact analysis
@@ -167,7 +164,7 @@ func (brain *AIBrain) PredictDeploymentImpact(ctx context.Context, changes []Pro
 
 // IntelligentTroubleshooting provides AI-driven root cause analysis
 // This enables sophisticated problem diagnosis beyond traditional monitoring
-func (brain *AIBrain) IntelligentTroubleshooting(ctx context.Context, incidentID string, description string, symptoms []string) (*TroubleshootingResponse, error) {
+func (brain *PlatformAI) IntelligentTroubleshooting(ctx context.Context, incidentID string, description string, symptoms []string) (*TroubleshootingResponse, error) {
 	brain.logger.Info("🔍 AI Brain analyzing incident: %s - %s", incidentID, description)
 
 	// Extract incident context from platform state
@@ -190,7 +187,7 @@ func (brain *AIBrain) IntelligentTroubleshooting(ctx context.Context, incidentID
 
 // ProactiveOptimization continuously analyzes platform for improvements
 // This provides ongoing architectural intelligence impossible with static tools
-func (brain *AIBrain) ProactiveOptimization(ctx context.Context, target string, focus []string) (*OptimizationRecommendations, error) {
+func (brain *PlatformAI) ProactiveOptimization(ctx context.Context, target string, focus []string) (*OptimizationRecommendations, error) {
 	brain.logger.Info("⚡ AI Brain performing proactive optimization for %s", target)
 
 	// Build optimization scope
@@ -220,7 +217,7 @@ func (brain *AIBrain) ProactiveOptimization(ctx context.Context, target string, 
 
 // LearnFromDeployment captures deployment outcomes for continuous learning
 // This builds institutional knowledge that improves AI reasoning over time
-func (brain *AIBrain) LearnFromDeployment(ctx context.Context, deploymentID string, success bool, duration int64, issues []DeploymentIssue) (*LearningInsights, error) {
+func (brain *PlatformAI) LearnFromDeployment(ctx context.Context, deploymentID string, success bool, duration int64, issues []DeploymentIssue) (*LearningInsights, error) {
 	brain.logger.Info("🧠 AI Brain learning from deployment %s (success: %t, duration: %ds)",
 		deploymentID, success, duration)
 
@@ -254,7 +251,7 @@ func (brain *AIBrain) LearnFromDeployment(ctx context.Context, deploymentID stri
 // This method existed for the complex planning chain but has been replaced with
 // deployments.AIDeploymentPlanner which automatically discovers edges using AI.
 // The API should transition to use the deployment engine directly.
-func (brain *AIBrain) GenerateDeploymentPlan(ctx context.Context, appName string, edgeTypes []string) (*PlanningResponse, error) {
+func (brain *PlatformAI) GenerateDeploymentPlan(ctx context.Context, appName string, edgeTypes []string) (*PlanningResponse, error) {
 	brain.logger.Info("⚠️  DEPRECATED: AI Brain GenerateDeploymentPlan used for app: %s - transition to simplified deployment engine", appName)
 
 	// Get the global graph
@@ -300,7 +297,7 @@ func (brain *AIBrain) GenerateDeploymentPlan(ctx context.Context, appName string
 }
 
 // EvaluateDeploymentPolicies evaluates deployment policies using AI for an application and environment
-func (brain *AIBrain) EvaluateDeploymentPolicies(ctx context.Context, applicationID, environmentID string) (*PolicyEvaluation, error) {
+func (brain *PlatformAI) EvaluateDeploymentPolicies(ctx context.Context, applicationID, environmentID string) (*PolicyEvaluation, error) {
 	brain.logger.Info("🔍 AI Brain evaluating deployment policies for app: %s in env: %s", applicationID, environmentID)
 
 	// Get the global graph to extract policy context
@@ -325,7 +322,7 @@ func (brain *AIBrain) EvaluateDeploymentPolicies(ctx context.Context, applicatio
 }
 
 // OptimizeExistingPlan optimizes an existing deployment plan using AI
-func (brain *AIBrain) OptimizeExistingPlan(ctx context.Context, plan *DeploymentPlan, applicationID string) (*PlanningResponse, error) {
+func (brain *PlatformAI) OptimizeExistingPlan(ctx context.Context, plan *DeploymentPlan, applicationID string) (*PlanningResponse, error) {
 	brain.logger.Info("⚡ AI Brain optimizing deployment plan for app: %s with %d steps", applicationID, len(plan.Steps))
 
 	// Get the global graph to extract optimization context
@@ -350,7 +347,7 @@ func (brain *AIBrain) OptimizeExistingPlan(ctx context.Context, plan *Deployment
 }
 
 // buildPlanningContext creates planning context for AI deployment planning
-func (brain *AIBrain) buildPlanningContext(appName string, edgeTypes []string, globalGraph *graph.Graph) *PlanningContext {
+func (brain *PlatformAI) buildPlanningContext(appName string, edgeTypes []string, globalGraph *graph.Graph) *PlanningContext {
 	// Find target nodes related to the application
 	targetNodes := []*graph.Node{}
 	relatedNodes := []*graph.Node{}
@@ -421,7 +418,7 @@ func (brain *AIBrain) buildPlanningContext(appName string, edgeTypes []string, g
 
 // edgeMatchesGraphEdge checks if a graph edge type matches the requested edge types
 // If edgeTypes is nil, all edges match (AI-first mode - AI discovers all edges automatically)
-func (brain *AIBrain) edgeMatchesGraphEdge(edge *graph.Edge, edgeTypes []string) bool {
+func (brain *PlatformAI) edgeMatchesGraphEdge(edge *graph.Edge, edgeTypes []string) bool {
 	if edgeTypes == nil {
 		// AI-first mode: include ALL edge types, let AI decide relevance
 		return true
@@ -437,7 +434,7 @@ func (brain *AIBrain) edgeMatchesGraphEdge(edge *graph.Edge, edgeTypes []string)
 }
 
 // buildPolicyContext creates policy context for AI policy evaluation
-func (brain *AIBrain) buildPolicyContext(applicationID, environmentID string, globalGraph *graph.Graph) map[string]interface{} {
+func (brain *PlatformAI) buildPolicyContext(applicationID, environmentID string, globalGraph *graph.Graph) map[string]interface{} {
 	policyContext := map[string]interface{}{
 		"application_id": applicationID,
 		"environment_id": environmentID,
@@ -463,14 +460,14 @@ func (brain *AIBrain) buildPolicyContext(applicationID, environmentID string, gl
 }
 
 // buildOptimizationContext creates context for AI plan optimization
-func (brain *AIBrain) buildOptimizationContext(applicationID string, globalGraph *graph.Graph) *PlanningContext {
+func (brain *PlatformAI) buildOptimizationContext(applicationID string, globalGraph *graph.Graph) *PlanningContext {
 	// Reuse the planning context builder but with optimization focus
 	// This provides the AI with complete graph context for optimization
 	return brain.buildPlanningContext(applicationID, []string{"deploy", "create", "owns", "depends"}, globalGraph)
 }
 
 // extractPoliciesForEnvironment extracts relevant policies for an environment
-func (brain *AIBrain) extractPoliciesForEnvironment(environmentID string, globalGraph *graph.Graph) []map[string]interface{} {
+func (brain *PlatformAI) extractPoliciesForEnvironment(environmentID string, globalGraph *graph.Graph) []map[string]interface{} {
 	policies := []map[string]interface{}{}
 
 	// Look for policy nodes connected to the environment
@@ -497,7 +494,7 @@ func (brain *AIBrain) extractPoliciesForEnvironment(environmentID string, global
 }
 
 // extractEnvironmentConstraints extracts constraints for an environment
-func (brain *AIBrain) extractEnvironmentConstraints(environmentID string, globalGraph *graph.Graph) map[string]interface{} {
+func (brain *PlatformAI) extractEnvironmentConstraints(environmentID string, globalGraph *graph.Graph) map[string]interface{} {
 	constraints := map[string]interface{}{}
 
 	// Get environment node if it exists
@@ -516,7 +513,7 @@ func (brain *AIBrain) extractEnvironmentConstraints(environmentID string, global
 // These methods enable the groundbreaking AI capabilities
 
 // extractPlatformContext extracts comprehensive platform state for conversational AI
-func (brain *AIBrain) extractPlatformContext(contextHint string) (map[string]interface{}, error) {
+func (brain *PlatformAI) extractPlatformContext(contextHint string) (map[string]interface{}, error) {
 	// Get complete platform graph
 	globalGraph, err := brain.graph.Graph()
 	if err != nil {
@@ -540,7 +537,7 @@ func (brain *AIBrain) extractPlatformContext(contextHint string) (map[string]int
 }
 
 // detectIntent analyzes user query to understand intent
-func (brain *AIBrain) detectIntent(query string) string {
+func (brain *PlatformAI) detectIntent(query string) string {
 	queryLower := strings.ToLower(query)
 
 	// Question patterns
@@ -566,7 +563,7 @@ func (brain *AIBrain) detectIntent(query string) string {
 }
 
 // extractScope determines the scope of the query
-func (brain *AIBrain) extractScope(query string, platformContext map[string]interface{}) []string {
+func (brain *PlatformAI) extractScope(query string, platformContext map[string]interface{}) []string {
 	queryLower := strings.ToLower(query)
 	scope := []string{}
 
@@ -601,7 +598,7 @@ func (brain *AIBrain) extractScope(query string, platformContext map[string]inte
 }
 
 // extractEnvironmentContext gets detailed environment context for impact analysis
-func (brain *AIBrain) extractEnvironmentContext(environment string) (map[string]interface{}, error) {
+func (brain *PlatformAI) extractEnvironmentContext(environment string) (map[string]interface{}, error) {
 	globalGraph, err := brain.graph.Graph()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get graph: %w", err)
@@ -622,7 +619,7 @@ func (brain *AIBrain) extractEnvironmentContext(environment string) (map[string]
 }
 
 // extractIncidentContext builds comprehensive incident context for troubleshooting
-func (brain *AIBrain) extractIncidentContext(incidentID, description string, symptoms []string) (*IncidentContext, error) {
+func (brain *PlatformAI) extractIncidentContext(incidentID, description string, symptoms []string) (*IncidentContext, error) {
 	// Build incident timeline
 	timeline := []EventTimestamp{
 		{
@@ -673,7 +670,7 @@ func (brain *AIBrain) extractIncidentContext(incidentID, description string, sym
 }
 
 // extractOptimizationConstraints gets constraints for optimization analysis
-func (brain *AIBrain) extractOptimizationConstraints(target string) []string {
+func (brain *PlatformAI) extractOptimizationConstraints(target string) []string {
 	constraints := []string{
 		"maintain_availability",
 		"zero_downtime",
@@ -690,7 +687,7 @@ func (brain *AIBrain) extractOptimizationConstraints(target string) []string {
 }
 
 // extractTargetState gets current state of optimization target
-func (brain *AIBrain) extractTargetState(target string) map[string]interface{} {
+func (brain *PlatformAI) extractTargetState(target string) map[string]interface{} {
 	return map[string]interface{}{
 		"target":               target,
 		"current_health":       brain.extractTargetHealth(target),
@@ -703,7 +700,7 @@ func (brain *AIBrain) extractTargetState(target string) map[string]interface{} {
 }
 
 // extractApplicationSummary extracts summary of applications in the platform
-func (brain *AIBrain) extractApplicationSummary(graph *graph.Graph) map[string]interface{} {
+func (brain *PlatformAI) extractApplicationSummary(graph *graph.Graph) map[string]interface{} {
 	applications := make(map[string]interface{})
 	for _, node := range graph.Nodes {
 		if node.Kind == "application" {
@@ -718,7 +715,7 @@ func (brain *AIBrain) extractApplicationSummary(graph *graph.Graph) map[string]i
 }
 
 // extractServiceSummary extracts summary of services in the platform
-func (brain *AIBrain) extractServiceSummary(graph *graph.Graph) map[string]interface{} {
+func (brain *PlatformAI) extractServiceSummary(graph *graph.Graph) map[string]interface{} {
 	services := make(map[string]interface{})
 	for _, node := range graph.Nodes {
 		if node.Kind == "service" {
@@ -733,7 +730,7 @@ func (brain *AIBrain) extractServiceSummary(graph *graph.Graph) map[string]inter
 }
 
 // extractDependencyMap extracts dependency relationships between components
-func (brain *AIBrain) extractDependencyMap(graph *graph.Graph) map[string]interface{} {
+func (brain *PlatformAI) extractDependencyMap(graph *graph.Graph) map[string]interface{} {
 	dependencies := make(map[string]interface{})
 	for fromID, edges := range graph.Edges {
 		deps := []string{}
@@ -750,7 +747,7 @@ func (brain *AIBrain) extractDependencyMap(graph *graph.Graph) map[string]interf
 }
 
 // extractPolicySummary extracts summary of policies in the platform
-func (brain *AIBrain) extractPolicySummary(graph *graph.Graph) map[string]interface{} {
+func (brain *PlatformAI) extractPolicySummary(graph *graph.Graph) map[string]interface{} {
 	policies := make(map[string]interface{})
 	for _, node := range graph.Nodes {
 		if node.Kind == "policy" {
@@ -765,7 +762,7 @@ func (brain *AIBrain) extractPolicySummary(graph *graph.Graph) map[string]interf
 }
 
 // extractEnvironmentSummary extracts summary of environments in the platform
-func (brain *AIBrain) extractEnvironmentSummary(graph *graph.Graph) map[string]interface{} {
+func (brain *PlatformAI) extractEnvironmentSummary(graph *graph.Graph) map[string]interface{} {
 	environments := make(map[string]interface{})
 	for _, node := range graph.Nodes {
 		if node.Kind == "environment" {
@@ -780,7 +777,7 @@ func (brain *AIBrain) extractEnvironmentSummary(graph *graph.Graph) map[string]i
 }
 
 // extractHealthStatus extracts health status of the platform components
-func (brain *AIBrain) extractHealthStatus(graph *graph.Graph) map[string]interface{} {
+func (brain *PlatformAI) extractHealthStatus(graph *graph.Graph) map[string]interface{} {
 	return map[string]interface{}{
 		"overall":      "healthy",
 		"applications": brain.countHealthyApplications(graph),
@@ -790,7 +787,7 @@ func (brain *AIBrain) extractHealthStatus(graph *graph.Graph) map[string]interfa
 }
 
 // extractRecentEvents extracts recent events in the platform
-func (brain *AIBrain) extractRecentEvents() []map[string]interface{} {
+func (brain *PlatformAI) extractRecentEvents() []map[string]interface{} {
 	return []map[string]interface{}{
 		{
 			"timestamp": time.Now().Add(-1 * time.Hour).Format(time.RFC3339),
@@ -806,7 +803,7 @@ func (brain *AIBrain) extractRecentEvents() []map[string]interface{} {
 }
 
 // Additional helper methods for environment context
-func (brain *AIBrain) extractEnvironmentApplications(graph *graph.Graph, environment string) []string {
+func (brain *PlatformAI) extractEnvironmentApplications(graph *graph.Graph, environment string) []string {
 	apps := []string{}
 	for _, node := range graph.Nodes {
 		if node.Kind == "application" {
@@ -816,7 +813,7 @@ func (brain *AIBrain) extractEnvironmentApplications(graph *graph.Graph, environ
 	return apps
 }
 
-func (brain *AIBrain) extractEnvironmentServices(graph *graph.Graph, environment string) []string {
+func (brain *PlatformAI) extractEnvironmentServices(graph *graph.Graph, environment string) []string {
 	services := []string{}
 	for _, node := range graph.Nodes {
 		if node.Kind == "service" {
@@ -826,7 +823,7 @@ func (brain *AIBrain) extractEnvironmentServices(graph *graph.Graph, environment
 	return services
 }
 
-func (brain *AIBrain) extractEnvironmentPolicies(graph *graph.Graph, environment string) []string {
+func (brain *PlatformAI) extractEnvironmentPolicies(graph *graph.Graph, environment string) []string {
 	policies := []string{}
 	for _, node := range graph.Nodes {
 		if node.Kind == "policy" {
@@ -836,7 +833,7 @@ func (brain *AIBrain) extractEnvironmentPolicies(graph *graph.Graph, environment
 	return policies
 }
 
-func (brain *AIBrain) extractEnvironmentLoad(environment string) map[string]interface{} {
+func (brain *PlatformAI) extractEnvironmentLoad(environment string) map[string]interface{} {
 	return map[string]interface{}{
 		"cpu":     "45%",
 		"memory":  "60%",
@@ -844,11 +841,11 @@ func (brain *AIBrain) extractEnvironmentLoad(environment string) map[string]inte
 	}
 }
 
-func (brain *AIBrain) extractActiveDeployments(environment string) []string {
+func (brain *PlatformAI) extractActiveDeployments(environment string) []string {
 	return []string{} // No active deployments
 }
 
-func (brain *AIBrain) extractRecentChanges(environment string) []map[string]interface{} {
+func (brain *PlatformAI) extractRecentChanges(environment string) []map[string]interface{} {
 	return []map[string]interface{}{
 		{
 			"timestamp": time.Now().Add(-30 * time.Minute).Format(time.RFC3339),
@@ -859,7 +856,7 @@ func (brain *AIBrain) extractRecentChanges(environment string) []map[string]inte
 }
 
 // Additional helper methods for incident context
-func (brain *AIBrain) detectIncidentEnvironment(symptoms []string) string {
+func (brain *PlatformAI) detectIncidentEnvironment(symptoms []string) string {
 	for _, symptom := range symptoms {
 		if strings.Contains(strings.ToLower(symptom), "production") {
 			return "production"
@@ -871,7 +868,7 @@ func (brain *AIBrain) detectIncidentEnvironment(symptoms []string) string {
 	return "unknown"
 }
 
-func (brain *AIBrain) extractCurrentPlatformState() map[string]interface{} {
+func (brain *PlatformAI) extractCurrentPlatformState() map[string]interface{} {
 	return map[string]interface{}{
 		"overall_health": "degraded",
 		"active_alerts":  2,
@@ -879,7 +876,7 @@ func (brain *AIBrain) extractCurrentPlatformState() map[string]interface{} {
 	}
 }
 
-func (brain *AIBrain) extractRecentDeployments() []map[string]interface{} {
+func (brain *PlatformAI) extractRecentDeployments() []map[string]interface{} {
 	return []map[string]interface{}{
 		{
 			"deployment_id": "deploy-123",
@@ -891,11 +888,11 @@ func (brain *AIBrain) extractRecentDeployments() []map[string]interface{} {
 }
 
 // Additional helper methods for optimization
-func (brain *AIBrain) extractTargetHealth(target string) string {
+func (brain *PlatformAI) extractTargetHealth(target string) string {
 	return "healthy" // Placeholder
 }
 
-func (brain *AIBrain) extractTargetResources(target string) map[string]interface{} {
+func (brain *PlatformAI) extractTargetResources(target string) map[string]interface{} {
 	return map[string]interface{}{
 		"cpu":    "65%",
 		"memory": "70%",
@@ -903,7 +900,7 @@ func (brain *AIBrain) extractTargetResources(target string) map[string]interface
 	}
 }
 
-func (brain *AIBrain) extractTargetPerformance(target string) map[string]interface{} {
+func (brain *PlatformAI) extractTargetPerformance(target string) map[string]interface{} {
 	return map[string]interface{}{
 		"response_time": "150ms",
 		"throughput":    "1000 req/s",
@@ -911,15 +908,15 @@ func (brain *AIBrain) extractTargetPerformance(target string) map[string]interfa
 	}
 }
 
-func (brain *AIBrain) extractTargetDependencies(target string) []string {
+func (brain *PlatformAI) extractTargetDependencies(target string) []string {
 	return []string{"database", "cache", "message-queue"}
 }
 
-func (brain *AIBrain) extractTargetRecentChanges(target string) []string {
+func (brain *PlatformAI) extractTargetRecentChanges(target string) []string {
 	return []string{"scaled up replicas", "updated configuration"}
 }
 
-func (brain *AIBrain) extractOptimizationHistory(target string) []map[string]interface{} {
+func (brain *PlatformAI) extractOptimizationHistory(target string) []map[string]interface{} {
 	return []map[string]interface{}{
 		{
 			"timestamp":    time.Now().Add(-7 * 24 * time.Hour).Format(time.RFC3339),
@@ -932,7 +929,7 @@ func (brain *AIBrain) extractOptimizationHistory(target string) []map[string]int
 // Helper functions for deployment context extraction (replacing deployments package calls)
 
 // extractDeploymentMetrics gets metrics for learning from deployment
-func (brain *AIBrain) extractDeploymentMetrics(deploymentID string) map[string]interface{} {
+func (brain *PlatformAI) extractDeploymentMetrics(deploymentID string) map[string]interface{} {
 	return map[string]interface{}{
 		"deployment_id":      deploymentID,
 		"start_time":         time.Now().Add(-10 * time.Minute).Format(time.RFC3339),
@@ -945,7 +942,7 @@ func (brain *AIBrain) extractDeploymentMetrics(deploymentID string) map[string]i
 }
 
 // extractDeploymentContext gets context for learning from deployment
-func (brain *AIBrain) extractDeploymentContext(deploymentID string) map[string]interface{} {
+func (brain *PlatformAI) extractDeploymentContext(deploymentID string) map[string]interface{} {
 	return map[string]interface{}{
 		"deployment_id":     deploymentID,
 		"strategy":          "rolling",
@@ -959,7 +956,7 @@ func (brain *AIBrain) extractDeploymentContext(deploymentID string) map[string]i
 }
 
 // countApplicationServices counts the number of services owned by an application
-func (brain *AIBrain) countApplicationServices(graph *graph.Graph, appID string) int {
+func (brain *PlatformAI) countApplicationServices(graph *graph.Graph, appID string) int {
 	count := 0
 	if edges, exists := graph.Edges[appID]; exists {
 		for _, edge := range edges {
@@ -974,7 +971,7 @@ func (brain *AIBrain) countApplicationServices(graph *graph.Graph, appID string)
 }
 
 // countHealthyApplications counts healthy applications in the graph
-func (brain *AIBrain) countHealthyApplications(graph *graph.Graph) int {
+func (brain *PlatformAI) countHealthyApplications(graph *graph.Graph) int {
 	count := 0
 	for _, node := range graph.Nodes {
 		if node.Kind == "application" {
@@ -985,7 +982,7 @@ func (brain *AIBrain) countHealthyApplications(graph *graph.Graph) int {
 }
 
 // countHealthyServices counts healthy services in the graph
-func (brain *AIBrain) countHealthyServices(graph *graph.Graph) int {
+func (brain *PlatformAI) countHealthyServices(graph *graph.Graph) int {
 	count := 0
 	for _, node := range graph.Nodes {
 		if node.Kind == "service" {

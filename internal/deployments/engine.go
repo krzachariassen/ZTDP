@@ -60,6 +60,28 @@ func NewEngine(g *graph.GlobalGraph, brain *ai.AIBrain) *Engine {
 	}
 }
 
+// NewEngineWithProvider creates a new deployment engine with AI provider directly
+// This avoids the AI Brain dependency and uses clean domain separation
+func NewEngineWithProvider(g *graph.GlobalGraph, provider ai.AIProvider) *Engine {
+	logger := logging.GetLogger().ForComponent("deployment-engine")
+
+	// Create AI deployment planner directly with provider
+	var planner DeploymentPlanner
+	if provider != nil {
+		planner = NewAIDeploymentPlanner(g, provider)
+	} else {
+		// Fall back to AI planner with nil provider (it will handle fallback internally)
+		planner = NewAIDeploymentPlanner(g, nil)
+	}
+
+	return &Engine{
+		graph:   g,
+		brain:   nil, // No AI Brain dependency
+		planner: planner,
+		logger:  logger,
+	}
+}
+
 // isResourceInstance checks if a resource node is an instance (has application context)
 // rather than a catalog resource
 func (e *Engine) isResourceInstance(node *graph.Node) bool {

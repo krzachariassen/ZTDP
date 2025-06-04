@@ -58,39 +58,13 @@ type RollbackPlan struct {
 	Metadata map[string]interface{} `json:"metadata"` // Rollback metadata
 }
 
-// AIProvider defines the interface for AI reasoning providers
-// This follows the same pattern as GraphBackend for clean abstraction
+// AIProvider defines the interface for AI infrastructure providers
+// This handles ONLY the communication with AI services (OpenAI, Anthropic, etc.)
+// Business logic should be in AIService, not in providers
 type AIProvider interface {
-	// GeneratePlan creates an intelligent deployment plan using AI reasoning
-	GeneratePlan(ctx context.Context, request *PlanningRequest) (*PlanningResponse, error)
-
-	// EvaluatePolicy uses AI to evaluate policy compliance and suggest actions
-	EvaluatePolicy(ctx context.Context, policyContext interface{}) (*PolicyEvaluation, error)
-
-	// OptimizePlan refines an existing plan based on additional context
-	OptimizePlan(ctx context.Context, plan *DeploymentPlan, context *PlanningContext) (*PlanningResponse, error)
-
-	// *** REVOLUTIONARY AI CAPABILITIES - IMPOSSIBLE WITH TRADITIONAL IDPS ***
-
-	// ChatWithPlatform enables natural language interaction with the platform graph
-	// This allows developers to ask complex questions about their infrastructure
-	ChatWithPlatform(ctx context.Context, query *ConversationalQuery) (*ConversationalResponse, error)
-
-	// PredictImpact analyzes potential impact of changes before they happen
-	// Uses AI to simulate and predict deployment consequences
-	PredictImpact(ctx context.Context, request *ImpactAnalysisRequest) (*ImpactPrediction, error)
-
-	// IntelligentTroubleshooting provides AI-driven root cause analysis
-	// Analyzes failures and suggests intelligent fixes
-	IntelligentTroubleshooting(ctx context.Context, incident *IncidentContext) (*TroubleshootingResponse, error)
-
-	// ProactiveOptimization continuously analyzes platform for improvements
-	// Identifies patterns and suggests architectural optimizations
-	ProactiveOptimization(ctx context.Context, scope *OptimizationScope) (*OptimizationRecommendations, error)
-
-	// LearningFromFailures learns from deployment patterns and failures
-	// Builds institutional knowledge that improves over time
-	LearningFromFailures(ctx context.Context, outcome *DeploymentOutcome) (*LearningInsights, error)
+	// CallAI makes a raw AI inference call with system and user prompts
+	// Returns the raw response from the AI provider
+	CallAI(ctx context.Context, systemPrompt, userPrompt string) (string, error)
 
 	// GetProviderInfo returns information about the AI provider
 	GetProviderInfo() *ProviderInfo
