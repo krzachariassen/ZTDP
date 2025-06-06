@@ -20,12 +20,9 @@ type AIService struct {
 // NewAIService creates a new AI service with the specified provider
 func NewAIService(provider AIProvider, graph *graph.GlobalGraph) *AIService {
 	return &AIService{
-		provider:          provider,
-		graph:             graph,
-		logger:            logging.GetLogger().ForComponent("ai-service"),
-		planningPrompts:   NewPlannerPrompts(),
-		policyPrompts:     NewPolicyPrompts(),
-		deploymentPrompts: prompts.NewDeploymentPrompts(),
+		provider: provider,
+		graph:    graph,
+		logger:   logging.GetLogger().ForComponent("ai-service"),
 	}
 }
 
@@ -35,8 +32,8 @@ func (s *AIService) GenerateDeploymentPlan(ctx context.Context, request *Plannin
 	s.logger.Info("🧠 Generating AI deployment plan for application: %s", request.ApplicationID)
 
 	// Build provider-agnostic prompts
-	systemPrompt := s.deploymentPrompts.BuildPlanningSystemPrompt()
-	userPrompt, err := s.deploymentPrompts.BuildPlanningUserPrompt(request)
+	systemPrompt := s.buildPlanningSystemPrompt()
+	userPrompt, err := s.buildPlanningUserPrompt(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build user prompt: %w", err)
 	}
@@ -70,8 +67,8 @@ func (s *AIService) EvaluateDeploymentPolicy(ctx context.Context, policyContext 
 	s.logger.Info("🔍 Evaluating policy compliance using AI")
 
 	// Build provider-agnostic prompts
-	systemPrompt := s.policyPrompts.BuildPolicySystemPrompt()
-	userPrompt, err := s.policyPrompts.BuildPolicyUserPrompt(policyContext)
+	systemPrompt := s.buildPolicySystemPrompt()
+	userPrompt, err := s.buildPolicyUserPrompt(policyContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build policy prompt: %w", err)
 	}
@@ -88,13 +85,8 @@ func (s *AIService) EvaluateDeploymentPolicy(ctx context.Context, policyContext 
 		return nil, fmt.Errorf("failed to parse policy evaluation: %w", err)
 	}
 
-	// Apply business rules
-	if evaluation.Confidence == 0 {
-		evaluation.Confidence = 0.8 // Default confidence
-	}
-
-	s.logger.Info("✅ Policy evaluation completed (compliant: %t, confidence: %.2f)",
-		evaluation.Compliant, evaluation.Confidence)
+	s.logger.Info("✅ Policy evaluation completed (compliant: %t)",
+		evaluation.Compliant)
 
 	return evaluation, nil
 }
@@ -105,8 +97,8 @@ func (s *AIService) OptimizeDeploymentPlan(ctx context.Context, plan *Deployment
 	s.logger.Info("⚡ Optimizing deployment plan using AI")
 
 	// Build provider-agnostic prompts
-	systemPrompt := s.deploymentPrompts.BuildOptimizationSystemPrompt()
-	userPrompt, err := s.deploymentPrompts.BuildOptimizationPrompt(plan, context)
+	systemPrompt := s.buildOptimizationSystemPrompt()
+	userPrompt, err := s.buildOptimizationPrompt(plan, context)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build optimization prompt: %w", err)
 	}
@@ -175,11 +167,6 @@ func (s *AIService) parsePolicyEvaluation(response string) (*PolicyEvaluation, e
 		return nil, fmt.Errorf("failed to parse policy evaluation: %w", err)
 	}
 
-	// Set default confidence if not provided
-	if evaluation.Confidence == 0 {
-		evaluation.Confidence = 0.8
-	}
-
 	return &evaluation, nil
 }
 
@@ -197,4 +184,108 @@ func (s *AIService) validateDeploymentPlan(plan *DeploymentPlan) error {
 	// ...
 
 	return nil
+}
+
+// *** PROMPT BUILDING METHODS ***
+
+// buildPlanningSystemPrompt creates system prompt for deployment planning
+func (s *AIService) buildPlanningSystemPrompt() string {
+	return `You are an AI deployment planning assistant. Generate a deployment plan as JSON with the following structure:
+{
+  "plan": {
+    "id": "unique-plan-id",
+    "application_id": "app-id",
+    "environment": "target-environment",
+    "steps": [
+      {
+        "id": "step-id",
+        "type": "deploy|test|validate",
+        "description": "step description",
+        "command": "command to execute",
+        "dependencies": ["previous-step-ids"],
+        "metadata": {}
+      }
+    ]
+  },
+  "confidence": 0.9,
+  "metadata": {}
+}`
+}
+
+// buildPlanningUserPrompt creates user prompt for deployment planning
+func (s *AIService) buildPlanningUserPrompt(request *PlanningRequest) (string, error) {
+	if request == nil {
+		return "", fmt.Errorf("planning request cannot be nil")
+	}
+
+	environment := "unknown"
+	if request.Context != nil && request.Context.EnvironmentID != "" {
+		environment = request.Context.EnvironmentID
+	}
+
+	return fmt.Sprintf(`Create a deployment plan for:
+Application: %s
+Environment: %s
+Intent: %s
+Edge Types: %v
+Context: %v
+
+Please provide a structured deployment plan with proper dependencies.`,
+		request.ApplicationID, environment, request.Intent, request.EdgeTypes, request.Context), nil
+}
+
+// buildPolicySystemPrompt creates system prompt for policy evaluation
+func (s *AIService) buildPolicySystemPrompt() string {
+	return `You are an AI policy evaluation assistant. Evaluate policy compliance and return JSON:
+{
+  "compliant": true/false,
+  "violations": [
+    {
+      "policy": "policy-name",
+      "reason": "violation reason",
+      "severity": "high|medium|low",
+      "remediation": "how to fix"
+    }
+  ],
+  "warnings": [
+    {
+      "policy": "policy-name",
+      "message": "warning message"
+    }
+  ],
+  "suggestions": ["suggestion1", "suggestion2"],
+  "metadata": {}
+}`
+}
+
+// buildPolicyUserPrompt creates user prompt for policy evaluation
+func (s *AIService) buildPolicyUserPrompt(policyContext interface{}) (string, error) {
+	return fmt.Sprintf(`Evaluate policy compliance for:
+Context: %v
+
+Please check all applicable policies and return compliance status.`, policyContext), nil
+}
+
+// buildOptimizationSystemPrompt creates system prompt for plan optimization
+func (s *AIService) buildOptimizationSystemPrompt() string {
+	return `You are an AI deployment optimization assistant. Optimize the given deployment plan and return the improved version as JSON with the same structure as the input plan.`
+}
+
+// buildOptimizationPrompt creates user prompt for plan optimization
+func (s *AIService) buildOptimizationPrompt(plan *DeploymentPlan, context *PlanningContext) (string, error) {
+	if plan == nil {
+		return "", fmt.Errorf("deployment plan cannot be nil")
+	}
+
+	planJSON, err := json.Marshal(plan)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal plan: %w", err)
+	}
+
+	return fmt.Sprintf(`Optimize this deployment plan:
+Current Plan: %s
+Context: %v
+
+Please provide an optimized version with better efficiency and reliability.`,
+		string(planJSON), context), nil
 }

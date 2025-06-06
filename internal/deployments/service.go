@@ -82,7 +82,7 @@ func (s *Service) TroubleshootDeployment(ctx context.Context, incidentID, descri
 		return nil, fmt.Errorf("troubleshooting failed: %w", err)
 	}
 
-	s.logger.Info("✅ Troubleshooting completed with %d solutions", len(response.Solutions))
+	s.logger.Info("✅ Troubleshooting completed with %d recommendations", len(response.Recommendations))
 	return response, nil
 }
 
@@ -247,14 +247,13 @@ func (s *Service) parseDeploymentPlan(response string) (*ai.DeploymentPlan, erro
 	// This is deployment domain business logic
 
 	// For now, return a basic plan
-	plan.Steps = []*ai.DeploymentStep{
+	plan.Steps = []ai.DeploymentStep{
 		{
-			ID:     "step-1",
-			Action: "deploy",
-			Target: "application",
+			ID:          "step-1",
+			Type:        "deploy",
+			Description: "Deploy application",
 		},
 	}
-	plan.Strategy = "rolling"
 
 	return &plan, nil
 }

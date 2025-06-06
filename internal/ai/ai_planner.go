@@ -48,8 +48,8 @@ func (p *AIPlanner) convertPlanToOrder(plan *DeploymentPlan) ([]string, error) {
 	stepMap := make(map[string]*DeploymentStep)
 
 	// Build step map for dependency resolution
-	for _, step := range plan.Steps {
-		stepMap[step.ID] = step
+	for i := range plan.Steps {
+		stepMap[plan.Steps[i].ID] = &plan.Steps[i]
 	}
 
 	// Track processed steps to detect cycles
@@ -57,9 +57,9 @@ func (p *AIPlanner) convertPlanToOrder(plan *DeploymentPlan) ([]string, error) {
 	processing := make(map[string]bool)
 
 	// Process steps in dependency order
-	for _, step := range plan.Steps {
-		if !processed[step.ID] {
-			if err := p.processStepDependencies(step, stepMap, processed, processing, &order); err != nil {
+	for i := range plan.Steps {
+		if !processed[plan.Steps[i].ID] {
+			if err := p.processStepDependencies(&plan.Steps[i], stepMap, processed, processing, &order); err != nil {
 				return nil, fmt.Errorf("dependency resolution failed: %w", err)
 			}
 		}
@@ -92,7 +92,7 @@ func (p *AIPlanner) processStepDependencies(step *DeploymentStep, stepMap map[st
 	}
 
 	// Add this step to the order
-	*order = append(*order, step.Target)
+	*order = append(*order, step.ID)
 	processed[step.ID] = true
 	processing[step.ID] = false
 

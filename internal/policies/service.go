@@ -353,20 +353,18 @@ func (s *Service) evaluateBasicPolicyCompliance(applicationID, environmentID str
 	if environmentID == "production" {
 		// In production, require additional checks
 		violations = append(violations, ai.PolicyViolation{
-			PolicyID:    "prod-approval-required",
+			Policy:      "prod-approval-required",
 			Severity:    "medium",
-			Description: "Production deployments require approval",
-			Suggestion:  "Obtain approval from operations team",
+			Reason:      "Production deployments require approval",
+			Remediation: "Obtain approval from operations team",
 		})
 		compliant = false
 	}
 
 	return &ai.PolicyEvaluation{
-		Compliant:       compliant,
-		Violations:      violations,
-		Recommendations: []string{"Follow standard deployment procedures", "Monitor deployment progress"},
-		Confidence:      0.7, // Lower confidence for basic evaluation
-		Reasoning:       "Basic heuristic-based policy evaluation",
+		Compliant:   compliant,
+		Violations:  violations,
+		Suggestions: []string{"Follow standard deployment procedures", "Monitor deployment progress"},
 		Metadata: map[string]interface{}{
 			"evaluation_type": "deterministic",
 			"timestamp":       time.Now(),
@@ -386,20 +384,18 @@ func (s *Service) validateBasicTransition(fromID, toID, edgeType, user string) *
 	// Simple rule: deployments require proper permissions
 	if edgeType == "deploy" && user != "admin" {
 		violations = append(violations, ai.PolicyViolation{
-			PolicyID:    "deploy-permission-required",
+			Policy:      "deploy-permission-required",
 			Severity:    "high",
-			Description: "Deployment requires administrative permissions",
-			Suggestion:  "Request deployment permissions or use administrative account",
+			Reason:      "Deployment requires administrative permissions",
+			Remediation: "Request deployment permissions or use administrative account",
 		})
 		compliant = false
 	}
 
 	return &ai.PolicyEvaluation{
-		Compliant:       compliant,
-		Violations:      violations,
-		Recommendations: []string{"Verify user permissions", "Follow deployment protocols"},
-		Confidence:      0.6,
-		Reasoning:       "Simple rule-based transition validation",
+		Compliant:   compliant,
+		Violations:  violations,
+		Suggestions: []string{"Verify user permissions", "Follow deployment protocols"},
 		Metadata: map[string]interface{}{
 			"evaluation_type": "deterministic",
 			"timestamp":       time.Now(),
@@ -593,11 +589,6 @@ func (s *Service) parsePolicyEvaluationResponse(response string) (*ai.PolicyEval
 
 	if err := json.Unmarshal([]byte(response), &evaluation); err != nil {
 		return nil, fmt.Errorf("failed to parse policy evaluation: %w", err)
-	}
-
-	// Set default confidence if not provided
-	if evaluation.Confidence == 0 {
-		evaluation.Confidence = 0.8
 	}
 
 	return &evaluation, nil

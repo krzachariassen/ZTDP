@@ -21,15 +21,15 @@ func TestEngine_ExecuteApplicationDeployment(t *testing.T) {
 	// Setup test application
 	setupTestApplication(globalGraph)
 
-	// Create AI brain for simplified planner
-	brain, err := ai.NewPlatformAIFromConfig(globalGraph)
+	// Create AI platform agent for simplified planner
+	agent, err := ai.NewPlatformAgentFromConfig(globalGraph, nil, nil)
 	if err != nil {
-		// For tests, use a mock or skip AI brain if not available
-		t.Skipf("AI brain not available for testing: %v", err)
+		// For tests, use a mock or skip AI agent if not available
+		t.Skipf("AI platform agent not available for testing: %v", err)
 	}
 
-	// Create deployment engine with AI brain
-	engine := NewEngine(globalGraph, brain)
+	// Create deployment engine with AI platform agent
+	engine := NewEngine(globalGraph, agent)
 
 	t.Run("Successful deployment", func(t *testing.T) {
 		result, err := engine.ExecuteApplicationDeployment("test-app", "dev")

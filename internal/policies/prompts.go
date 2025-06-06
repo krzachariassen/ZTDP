@@ -74,10 +74,5 @@ func parsePolicyEvaluation(response string) (*ai.PolicyEvaluation, error) {
 		return nil, fmt.Errorf("failed to parse policy evaluation: %w", err)
 	}
 
-	// Set default confidence if not provided
-	if evaluation.Confidence == 0 {
-		evaluation.Confidence = 0.8
-	}
-
 	return &evaluation, nil
 }

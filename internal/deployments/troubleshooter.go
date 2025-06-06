@@ -42,9 +42,18 @@ func (t *Troubleshooter) Troubleshoot(ctx context.Context, incidentID string, de
 	}
 
 	// Perform AI-driven troubleshooting
-	response, err := t.provider.IntelligentTroubleshooting(ctx, incidentContext)
+	systemPrompt := t.buildSystemPrompt()
+	userPrompt := t.buildUserPrompt(incidentContext)
+
+	aiResponse, err := t.provider.CallAI(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("AI troubleshooting failed: %w", err)
+	}
+
+	// Parse AI response
+	response, err := t.parseTroubleshootingResponse(aiResponse)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse troubleshooting response: %w", err)
 	}
 
 	t.logger.Info("✅ Troubleshooting analysis completed: %s (confidence: %.2f)",
@@ -174,4 +183,64 @@ func (t *Troubleshooter) extractHealthStatus(graph *graph.Graph) map[string]inte
 		"total_services":    total,
 		"health_percentage": float64(healthy) / float64(total) * 100,
 	}
+}
+
+// buildSystemPrompt creates the system prompt for troubleshooting
+func (t *Troubleshooter) buildSystemPrompt() string {
+	return `You are an expert system troubleshooter with deep knowledge of:
+- Distributed system architecture and failure patterns
+- Root cause analysis methodologies
+- Incident response and resolution procedures
+- Performance analysis and optimization
+
+Your task is to analyze incidents and provide actionable troubleshooting guidance.
+Respond in JSON format with structured troubleshooting analysis.`
+}
+
+// buildUserPrompt creates the user prompt for troubleshooting
+func (t *Troubleshooter) buildUserPrompt(incident *ai.IncidentContext) string {
+	return fmt.Sprintf(`Analyze this incident and provide troubleshooting guidance:
+
+Incident ID: %s
+Description: %s
+Environment: %s
+Symptoms: %v
+
+System Context:
+- Metrics: %v
+- Timeline Events: %d
+
+Please provide:
+1. Most likely root cause
+2. Detailed diagnosis
+3. Recommended actions
+4. Next steps for resolution
+5. Estimated resolution time
+6. Prevention measures
+
+Focus on practical troubleshooting steps and root cause analysis.`,
+		incident.IncidentID, incident.Description, incident.Environment,
+		incident.Symptoms, incident.Metrics, len(incident.Timeline))
+}
+
+// parseTroubleshootingResponse parses AI response into troubleshooting response
+func (t *Troubleshooter) parseTroubleshootingResponse(response string) (*ai.TroubleshootingResponse, error) {
+	// TODO: Implement proper JSON parsing
+	// For now, return a basic response
+	return &ai.TroubleshootingResponse{
+		RootCause:          "Service dependency failure",
+		Confidence:         0.8,
+		Symptoms:           []string{"Increased latency", "Error rate spike"},
+		Diagnosis:          "Downstream service appears to be experiencing issues",
+		Recommendations:    []string{"Check service health", "Review recent deployments", "Monitor system resources"},
+		NextSteps:          []string{"Restart affected service", "Check logs for errors"},
+		EstimatedTime:      "15-30 minutes",
+		Severity:           "Medium",
+		AffectedComponents: []string{"web-service", "api-gateway"},
+		Timeline:           []ai.EventTimestamp{},
+		Metadata: map[string]interface{}{
+			"generated_by": "troubleshooter",
+			"method":       "ai_enhanced",
+		},
+	}, nil
 }

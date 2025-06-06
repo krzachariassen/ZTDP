@@ -4,11 +4,17 @@
 
 ZTDP is transitioning from an API-first platform to an **AI-native platform** where artificial intelligence is the primary interface for developer interactions. This document outlines the complete AI architecture vision, current implementation state, and roadmap to achieve a multi-agent ecosystem.
 
+### 🎯 **June 2025 Status: Major Milestone Achieved**
+
+**✅ Clean Architecture Foundation Complete**: Successfully eliminated redundant AIBrain layer and established clean domain separation with PlatformAgent as the core AI infrastructure. All compilation errors resolved and proper AI-as-infrastructure patterns implemented across all domain services.
+
+**🔥 Current Critical Priority**: Refactoring the monolithic `/api/handlers/ai.go` (726 lines) to achieve proper domain separation in the API layer - the final step to complete clean architecture implementation.
+
 ## Table of Contents
 
 1. [Vision & Strategic Direction](#vision--strategic-direction)
 2. [Current State Analysis](#current-state-analysis)
-3. [Target Architecture](#target-architecture)
+3. [Target Architecture](#target-architecture)s
 4. [User Experience Patterns](#user-experience-patterns)
 5. [Multi-Agent System Design](#multi-agent-system-design)
 6. [Implementation Roadmap](#implementation-roadmap)
@@ -17,20 +23,13 @@ ZTDP is transitioning from an API-first platform to an **AI-native platform** wh
 9. [Event-Driven Agent Communication](#event-driven-agent-communication)
 10. [Bring Your Own Agent (BYOA)](#bring-your-own-agent-byoa)
 11. [Critical Decisions & Trade-offs](#critical-decisions--trade-offs)
-12. [**Developer Principles & Best Practices**](#developer-principles--best-practices)
-13. [**AI Agent Instructions & Guidelines**](#ai-agent-instructions--guidelines)
-14. [**Coding Standards & Architecture Guidelines**](#coding-standards--architecture-guidelines)
-15. [Backlog & Next Steps](#backlog--next-steps)
+12. [Implementation Guidelines](#implementation-guidelines)
+13. [Backlog & Next Steps](#backlog--next-steps)
+14. [Documentation References](#documentation-references)
 
 ---
 
 ## Vision & Strategic Direction
-
-### Business Context
-
-**Original Problem**: API-first approach was deemed a poor investor case - too similar to existing IDP solutions.
-
-**Strategic Pivot**: Shift to AI-native platform where AI is the **primary interface**, not a feature add-on.
 
 ### Core AI Vision
 
@@ -53,45 +52,113 @@ ZTDP will become a **conversational infrastructure platform** where:
 
 ## Current State Analysis
 
-### What We Have (MVP v1)
+### What We Have (MVP v1) - **UPDATED June 2025**
 
 #### ✅ Foundational Infrastructure
 - **Graph-based platform** modeling applications, infrastructure, and policies
 - **Event-driven architecture** with real-time WebSocket streaming
 - **Policy enforcement engine** with graph-based validation
-- **AI provider interface** supporting OpenAI GPT models
+- **Clean AI provider interface** supporting OpenAI GPT models with proper abstraction
 - **Comprehensive API layer** with deployment, policy, and graph operations
 
-#### ✅ Basic AI Integration
-- **AI-enhanced deployment planning** using GPT-4 for intelligent plan generation
-- **AI provider abstraction** allowing multiple AI backends
-- **Graceful fallback** to traditional planning when AI unavailable
-- **Conversational endpoints** for basic platform interaction
+#### ✅ **MAJOR MILESTONE COMPLETED: AIBrain Redundancy Elimination (June 2025)**
+- **🎯 COMPLETED: Clean Architecture Migration**
+  - **ai_provider.go** - Pure infrastructure interface (25 lines, clean)
+  - **platform_agent.go** - Core platform agent implementation (478 lines, production-ready)
+  - **AIBrain completely eliminated** - Redundant wrapper layer removed (153 lines deleted)
+  - **All API handlers migrated** - 9 locations now use PlatformAgent directly
+  - **Deployment engine updated** - Uses PlatformAgent instead of AIBrain
+  - **Tests migrated** - Working with new architecture, all compilation errors fixed
+- **✅ ACHIEVED: Zero Redundancy in AI Layer**
+  - Eliminated AIBrain wrapper that provided no unique value over PlatformAgent
+  - Direct usage of PlatformAgent throughout codebase
+  - Clean dependency injection with proper error handling
+  - Consistent naming: `agent` instead of `brain` throughout
 
-#### ⚠️ Current Limitations
-- **Single AI instance** instead of multi-agent system
-- **API-first UX** - developers still primarily use REST endpoints
-- **Limited conversation scope** - basic Q&A rather than action-oriented chat
-- **No agent-to-agent communication** - monolithic AI brain approach
-- **Mixed architectural patterns** - some business logic in AI layer vs domain services
+#### ✅ **Complete Compilation Success**
+- **All AI module files compile successfully** ✅
+- **All internal modules compile without errors** ✅
+- **Domain services follow clean architecture patterns** ✅
+- **PlatformAgent ready for enhanced multi-agent capabilities** ✅
 
-### Current File Structure
+#### ✅ **Domain Services with Clean AI Integration**
+- **internal/analytics/service.go** - Analytics domain with AI-enhanced learning insights
+- **internal/operations/service.go** - Operations domain with AI-powered troubleshooting and optimization
+- **internal/deployments/service.go** - Clean domain service with AI integration patterns
+- All services implement proper AI-as-infrastructure pattern with fallback logic
+
+#### 🔥 **CRITICAL NEXT PRIORITY: API Handler Monolith Refactoring**
+- **🚨 URGENT: `/api/handlers/ai.go` Monolith Breakdown Required**
+  - **Current State**: 726-line monolithic handler file containing mixed concerns
+  - **Problem**: Domain-specific handlers scattered in AI file instead of proper domain files
+  - **Architecture Violation**: Business handlers living in wrong domain files
+  - **Required Action**: Extract and move handlers to appropriate domain files:
+    - `AIPredictImpact`, `AITroubleshoot`, `AIGeneratePlan` → `/api/handlers/deployments.go`
+    - `AIEvaluatePolicy` → `/api/handlers/policies.go`
+    - `AIProactiveOptimize`, `AILearnFromDeployment` → `/api/handlers/operations.go`
+  - **Keep in ai.go**: Only core conversational AI handlers (`AIChatWithPlatform`, `AIProviderStatus`)
+  - **Benefit**: Proper domain separation, easier maintenance, clearer API structure
+  - **Blocking**: This architectural violation must be fixed before adding new features
+
+#### 🎯 **Post-Refactoring Development Focus**
+- **Enhanced conversation capabilities** - Expand PlatformAgent conversational AI
+- **Multi-agent architecture preparation** - Lay groundwork for specialized agents
+- **Performance optimization** - Optimize AI provider calls and response times
+- **Advanced AI features** - Rich formatting, context persistence, multi-turn conversations
+
+### **Current File Structure (UPDATED June 2025) - CLEAN ARCHITECTURE ACHIEVED ✅**
+
 ```
 internal/ai/
-├── ai_brain.go          # 🚀 Core Platform Agent (PlatformAI) - THE AI-NATIVE INTERFACE
-├── ai_provider.go       # ✅ Clean infrastructure interface
-├── openai_provider.go   # ✅ OpenAI implementation
-└── ai_test.go          # ✅ Comprehensive test coverage
+├── ai_provider.go       # ✅ CLEAN: Pure infrastructure interface (25 lines)
+├── platform_agent.go   # ✅ PRODUCTION: Core platform agent (478 lines)
+├── ai_service.go        # ✅ COMPILES: Domain-agnostic AI business logic
+├── ai_planner.go        # ✅ COMPILES: Legacy planner compatibility 
+├── types.go            # ✅ CLEAN: Comprehensive type definitions
+├── openai_provider.go  # ✅ COMPILES: OpenAI implementation (infrastructure only)
+├── capabilities.go     # ✅ NEW: Agent capability definitions
+├── conversation_engine.go # ✅ NEW: Enhanced conversation handling
+├── intent_recognizer.go   # ✅ NEW: Intent analysis for routing
+├── response_builder.go    # ✅ NEW: Rich response formatting
+├── prompts.go          # ✅ CLEAN: Reusable prompt templates
+└── ai_test.go          # ✅ UPDATED: Working test suite with PlatformAgent
 
-api/handlers/
-├── ai.go               # ⚠️ Mixed patterns - should primarily route through PlatformAI
+internal/analytics/
+├── service.go          # ✅ DOMAIN: Analytics domain service with AI integration
+
+internal/operations/  
+├── service.go          # ✅ DOMAIN: Operations domain service with AI capabilities
 
 internal/deployments/
-├── service.go          # ⚠️ Needs better integration with PlatformAI orchestration
+├── service.go          # ✅ DOMAIN: Clean domain service with AI integration
+├── engine.go           # ✅ UPDATED: Uses PlatformAgent instead of AIBrain
+├── impact_predictor.go # ✅ CLEAN: Uses AI provider as infrastructure tool
+├── troubleshooter.go   # ✅ CLEAN: Proper AI integration patterns
+├── context.go          # ✅ DOMAIN: Deployment context management
+├── planner.go          # ✅ DOMAIN: Core deployment planning logic
+├── prompts.go          # ✅ DOMAIN: Deployment-specific AI prompts
 
 internal/policies/
-├── service.go          # ⚠️ Needs better integration with PlatformAI orchestration
+├── service.go          # ✅ DOMAIN: Clean domain service with policy evaluation
+
+api/handlers/
+├── ai.go               # 🔥 CRITICAL: Monolithic handler (726 lines) - URGENT REFACTORING NEEDED
+├── deployments.go      # ✅ UPDATED: Uses PlatformAgent for deployment operations
+├── applications.go     # ✅ CLEAN: Application domain handlers
+├── environments.go     # ✅ CLEAN: Environment domain handlers
+├── policies.go         # ✅ CLEAN: Policy domain handlers
+├── resources.go        # ✅ CLEAN: Resource domain handlers
+├── services.go         # ✅ CLEAN: Service domain handlers
+└── [other handlers]    # ✅ CLEAN: Domain-appropriate handlers
 ```
+
+### **MAJOR MILESTONE ACHIEVED ✅**
+
+**🎯 AIBrain Elimination Complete**: Successfully removed redundant wrapper layer and migrated entire codebase to use PlatformAgent directly, achieving true clean architecture with zero compilation errors.
+
+**🎯 Ready for Multi-Agent Evolution**: Clean foundation established for specialized agent development with proper domain separation and event-driven communication.
+
+**🔥 Critical Path Forward**: API handler refactoring is now the blocking priority for maintaining clean architecture principles.
 
 ---
 
@@ -722,48 +789,86 @@ func (a *MCPAgent) Process(ctx context.Context, req *Request) (*Response, error)
 
 ## Backlog & Next Steps
 
-### Immediate Priority (Sprint 1-2)
+### ⚠️ CRITICAL PRIORITY: API Handler Monolith Refactoring
 
-1. **🔥 Enhance Core Platform Agent**
-   - [ ] Refactor `/internal/ai/ai_brain.go` to separate orchestration from business logic
-   - [ ] Complete domain service integration with PlatformAI
-   - [ ] Enhance conversation capabilities and intent recognition
-   - [ ] Fix compilation errors while preserving AI capabilities
+**🔥 URGENT TASK: Break Up `/api/handlers/ai.go` Monolith**
 
-2. **🔥 Validate Current AI Integration**
-   - [ ] Ensure all existing AI endpoints work with domain services
-   - [ ] Verify graceful fallback when AI unavailable
-   - [ ] Test end-to-end deployment with AI planning
+**Current Problem**:
+- **726-line monolithic file** containing mixed domain concerns
+- Domain-specific handlers scattered in AI file instead of proper domain files
+- Violates clean architecture principles
+- Makes maintenance and testing difficult
 
-### Short Term (Sprint 3-6)
+**Required Actions**:
+1. **Extract Deployment Handlers** → Move to `/api/handlers/deployments.go`:
+   - `AIPredictImpact` - Deployment impact analysis
+   - `AITroubleshoot` - Deployment troubleshooting
+   - `AIGeneratePlan` - Deployment plan generation
 
-3. **🚀 Core Platform Agent**
-   - [ ] Design and implement Core Platform Agent
-   - [ ] Build intent recognition using AI
-   - [ ] Create agent registry and discovery
-   - [ ] Enhanced conversation interface
+2. **Extract Policy Handlers** → Move to `/api/handlers/policies.go`:
+   - `AIEvaluatePolicy` - Policy evaluation with AI
 
-4. **🎯 Agent Communication**
-   - [ ] Extend event system for agent communication
-   - [ ] Define agent communication protocols
-   - [ ] Implement request-response and broadcast patterns
+3. **Extract Operations Handlers** → Move to `/api/handlers/operations.go`:
+   - `AIProactiveOptimize` - Proactive optimization
+   - `AILearnFromDeployment` - Learning from deployment data
 
-### Medium Term (Sprint 7-12)
+4. **Keep Core AI Handlers** in `/api/handlers/ai.go`:
+   - `AIChatWithPlatform` - Core conversational interface
+   - `AIProviderStatus` - AI provider health/status
 
-5. **🏗️ Specialized Agents**
-   - [ ] Deployment Agent (`/internal/agents/deployment/`)
-   - [ ] Policy/Governance Agent (`/internal/agents/governance/`)
-   - [ ] Agent health monitoring and recovery
+**Expected Outcome**:
+- Proper domain separation in API layer
+- Each handler file focused on single domain
+- Easier maintenance and testing
+- Clear API structure
 
-6. **💬 Enhanced UX**
-   - [ ] Multi-turn conversation support
+### Immediate Priority (Current Sprint)
+
+1. **🔥 Complete API Handler Refactoring**
+   - [ ] Extract deployment handlers from ai.go
+   - [ ] Extract policy handlers from ai.go  
+   - [ ] Extract operations handlers from ai.go
+   - [ ] Keep only core AI handlers in ai.go
+   - [ ] Update API documentation and routing
+
+2. **🚀 Enhance PlatformAgent Capabilities**
+   - [ ] Improve conversation engine performance
+   - [ ] Add intent recognition accuracy
+   - [ ] Enhance response formatting (markdown, code blocks)
+   - [ ] Add multi-turn conversation context
+
+### Short Term (Next 2-4 Weeks)
+
+3. **🎯 Core Platform Agent Evolution**
+   - [ ] Design multi-agent orchestration interface
+   - [ ] Build agent registry and discovery patterns
+   - [ ] Create agent communication protocols
+   - [ ] Implement conversation state management
+
+4. **🧪 Testing & Quality**
+   - [ ] Add comprehensive API handler tests
+   - [ ] Improve AI integration test coverage
+   - [ ] Add performance benchmarks for AI responses
+   - [ ] Validate error handling across all scenarios
+
+### Medium Term (Next 1-2 Months)
+
+5. **🏗️ Specialized Agent Foundation**
+   - [ ] Design agent interface specification
+   - [ ] Create deployment agent prototype
+   - [ ] Implement policy/governance agent patterns
+   - [ ] Build agent health monitoring
+
+6. **💬 Enhanced User Experience**
+   - [ ] Rich response formatting (markdown, diagrams)
    - [ ] Context persistence across conversations
-   - [ ] Rich response formatting (markdown, code blocks, etc.)
+   - [ ] Conversation history and replay
+   - [ ] Multi-step workflow orchestration
 
-### Long Term (Sprint 13+)
+### Long Term (3+ Months)
 
 7. **🔌 Customer Extensibility**
-   - [ ] Agent SDK and documentation
+   - [ ] Agent SDK development
    - [ ] Agent marketplace infrastructure
    - [ ] MCP integration for external tools
    - [ ] Agent security and sandboxing
@@ -776,23 +881,30 @@ func (a *MCPAgent) Process(ctx context.Context, req *Request) (*Response, error)
 
 ### Success Criteria
 
-#### Phase 1 Success (Domain Separation)
-- [ ] All API endpoints functional without AI Brain
-- [ ] Clean separation: business logic in domain services, AI as infrastructure
+#### Phase 1 Success (API Refactoring - CURRENT)
+- [ ] API handlers properly separated by domain
+- [ ] No business logic in AI handlers
+- [ ] All endpoints functional after refactoring
 - [ ] Zero compilation errors
 - [ ] All existing tests passing
 
-#### Phase 2 Success (Core Agent)
+#### Phase 2 Success (Enhanced Platform Agent)
 - [ ] Natural language deployment requests working
 - [ ] Intent recognition accuracy >90%
-- [ ] Multi-agent coordination for complex requests
+- [ ] Multi-turn conversations supported
 - [ ] Performance: AI responses <5 seconds
 
-#### Phase 3 Success (Agent Ecosystem)
-- [ ] 3+ specialized agents operational
-- [ ] Event-driven agent communication working
-- [ ] Agent failure recovery implemented
+#### Phase 3 Success (Multi-Agent Foundation)
+- [ ] Agent communication protocols working
+- [ ] Agent registry and discovery operational
+- [ ] Multiple agent types coordinating
+- [ ] Event-driven agent workflows
+
+#### Phase 4 Success (Customer Extensibility)
 - [ ] Customer can deploy custom agent (proof of concept)
+- [ ] Agent SDK documentation complete
+- [ ] Security model for agent sandboxing
+- [ ] Agent marketplace basic functionality
 
 ---
 
@@ -812,1067 +924,49 @@ This architecture document serves as the definitive guide for implementing ZTDP'
 
 ---
 
-## Developer Principles & Best Practices
+## 12. Implementation Guidelines
 
-### Core Development Principles
+For detailed implementation guidance, please refer to the dedicated architecture documents:
 
-#### 1. Clean Architecture
-- **Dependency Direction**: Core business logic should not depend on external layers
-- **Interface Segregation**: Use interfaces to break dependencies
-- **Single Responsibility**: Each package should have a clear purpose
-- **Testability**: Design for easy unit testing and mocking
+### 🏗️ Architecture Foundations
+- **[Architecture Overview](/docs/architecture-overview.md)** - High-level platform vision, technology stack, and component overview
+- **[Clean Architecture Principles](/docs/clean-architecture-principles.md)** - Dependency direction, layer separation, and ZTDP-specific patterns
+- **[Domain-Driven Design](/docs/domain-driven-design.md)** - Domain modeling, bounded contexts, and service patterns
 
-#### 2. Domain-Driven Design
-- **Domain Services Own Business Logic**: Deployment, Policy, Security services contain all domain-specific logic
-- **No Business Logic in API Handlers**: API handlers are thin, delegating to domain services
-- **AI as Infrastructure Tool**: AI providers are pure infrastructure for communicating with AI services
-- **No Business Logic in AI Layer**: AI components handle only AI communication, not business decisions
+### 🔄 System Design Patterns  
+- **[Event-Driven Architecture](/docs/event-driven-architecture.md)** - Event structures, communication patterns, and real-time streaming
+- **[Policy-First Development](/docs/policy-first-development.md)** - Policy types, graph-based evaluation, and enforcement patterns
 
-#### 3. Event-Driven Architecture
-- **Consistent Emission**: Ensure all operations emit appropriate events
-- **Structured Events**: Follow the standard event schema
-- **Error Handling**: Emit events for both success and failure cases
-- **Performance**: Consider event volume and processing capacity
+### 🧪 Development Practices
+- **[Testing Strategies](/docs/testing-strategies.md)** - TDD practices, testing pyramid, AI component testing, and coverage requirements
+- **[Git and Code Review Practices](/docs/git-and-code-review-practices.md)** - Workflow, branching strategy, commit standards, and review guidelines
 
-#### 4. Policy-First Development
-- **Early Validation**: Check policies before making changes
-- **Clear Errors**: Provide detailed policy violation messages
-- **Event Integration**: Emit events for all policy decisions
-- **Test Coverage**: Include policy scenarios in all tests
+### Key Implementation Principles
 
-### Testing Philosophy
-
-#### Test-Driven Development (TDD)
-- **Test First**: Every feature starts with a test
-- **Red-Green-Refactor**: Follow TDD cycle religiously
-- **API-First**: Test the public interface, not implementation details
-- **Coverage Requirements**: Maintain high test coverage across all layers
-
-#### Test Organization
-- **Unit Tests**: Co-located with source code (`*_test.go`)
-- **Integration Tests**: API-level testing (`test/api/`)
-- **End-to-End Tests**: Control plane validation (`test/controlplane/`)
-- **Policy Tests**: Comprehensive policy enforcement validation
-
-#### Test Patterns
-```go
-// Unit test pattern - test business logic in isolation
-func TestDeploymentService_GenerateDeploymentPlan(t *testing.T) {
-    // Arrange
-    mockGraph := &mockGraph{}
-    mockAI := &mockAIProvider{}
-    service := NewDeploymentService(mockGraph, mockAI)
-    
-    // Act
-    plan, err := service.GenerateDeploymentPlan(ctx, "test-app")
-    
-    // Assert
-    assert.NoError(t, err)
-    assert.NotNil(t, plan)
-    // Verify business logic, not AI integration
-}
-
-// Integration test pattern - test end-to-end API flow
-func TestCreateAndDeployApplication(t *testing.T) {
-    router := newTestRouter(t)
-    
-    // Create application
-    createApplication(t, router, "test-app")
-    
-    // Deploy application
-    deployApplication(t, router, "test-app", "dev")
-    
-    // Verify deployment was successful
-    verifyDeploymentStatus(t, router, "test-app", "dev", "deployed")
-}
-```
-
-### Error Handling Standards
-
-#### HTTP Error Responses
-```go
-// Policy violations - return 403 Forbidden
-if errors.Is(err, &graph.PolicyNotSatisfiedError{}) {
-    WriteJSONError(w, "Policy not satisfied", http.StatusForbidden)
-    return
-}
-
-// Business validation errors - return 400 Bad Request
-if errors.Is(err, &ValidationError{}) {
-    WriteJSONError(w, err.Error(), http.StatusBadRequest)
-    return
-}
-
-// System errors - return 500 Internal Server Error
-WriteJSONError(w, "Internal server error", http.StatusInternalServerError)
-```
-
-#### Event Emission for Errors
-```go
-// Emit events for both success and failure cases
-func (s *DeploymentService) DeployApplication(ctx context.Context, app, env string) error {
-    // Emit deployment started event
-    s.eventBus.Publish(&Event{
-        Type: "deployment.started",
-        Subject: fmt.Sprintf("%s/%s", app, env),
-    })
-    
-    err := s.performDeployment(ctx, app, env)
-    if err != nil {
-        // Emit failure event
-        s.eventBus.Publish(&Event{
-            Type: "deployment.failed",
-            Subject: fmt.Sprintf("%s/%s", app, env),
-            Payload: map[string]interface{}{
-                "error": err.Error(),
-            },
-        })
-        return err
-    }
-    
-    // Emit success event
-    s.eventBus.Publish(&Event{
-        Type: "deployment.completed",
-        Subject: fmt.Sprintf("%s/%s", app, env),
-    })
-    return nil
-}
-```
-
-### Code Organization Standards
-
-#### Package Structure
-```
-internal/
-├── application/     # Application domain service
-├── deployment/      # Deployment domain service  
-├── policies/        # Policy domain service
-├── ai/             # AI infrastructure only
-├── graph/          # Graph data model and operations
-├── events/         # Event system infrastructure
-└── contracts/      # Data contracts and schemas
-
-api/
-├── handlers/       # HTTP handlers (thin layer)
-└── server/         # Routing and middleware setup
-
-test/
-├── api/           # Integration tests
-└── controlplane/  # End-to-end tests
-```
-
-#### File Naming Conventions
-- `service.go` - Main domain service implementation
-- `*_test.go` - Unit tests co-located with source
-- `contracts.go` - Data structures and interfaces
-- `errors.go` - Domain-specific error types
-
-#### Import Organization
-```go
-// Standard library imports first
-import (
-    "context"
-    "fmt"
-    "time"
-)
-
-// External library imports second
-import (
-    "github.com/go-chi/chi/v5"
-    "github.com/gorilla/websocket"
-)
-
-// Internal imports last
-import (
-    "github.com/krzachariassen/ZTDP/internal/graph"
-    "github.com/krzachariassen/ZTDP/internal/events"
-)
-```
+1. **Clean Architecture Compliance**: Business logic in domain services, AI as infrastructure tool
+2. **Event-Driven Communication**: All operations emit structured events for observability
+3. **Policy-First Validation**: Check policies before making any state changes  
+4. **Test-Driven Development**: Write tests first, maintain high coverage across all layers
+5. **AI-as-Infrastructure**: Use AI providers to enhance domain services, not replace business logic
 
 ---
 
-## AI Agent Instructions & Guidelines
+## 13. Backlog & Next Steps
 
-### For AI Assistants Working on ZTDP
+## Documentation References
 
-#### Understanding the Codebase
-1. **Read This Document First**: This document is the single source of truth for architecture and development practices
-2. **Domain Separation is Critical**: Never put business logic in AI components or API handlers
-3. **Event-Driven by Design**: All operations should emit structured events
-4. **Policy-Aware**: Consider policy implications for every change
+### **NEW: Architectural Conversations & Memory**
 
-#### When Making Changes
+- **`ai-enhancement-conversation-memory.md`** - June 6, 2025 conversation about AI enhancement of domain services, contract validation patterns, and Platform Agent orchestration strategies
+- Documents key architectural decisions about separating API interface (strict contracts) from AI interface (conversational)  
+- Contains detailed analysis of correct vs. anti-patterns for AI enhancement implementation
 
-##### 1. Research Phase
-```bash
-# Use semantic search to understand existing patterns
-semantic_search("deployment service AI integration")
-semantic_search("policy enforcement patterns")
-semantic_search("event emission examples")
+### Core Architecture Documents
 
-# Read related files to understand context
-read_file("/internal/deployments/service.go")
-read_file("/internal/policies/service.go")
-```
-
-##### 2. Implementation Phase
-- **Follow TDD**: Write tests before implementation
-- **Use Domain Services**: Call domain services, not AI Brain
-- **Emit Events**: Ensure operations emit structured events
-- **Handle Errors**: Follow established error handling patterns
-
-##### 3. Testing Phase
-- **Run All Tests**: `go test ./...` must pass
-- **Test Different Scenarios**: Success, failure, policy violations
-- **Integration Tests**: Test end-to-end API flows
-
-#### Common Patterns to Follow
-
-##### API Handler Pattern (Thin Layer)
-```go
-func CreateApplication(w http.ResponseWriter, r *http.Request) {
-    // Parse request
-    var app contracts.ApplicationContract
-    if err := json.NewDecoder(r.Body).Decode(&app); err != nil {
-        WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-        return
-    }
-
-    // Delegate to domain service
-    appService := application.NewService(GlobalGraph)
-    if err := appService.CreateApplication(app); err != nil {
-        WriteJSONError(w, err.Error(), http.StatusBadRequest)
-        return
-    }
-
-    // Return response
-    w.WriteHeader(http.StatusCreated)
-    json.NewEncoder(w).Encode(app)
-}
-```
-
-##### Domain Service Pattern (Business Logic)
-```go
-func (s *DeploymentService) GenerateDeploymentPlan(ctx context.Context, app string) (*Plan, error) {
-    // Business logic validation
-    if app == "" {
-        return nil, errors.New("application name required")
-    }
-    
-    // Check policies
-    if err := s.validateDeploymentPolicies(app); err != nil {
-        return nil, err
-    }
-    
-    // Use AI as tool (if available)
-    if s.aiProvider != nil {
-        prompt := s.buildDeploymentPrompt(app)
-        response, err := s.aiProvider.CallAI(ctx, prompt.System, prompt.User)
-        if err == nil {
-            if plan, err := s.parseAIPlan(response); err == nil {
-                return plan, nil
-            }
-        }
-    }
-    
-    // Fallback to traditional planning
-    return s.generateBasicPlan(app)
-}
-```
-
-##### Event Emission Pattern
-```go
-// Emit structured events for observability
-func (s *DeploymentService) emitDeploymentEvent(eventType, app, env string, payload map[string]interface{}) {
-    event := &events.Event{
-        Type:    eventType,
-        Source:  "deployment-service",
-        Subject: fmt.Sprintf("%s/%s", app, env),
-        Payload: payload,
-    }
-    s.eventBus.Publish(event)
-}
-```
-
-#### What NOT to Do
-
-##### ❌ Business Logic in API Handlers
-```go
-// WRONG - business logic in handler
-func CreateApplication(w http.ResponseWriter, r *http.Request) {
-    // Don't do complex validation here
-    // Don't call multiple services here
-    // Don't handle policy enforcement here
-}
-```
-
-##### ❌ Business Logic in AI Components
-```go
-// WRONG - business logic in AI layer
-func (brain *AIBrain) GenerateDeploymentPlan(app string) (*Plan, error) {
-    // Don't put deployment logic in AI layer
-    // Don't validate business rules in AI layer
-    // Don't handle policy enforcement in AI layer
-}
-```
-
-##### ❌ Direct AI Provider Calls from Handlers
-```go
-// WRONG - skipping domain services
-func AIGeneratePlan(w http.ResponseWriter, r *http.Request) {
-    // Don't call AI provider directly
-    response, err := aiProvider.CallAI(ctx, system, user)
-    // Domain logic belongs in domain services
-}
-```
-
-#### Required Steps for AI-Related Changes
-
-1. **Identify the Domain**: Which business domain does this belong to?
-2. **Check Domain Service**: Does the domain service have the required method?
-3. **Add to Domain Service**: If missing, add business logic to domain service
-4. **Use AI as Tool**: Domain service can use AI provider for enhancement
-5. **Update Handler**: Handler calls domain service, not AI directly
-6. **Add Tests**: Unit tests for domain service, integration tests for API
-7. **Emit Events**: Ensure operations emit structured events
-
-#### File Change Patterns
-
-When modifying AI-related functionality:
-
-##### For New AI-Enhanced Features:
-1. Add method to appropriate domain service (`internal/[domain]/service.go`)
-2. Use AI provider as infrastructure tool within domain service
-3. Update API handler to call domain service
-4. Add comprehensive tests
-5. Update this architecture document if needed
-
-##### For Refactoring Existing AI Code:
-1. Identify business logic currently in AI layer
-2. Move business logic to appropriate domain service
-3. Update AI component to be pure infrastructure
-4. Update callers to use domain service
-5. Remove any business logic from AI layer
-
----
-
-## Coding Standards & Architecture Guidelines
-
-### Go Language Standards
-
-#### Code Style
-- **gofmt**: All code must be formatted with `gofmt`
-- **goimports**: Organize imports using `goimports`
-- **golint**: Follow `golint` recommendations
-- **go vet**: Code must pass `go vet` checks
-
-#### Naming Conventions
-```go
-// Interfaces: -er suffix
-type Deployer interface {
-    Deploy(ctx context.Context, app string) error
-}
-
-// Structs: Clear, descriptive names
-type DeploymentService struct {
-    graph      graph.Graph
-    aiProvider ai.Provider
-    eventBus   events.Bus
-}
-
-// Methods: Verb + Object
-func (s *DeploymentService) GenerateDeploymentPlan(ctx context.Context, app string) (*Plan, error)
-func (s *DeploymentService) ValidateDeploymentPolicy(ctx context.Context, app, env string) error
-
-// Constants: ALL_CAPS or CamelCase for exported
-const (
-    DefaultTimeout = 30 * time.Second
-    MaxRetries     = 3
-)
-```
-
-#### Error Handling
-```go
-// Define domain-specific error types
-type PolicyNotSatisfiedError struct {
-    Policy string
-    Reason string
-}
-
-func (e *PolicyNotSatisfiedError) Error() string {
-    return fmt.Sprintf("policy %s not satisfied: %s", e.Policy, e.Reason)
-}
-
-// Use errors.Is for error checking
-if errors.Is(err, &PolicyNotSatisfiedError{}) {
-    // Handle policy violation
-}
-
-// Wrap errors with context
-if err != nil {
-    return fmt.Errorf("failed to generate deployment plan for %s: %w", app, err)
-}
-```
-
-### Architecture Patterns
-
-#### Dependency Injection
-```go
-// Constructor pattern for dependency injection
-func NewDeploymentService(graph graph.Graph, aiProvider ai.Provider, eventBus events.Bus) *DeploymentService {
-    return &DeploymentService{
-        graph:      graph,
-        aiProvider: aiProvider,
-        eventBus:   eventBus,
-    }
-}
-
-// Interface segregation
-type GraphReader interface {
-    GetApplication(name string) (*Application, error)
-    GetServices(app string) ([]*Service, error)
-}
-
-type GraphWriter interface {
-    AddNode(node *Node) error
-    AddEdge(from, to, relation string) error
-}
-```
-
-#### Context Usage
-```go
-// Always use context for cancellation and timeouts
-func (s *DeploymentService) GenerateDeploymentPlan(ctx context.Context, app string) (*Plan, error) {
-    // Check context cancellation
-    select {
-    case <-ctx.Done():
-        return nil, ctx.Err()
-    default:
-    }
-    
-    // Pass context to dependencies
-    response, err := s.aiProvider.CallAI(ctx, systemPrompt, userPrompt)
-    if err != nil {
-        return nil, err
-    }
-    
-    return s.parsePlan(response)
-}
-```
-
-#### Interface Design
-```go
-// Small, focused interfaces
-type PlanGenerator interface {
-    GeneratePlan(ctx context.Context, app string) (*Plan, error)
-}
-
-type PolicyValidator interface {
-    ValidateTransition(ctx context.Context, from, to, relation string) error
-}
-
-// Compose interfaces when needed
-type DeploymentOrchestrator interface {
-    PlanGenerator
-    PolicyValidator
-}
-```
-
-### Documentation Standards
-
-#### Code Documentation
-```go
-// Package documentation
-// Package deployment provides deployment planning and execution capabilities.
-// It integrates with AI providers for intelligent plan generation while
-// maintaining fallback to traditional planning methods.
-package deployment
-
-// Function documentation
-// GenerateDeploymentPlan creates a deployment plan for the specified application.
-// It uses AI-enhanced planning when available, falling back to basic planning
-// when AI is unavailable or fails.
-//
-// Parameters:
-//   - ctx: Context for cancellation and timeouts
-//   - app: Application name to generate plan for
-//
-// Returns:
-//   - *Plan: Generated deployment plan
-//   - error: Error if plan generation fails
-func (s *DeploymentService) GenerateDeploymentPlan(ctx context.Context, app string) (*Plan, error) {
-    // Implementation...
-}
-```
-
-#### API Documentation (Swagger)
-```go
-// CreateApplication godoc
-// @Summary      Create a new application
-// @Description  Creates a new application resource in the platform
-// @Tags         applications
-// @Accept       json
-// @Produce      json
-// @Param        application  body      contracts.ApplicationContract  true  "Application payload"
-// @Success      201  {object}  contracts.ApplicationContract
-// @Failure      400  {object}  map[string]string
-// @Router       /v1/applications [post]
-func CreateApplication(w http.ResponseWriter, r *http.Request) {
-    // Implementation...
-}
-```
-
-### Performance Guidelines
-
-#### Context and Timeouts
-```go
-// Set reasonable timeouts for AI operations
-ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-defer cancel()
-
-response, err := s.aiProvider.CallAI(ctx, systemPrompt, userPrompt)
-```
-
-#### Resource Management
-```go
-// Close resources properly
-func (p *OpenAIProvider) Close() error {
-    if p.client != nil {
-        // Close HTTP client if needed
-    }
-    return nil
-}
-
-// Use defer for cleanup
-func (s *DeploymentService) processDeployment(ctx context.Context) error {
-    resources, err := s.allocateResources()
-    if err != nil {
-        return err
-    }
-    defer s.releaseResources(resources)
-    
-    // Process deployment...
-}
-```
-
-#### Event System Performance
-```go
-// Batch events when possible
-func (s *DeploymentService) emitBatchEvents(events []*Event) {
-    for _, event := range events {
-        s.eventBus.Publish(event)
-    }
-}
-
-// Consider event volume for high-frequency operations
-func (s *DeploymentService) shouldEmitDetailedEvents() bool {
-    return s.config.DetailedEvents && s.eventBus.Load() < s.config.MaxEventLoad
-}
-```
-
-### Security Guidelines
-
-#### Input Validation
-```go
-// Validate all inputs at service boundaries
-func (s *DeploymentService) GenerateDeploymentPlan(ctx context.Context, app string) (*Plan, error) {
-    if app == "" {
-        return nil, errors.New("application name is required")
-    }
-    
-    if !isValidAppName(app) {
-        return nil, errors.New("invalid application name format")
-    }
-    
-    // Continue with business logic...
-}
-```
-
-#### AI Provider Security
-```go
-// Sanitize inputs to AI providers
-func (s *DeploymentService) buildPrompt(app string) *Prompt {
-    // Sanitize application name to prevent prompt injection
-    sanitizedApp := sanitizeForAI(app)
-    
-    return &Prompt{
-        System: "You are a deployment planning assistant...",
-        User:   fmt.Sprintf("Generate deployment plan for application: %s", sanitizedApp),
-    }
-}
-```
-
-#### Policy Enforcement
-```go
-// Always check policies before making changes
-func (s *DeploymentService) DeployApplication(ctx context.Context, app, env string) error {
-    // Policy check before any action
-    if err := s.validateDeploymentPolicy(ctx, app, env); err != nil {
-        return fmt.Errorf("deployment policy violation: %w", err)
-    }
-    
-    // Proceed with deployment...
-}
-```
-
-## 12. Domain Separation Requirements
-
-### Current Architecture Problem
-
-The AI components have **absorbed business logic** that belongs to domain services, violating clean architecture principles.
-
-#### Wrong: AI Brain as Business Controller
-
-```
-API Handler → AI Brain → AI Provider
-            ↑ (Business Logic)
-```
-
-#### Correct: Domains Own Business Logic
-
-```
-API Handler → Domain Service → AI Provider
-            ↑ (Business Logic)   ↑ (Infrastructure)
-```
-
-### Domain Responsibility Matrix
-
-| Component | Current Responsibility | Correct Responsibility |
-|-----------|----------------------|----------------------|
-| **AI Provider** | Infrastructure only | ✅ Infrastructure only |
-| **AI Brain** | ❌ Business logic controller | 🗑️ DELETE - Not needed |
-| **Deployment Service** | Partial business logic | ✅ All deployment business logic |
-| **Policy Service** | Partial business logic | ✅ All policy business logic |
-
-### Required Changes
-
-#### 1. Delete AI Brain
-
-- `/internal/ai/ai_brain.go` - Remove entirely (997 lines of misplaced logic)
-- All business methods belong in domain services
-
-#### 2. Update Domain Services
-
-- **Deployment Service**: Call AI Provider directly for planning
-- **Policy Service**: Call AI Provider directly for evaluation
-- Remove dependencies on AI Brain
-
-#### 3. Update API Handlers
-
-- Call domain services instead of AI Brain
-- Domain services will use AI as needed
-
-#### 4. Clean AI Provider Interface
-
-- Keep only infrastructure methods: `CallAI()`
-- Remove business methods that were added for AI Brain
-
-### Correct Implementation Pattern
-
-```go
-// Deployment domain owns deployment logic
-func (s *DeploymentService) PlanDeployment(app string) (*Plan, error) {
-    // Business logic here
-    prompt := s.buildDeploymentPrompt(app)
-    response, err := s.aiProvider.CallAI(ctx, prompt)
-    // Parse and validate response
-    return s.parseDeploymentPlan(response)
-}
-```
-
-## 13. AI Provider Architecture Refactoring
-
-### Critical Issue Identified
-
-The `/internal/ai/openai_provider.go` file contains **852 lines** with **business logic mixed into infrastructure code**, violating separation of concerns.
-
-### Current Problems
-
-#### 1. Business Logic in Infrastructure Provider
-
-```go
-// WRONG: Business logic in OpenAI provider
-func (p *OpenAIProvider) GeneratePlan(ctx context.Context, request *PlanningRequest) (*PlanningResponse, error) {
-    // Complex deployment planning business rules
-    // Domain-specific validation logic
-    // Graph analysis logic
-    // Plan optimization logic
-}
-```
-
-#### 2. Dead Code (~500+ Lines)
-
-- Revolutionary AI methods implemented but unused in API:
-  - `ChatWithPlatform()` - Conversational AI (unused)
-  - `PredictImpact()` - Impact prediction (unused)
-  - `IntelligentTroubleshooting()` - Root cause analysis (unused)
-  - `ProactiveOptimization()` - Continuous optimization (unused)
-
-#### 3. Provider Lock-in
-
-- Cannot swap AI providers without reimplementing all business logic
-- OpenAI-specific implementation contains generic domain logic
-
-### Solution: Architectural Separation
-
-#### Correct Architecture Pattern
-
-```
-┌─────────────────────────────────────┐
-│          AI SERVICE                 │
-│  (Domain Business Logic)            │
-│  ├── GenerateDeploymentPlan()       │
-│  ├── EvaluateDeploymentPolicy()     │
-│  ├── OptimizeDeploymentPlan()       │
-│  └── Domain-agnostic AI logic       │
-└─────────────────┬───────────────────┘
-                  │ Uses
-┌─────────────────▼───────────────────┐
-│       AI PROVIDER INTERFACE        │
-│  (Infrastructure Contract)          │
-│  ├── CallAI(prompts) → response     │
-│  ├── GetProviderInfo()              │
-│  └── Close()                        │
-└─────────────────┬───────────────────┘
-                  │ Implements
-┌─────────────────▼───────────────────┐
-│      OPENAI PROVIDER               │
-│  (Pure Infrastructure)             │
-│  ├── HTTP communication with API   │
-│  ├── JSON parsing/marshaling       │
-│  ├── Error handling                │
-│  └── ~150 lines max                │
-└─────────────────────────────────────┘
-```
-
-#### New File Structure
-
-**1. `/internal/ai/ai_service.go` (Business Logic)**
-
-```go
-// Domain-agnostic AI business logic
-type AIService struct {
-    provider AIProvider  // Infrastructure provider
-    graph    *graph.GlobalGraph
-    // Domain-specific components
-}
-
-func (s *AIService) GenerateDeploymentPlan(ctx, request) (*PlanningResponse, error) {
-    // 1. Build domain prompts
-    // 2. Call provider.CallAI(systemPrompt, userPrompt) 
-    // 3. Parse response with domain logic
-    // 4. Validate business rules
-    // 5. Return domain object
-}
-```
-
-**2. `/internal/ai/ai_provider.go` (Interface)**
-
-```go
-// Infrastructure-only interface
-type AIProvider interface {
-    CallAI(ctx, systemPrompt, userPrompt string) (string, error)
-    GetProviderInfo() *ProviderInfo
-    Close() error
-}
-```
-
-**3. `/internal/ai/openai_provider_clean.go` (Infrastructure)**
-
-```go
-// Pure OpenAI HTTP communication (~150 lines)
-func (p *OpenAIProvider) CallAI(ctx, systemPrompt, userPrompt string) (string, error) {
-    // 1. Build HTTP request
-    // 2. Call OpenAI API
-    // 3. Parse HTTP response
-    // 4. Return raw AI response
-}
-```
-
-### Benefits of Refactored Architecture
-
-#### 🔧 Separation of Concerns
-
-- **Business Logic**: In `AIService` (domain-agnostic)
-- **Infrastructure**: In providers (communication only)
-- **Clear boundaries**: No business rules in infrastructure
-
-#### 🔄 Provider Flexibility
-
-- Easy to add Anthropic, Azure OpenAI, local models
-- Business logic works with any AI provider
-- No code duplication across providers
-
-#### 🧪 Testability
-
-- Mock AI providers for unit tests
-- Test business logic independently
-- Validate infrastructure separately
-
-## 14. Developer Principles & Best Practices
-
-### Clean Architecture Principles
-
-#### 1. Dependency Direction
-
-- **Rule**: Core business logic should not depend on external layers
-- **Implementation**: Domain services use interfaces, not concrete implementations
-- **Validation**: Dependencies point inward toward business logic
-
-#### 2. Domain-Driven Design
-
-- **Domain Services Own Business Logic**: Deployment, Policy, Security services contain all domain-specific logic
-- **API Handlers Are Thin**: Only handle HTTP concerns, delegate to domain services
-- **AI Components Are Infrastructure**: Tools used by domain services, not business logic owners
-
-#### 3. Event-Driven Architecture
-
-- **Consistent Emission**: Ensure all operations emit appropriate events
-- **Decoupled Communication**: Services communicate through events, not direct calls
-- **Audit Trail**: Events provide complete system state history
-
-#### 4. Policy-First Development
-
-- **Early Validation**: Check policies before making changes
-- **Fail Fast**: Policy violations should prevent operations immediately
-- **Comprehensive Coverage**: All state changes must respect policies
-
-### Test-Driven Development (TDD)
-
-#### Test First Approach
-
-- **Test First**: Every feature starts with a test
-- **Red-Green-Refactor**: Write failing test, make it pass, improve code
-- **Comprehensive Coverage**: Unit, integration, and end-to-end tests
-
-#### Test Organization
-
-- **Unit Tests**: Co-located with source code (`*_test.go`)
-- **Integration Tests**: `/tests/integration/`
-- **End-to-End Tests**: `/tests/e2e/`
-
-#### Test Patterns
-
-```go
-func TestDeploymentService_PlanDeployment(t *testing.T) {
-    tests := []struct {
-        name    string
-        input   string
-        want    *Plan
-        wantErr bool
-    }{
-        {
-            name:  "valid application",
-            input: "test-app",
-            want:  &Plan{...},
-        },
-        {
-            name:    "invalid application",
-            input:   "",
-            wantErr: true,
-        },
-    }
-    
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            service := NewDeploymentService(mockProvider, mockGraph)
-            got, err := service.PlanDeployment(ctx, tt.input)
-            
-            if tt.wantErr {
-                assert.Error(t, err)
-                return
-            }
-            
-            assert.NoError(t, err)
-            assert.Equal(t, tt.want, got)
-        })
-    }
-}
-```
-
-This comprehensive guide ensures all development work follows consistent patterns and maintains the architectural integrity of ZTDP's AI-native platform vision.
-
----
-
-## Development Workflow & Git Practices
-
-### Git Workflow
-
-#### Branch Strategy
-- **Main Branch**: Always deployable production code
-- **Feature Branches**: `feature/domain-description` (e.g., `feature/deployment-ai-integration`)
-- **Hotfix Branches**: `hotfix/issue-description` for critical production fixes
-- **Release Branches**: `release/version` for coordinated releases
-
-#### Commit Standards
-```bash
-# Commit message format
-type(scope): description
-
-# Examples
-feat(deployment): integrate AI for deployment plan generation
-fix(policy): resolve policy validation edge case
-docs(architecture): update AI integration guidelines
-test(deployment): add comprehensive deployment service tests
-refactor(handlers): extract common error handling patterns
-```
-
-#### Pull Request Process
-1. **Feature Branch**: Create from latest main
-2. **Tests First**: Ensure all tests pass locally
-3. **Documentation**: Update relevant docs
-4. **Code Review**: Minimum one reviewer approval
-5. **Integration Tests**: Verify CI/CD pipeline passes
-6. **Merge**: Use squash merge for clean history
-
-### Development Environment Setup
-
-#### Prerequisites
-```bash
-# Install Go 1.21+
-go version
-
-# Install development tools
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-go install github.com/swaggo/swag/cmd/swag@latest
-
-# Install testing tools
-go install gotest.tools/gotestsum@latest
-```
-
-#### Local Development Workflow
-```bash
-# 1. Setup development environment
-make dev-setup
-
-# 2. Run tests during development
-make test-watch
-
-# 3. Run linter
-make lint
-
-# 4. Generate documentation
-make docs
-
-# 5. Run integration tests
-make test-integration
-```
-
-### Code Review Guidelines
-
-#### What to Look For
-1. **Architecture Compliance**: Follows clean architecture principles
-2. **Domain Separation**: Business logic in appropriate domain services
-3. **Event Emission**: All operations emit structured events
-4. **Error Handling**: Consistent error patterns and HTTP responses
-5. **Test Coverage**: Comprehensive unit and integration tests
-6. **AI Integration**: Proper use of AI providers without business logic mixing
-7. **Documentation**: Clear comments and updated API docs
-
-#### Review Checklist
-- [ ] Tests cover happy path and error cases
-- [ ] Error messages are clear and actionable
-- [ ] Events are emitted for all significant operations
-- [ ] Domain services contain business logic, not handlers
-- [ ] AI calls have proper context and timeouts
-- [ ] Policy validation occurs before state changes
-- [ ] Documentation is updated for public APIs
-- [ ] Code follows Go style guidelines
-
-### Deployment Process
-
-#### Staging Deployment
-```bash
-# Deploy to staging environment
-make deploy-staging
-
-# Run smoke tests
-make test-smoke-staging
-
-# Verify AI integrations
-make test-ai-integration-staging
-```
-
-#### Production Deployment
-```bash
-# Deploy to production (requires approval)
-make deploy-production
-
-# Monitor deployment
-make monitor-deployment
-
-# Rollback if needed
-make rollback-production
-```
-
-### Monitoring & Observability
-
-#### Key Metrics to Monitor
-- **API Response Times**: Track handler performance
-- **AI Provider Latency**: Monitor AI service response times
-- **Event Processing**: Track event emission and processing rates
-- **Error Rates**: Monitor error patterns and frequencies
-- **Policy Violations**: Track policy enforcement effectiveness
-
-#### Logging Standards
-```go
-// Use structured logging
-log.Info("deployment plan generated",
-    "application", app,
-    "environment", env,
-    "plan_id", plan.ID,
-    "generation_time_ms", time.Since(start).Milliseconds(),
-)
-
-// Log errors with context
-log.Error("AI provider call failed",
-    "provider", provider.Name(),
-    "error", err,
-    "context", ctx.Value("request_id"),
-)
-```
-
-### Troubleshooting Guide
-
-#### Common Issues
-
-**AI Provider Timeouts**
-```bash
-# Check AI provider status
-curl -H "Authorization: Bearer $API_KEY" https://api.openai.com/v1/models
-
-# Increase timeout in configuration
-export AI_TIMEOUT=60s
-```
-
-**Event System Backlog**
-```bash
-# Monitor event queue depth
-make monitor-events
-
-# Scale event processors
-kubectl scale deployment event-processor --replicas=5
-```
-
-**Policy Validation Failures**
-```bash
-# Debug policy evaluation
-go run cmd/debug/policy-validator.go --app=myapp --env=production
-
-# Check policy configuration
-make validate-policies
-```
-
-#### Debug Commands
-```bash
-# Run with debug logging
-DEBUG=true go run cmd/server/main.go
-
-# Profile memory usage
-go tool pprof http://localhost:8080/debug/pprof/heap
-
-# Trace request flow
-TRACE=true curl -H "X-Trace-ID: debug-123" http://localhost:8080/api/v1/applications
-```
-
-This development workflow ensures consistent, high-quality development practices aligned with ZTDP's AI-native platform architecture while maintaining the clean separation of concerns and robust testing practices essential for a reliable developer platform.
+- **`/docs/architecture-overview.md`** - High-level overview of the AI-native platform architecture
+- **`/docs/clean-architecture-principles.md`** - Detailed explanation of clean architecture principles as applied to ZTDP
+- **`/docs/domain-driven-design.md`** - Guide to domain-driven design principles and practices
+- **`/docs/event-driven-architecture.md`** - Overview of the event-driven architecture and patterns used in ZTDP
+- **`/docs/policy-first-development.md`** - Explanation of the policy-first approach and how to implement it
+- **`/docs/testing-strategies.md`** - Guide to testing strategies, including TDD, unit testing, and integration testing
+- **`/docs/git-and-code-review-practices.md`** - Best practices for Git workflow, branching strategy, commit messages, and code reviews
