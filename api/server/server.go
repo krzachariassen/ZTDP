@@ -77,13 +77,21 @@ func SetupRoutes(r *chi.Mux) {
 		v1.Get("/policies/{policy_id}", handlers.GetPolicy)
 
 		// =============================================================================
-		// AI ENDPOINTS
+		// AI ENDPOINTS (Infrastructure/Platform Level)
 		// =============================================================================
-		v1.Post("/ai/plans/generate", handlers.AIGeneratePlan)
-		v1.Post("/ai/policies/evaluate", handlers.AIEvaluatePolicy)
-		v1.Post("/ai/plans/optimize", handlers.AIOptimizePlan)
-		v1.Get("/ai/provider/status", handlers.AIProviderStatus)
-		v1.Get("/ai/metrics", handlers.AIMetrics)
+		// REMOVED: AI planning endpoints (now integrated into main deployment endpoint)
+		// - /ai/plans/generate -> Use POST /applications/{app}/deploy?plan=true
+		// - /ai/plans/optimize -> Use POST /applications/{app}/deploy?optimize=true
+		// - /ai/impact/analyze -> Use POST /applications/{app}/deploy?analyze=true
+		// - /ai/policies/evaluate -> Internal to deployment process
+
+		// Keep only platform-level AI endpoints that provide genuine business value
+		v1.Post("/ai/troubleshoot", handlers.AITroubleshootDeployment)  // Standalone diagnostic capability
+		v1.Post("/ai/proactive-optimize", handlers.AIProactiveOptimize) // Available in operations.go
+		v1.Post("/ai/learn-deployment", handlers.AILearnFromDeployment) // Available in operations.go
+		v1.Post("/ai/chat", handlers.AIChatWithPlatform)                // Available in ai.go
+		v1.Get("/ai/provider/status", handlers.AIProviderStatus)        // Available in ai.go
+		v1.Get("/ai/metrics", handlers.AIMetrics)                       // Available in ai.go
 
 		// =============================================================================
 		// REAL-TIME LOGS & EVENTS
@@ -98,4 +106,6 @@ func SetupRoutes(r *chi.Mux) {
 	r.Handle("/graph.html", http.FileServer(http.Dir("static")))
 	r.Handle("/graph-modern.html", http.FileServer(http.Dir("static")))
 	r.Handle("/graph-modern.css", http.FileServer(http.Dir("static")))
+	r.Handle("/chat.html", http.FileServer(http.Dir("static")))
+
 }

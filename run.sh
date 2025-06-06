@@ -9,3 +9,4 @@ redis-cli -h localhost -a BVogb1sEPqA FLUSHALL
 go run ./cmd/api
 
 go run ./test/controlplane/graph_demo_api.go
+

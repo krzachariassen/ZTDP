@@ -2,8 +2,10 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/logging"
 )
@@ -74,6 +76,12 @@ RESPONSE GUIDELINES:
 5. Offer proactive suggestions when relevant
 6. Maintain technical accuracy while being accessible
 
+RESPONSE FORMAT:
+- Provide ONLY the conversational message text
+- Do NOT wrap in JSON or any other format
+- Do NOT include metadata like confidence or timestamps
+- Just return the natural language response
+
 TONE: Professional but friendly, knowledgeable but not condescending.`,
 		len(context.Applications),
 		len(context.Services),
@@ -115,13 +123,44 @@ func (engine *ConversationEngine) parseConversationalResponse(
 	intent *Intent,
 	actions []Action,
 ) (*ConversationalResponse, error) {
+	// Clean the response
+	rawResponse = strings.TrimSpace(rawResponse)
+	
+	var finalMessage string
+	
+	// Try to parse as JSON first (fallback for old responses)
+	if strings.HasPrefix(rawResponse, "{") {
+		var jsonResponse map[string]interface{}
+		if err := json.Unmarshal([]byte(rawResponse), &jsonResponse); err == nil {
+			// Extract message from various possible JSON structures
+			if response, ok := jsonResponse["response"].(map[string]interface{}); ok {
+				if message, ok := response["message"].(string); ok {
+					finalMessage = message
+				}
+			} else if message, ok := jsonResponse["message"].(string); ok {
+				finalMessage = message
+			} else if answer, ok := jsonResponse["answer"].(string); ok {
+				finalMessage = answer
+			} else {
+				finalMessage = rawResponse // Fallback to raw if we can't parse
+			}
+		} else {
+			finalMessage = rawResponse // Not valid JSON, use as-is
+		}
+	} else {
+		// Use as plain text
+		finalMessage = rawResponse
+	}
+
 	// Parse the response into structured format
 	response := &ConversationalResponse{
-		Message:   strings.TrimSpace(rawResponse),
-		Intent:    intent.Type,
-		Actions:   actions,
-		Insights:  engine.extractInsights(rawResponse),
-		Timestamp: context.Background(), // Will be set properly in actual implementation
+		Answer:     finalMessage, // Primary field for UI
+		Message:    finalMessage, // Legacy compatibility
+		Intent:     intent.Type,
+		Actions:    actions,
+		Insights:   engine.extractInsights(finalMessage),
+		Confidence: intent.Confidence, // Use intent confidence
+		Timestamp:  time.Now(),
 	}
 
 	return response, nil

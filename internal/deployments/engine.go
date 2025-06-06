@@ -49,13 +49,13 @@ type Engine struct {
 func NewEngine(g *graph.GlobalGraph, agent *ai.PlatformAgent) *Engine {
 	logger := logging.GetLogger().ForComponent("deployment-engine")
 
-	// Create AI deployment planner - simplified interface, AI discovers edges automatically
-	var planner DeploymentPlanner
-	if agent != nil {
-		planner = NewAIDeploymentPlanner(g, agent.Provider())
-	} else {
-		planner = NewAIDeploymentPlanner(g, nil)
+	// Create AI deployment planner - AI agent is required for AI-native platform
+	if agent == nil {
+		logger.Error("❌ AI agent is required for deployment engine - this is an AI-native platform")
+		return nil
 	}
+	
+	planner := NewAIDeploymentPlanner(g, agent.Provider())
 
 	return &Engine{
 		graph:   g,
@@ -70,14 +70,14 @@ func NewEngine(g *graph.GlobalGraph, agent *ai.PlatformAgent) *Engine {
 func NewEngineWithProvider(g *graph.GlobalGraph, provider ai.AIProvider) *Engine {
 	logger := logging.GetLogger().ForComponent("deployment-engine")
 
-	// Create AI deployment planner directly with provider
-	var planner DeploymentPlanner
-	if provider != nil {
-		planner = NewAIDeploymentPlanner(g, provider)
-	} else {
-		// Fall back to AI planner with nil provider (it will handle fallback internally)
-		planner = NewAIDeploymentPlanner(g, nil)
+	// Create AI deployment planner - AI provider is required for AI-native platform
+	if provider == nil {
+		logger.Error("❌ AI provider is required for deployment engine - this is an AI-native platform")
+		// Return nil engine since we can't operate without AI
+		return nil
 	}
+	
+	planner := NewAIDeploymentPlanner(g, provider)
 
 	return &Engine{
 		graph:   g,

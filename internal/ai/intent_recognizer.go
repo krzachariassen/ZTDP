@@ -59,6 +59,7 @@ func (recognizer *IntentRecognizer) buildIntentSystemPrompt(context *PlatformCon
 	return `You are an AI intent recognition system for ZTDP infrastructure platform.
 
 INTENT TYPES:
+- "application_creation": Create new applications, register applications
 - "deployment": Deploy, update, rollback applications
 - "policy_check": Validate policies, check compliance  
 - "analysis": Analyze platform state, show status, health checks
