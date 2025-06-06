@@ -12,7 +12,7 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/logging"
 )
 
-// Service wraps PolicyEvaluator and provides business logic methods for policy operations
+// Service wraps Policy Evaluator and provides business logic methods for policy operations
 // Enhanced with AI-first policy evaluation capabilities using clean AI provider interface
 type Service struct {
 	evaluator   *PolicyEvaluator
@@ -243,20 +243,19 @@ func (s *Service) GetPolicy(policyID string) (*graph.Node, error) {
 func (s *Service) EvaluateDeploymentPolicies(ctx context.Context, applicationID string, environmentID string) (*ai.PolicyEvaluation, error) {
 	s.logger.Info("🔍 Evaluating deployment policies: %s -> %s", applicationID, environmentID)
 
-	// Try AI evaluation first
-	if s.aiProvider != nil {
-		evaluation, err := s.evaluatePoliciesWithAI(ctx, applicationID, environmentID)
-		if err != nil {
-			s.logger.Warn("⚠️ AI policy evaluation failed, falling back to basic evaluation: %v", err)
-		} else {
-			s.logger.Info("✅ AI policy evaluation completed (compliant: %t)", evaluation.Compliant)
-			return evaluation, nil
-		}
+	// AI provider is required for AI-native platform
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider is required for policy evaluation - this is an AI-native platform")
 	}
 
-	// Fallback to basic policy evaluation
-	s.logger.Info("🔄 Using basic policy evaluation (AI unavailable)")
-	return s.evaluateBasicPolicyCompliance(applicationID, environmentID), nil
+	// Use AI evaluation
+	evaluation, err := s.evaluatePoliciesWithAI(ctx, applicationID, environmentID)
+	if err != nil {
+		return nil, fmt.Errorf("AI policy evaluation failed: %w", err)
+	}
+
+	s.logger.Info("✅ AI policy evaluation completed (compliant: %t)", evaluation.Compliant)
+	return evaluation, nil
 }
 
 // ValidateTransitionWithAI uses AI to validate complex policy transitions
@@ -283,6 +282,73 @@ func (s *Service) ValidateTransitionWithAI(ctx context.Context, fromID, toID, ed
 // HasAICapabilities returns whether AI policy evaluation is available
 func (s *Service) HasAICapabilities() bool {
 	return s.aiProvider != nil
+}
+
+// EvaluatePolicyWithAI provides AI-powered policy evaluation for specific actions
+// This method is called by the API handler and owns the business logic for AI policy evaluation
+func (s *Service) EvaluatePolicyWithAI(ctx context.Context, applicationID, environment, action string, context map[string]interface{}, aiProvider ai.AIProvider) (*ai.PolicyEvaluation, error) {
+	s.logger.Info("🔍 Evaluating policy with AI: %s -> %s (action: %s)", applicationID, environment, action)
+
+	// Use the provided AI provider if given, otherwise use service's AI provider
+	provider := s.aiProvider
+	if aiProvider != nil {
+		provider = aiProvider
+	}
+
+	// Try AI evaluation first
+	if provider != nil {
+		evaluation, err := s.evaluatePolicyWithAI(ctx, applicationID, environment, action, context, provider)
+		if err != nil {
+			s.logger.Warn("⚠️ AI policy evaluation failed, falling back to basic evaluation: %v", err)
+		} else {
+			s.logger.Info("✅ AI policy evaluation completed (compliant: %t)", evaluation.Compliant)
+			return evaluation, nil
+		}
+	}
+
+	// Fallback to basic policy evaluation
+	s.logger.Info("🔄 Using basic policy evaluation (AI unavailable)")
+	return s.evaluateBasicPolicyCompliance(applicationID, environment), nil
+}
+
+// evaluatePolicyWithAI performs AI-driven policy evaluation for specific actions
+func (s *Service) evaluatePolicyWithAI(ctx context.Context, applicationID, environment, action string, requestContext map[string]interface{}, provider ai.AIProvider) (*ai.PolicyEvaluation, error) {
+	// Build comprehensive policy context for AI evaluation
+	policyContext := map[string]interface{}{
+		"application_id": applicationID,
+		"environment":    environment,
+		"action":         action,
+		"context":        requestContext,
+		"timestamp":      time.Now(),
+	}
+
+	// Add graph context if available
+	if graphContext, err := s.buildPolicyEvaluationContext(applicationID, environment); err == nil {
+		for k, v := range graphContext {
+			policyContext[k] = v
+		}
+	}
+
+	// Build prompts for AI
+	systemPrompt := s.buildPolicyEvaluationSystemPrompt()
+	userPrompt, err := s.buildPolicyEvaluationUserPrompt(policyContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build user prompt: %w", err)
+	}
+
+	// Call AI provider
+	response, err := provider.CallAI(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("AI call failed: %w", err)
+	}
+
+	// Parse response
+	evaluation, err := s.parsePolicyEvaluationResponse(response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse AI response: %w", err)
+	}
+
+	return evaluation, nil
 }
 
 // evaluatePoliciesWithAI performs AI-driven policy evaluation
@@ -682,4 +748,42 @@ func (s *Service) isRelatedToApplication(graph *graph.Graph, nodeID, application
 	}
 
 	return false
+}
+
+// EvaluatePolicy evaluates a policy request using AI or fallback logic
+// This method implements the PolicyService interface for AI platform agent integration
+func (s *Service) EvaluatePolicy(ctx context.Context, request *ai.PolicyEvaluationRequest) (*ai.PolicyEvaluation, error) {
+	if request == nil {
+		return nil, fmt.Errorf("policy evaluation request cannot be nil")
+	}
+
+	s.logger.Info("🔍 Evaluating policy request for application: %s -> %s (action: %s)",
+		request.ApplicationID, request.EnvironmentID, request.Action)
+
+	// Use the existing AI-powered policy evaluation logic
+	return s.EvaluateDeploymentPolicies(ctx, request.ApplicationID, request.EnvironmentID)
+}
+
+// ValidateDeployment validates if a deployment is allowed by policies
+// This method implements the PolicyService interface for AI platform agent integration
+func (s *Service) ValidateDeployment(ctx context.Context, app, env string) error {
+	s.logger.Info("🔒 Validating deployment policies: %s -> %s", app, env)
+
+	// Evaluate deployment policies using AI or fallback logic
+	evaluation, err := s.EvaluateDeploymentPolicies(ctx, app, env)
+	if err != nil {
+		return fmt.Errorf("policy evaluation failed: %w", err)
+	}
+
+	// Check if deployment is compliant with policies
+	if !evaluation.Compliant {
+		violationMessages := []string{}
+		for _, violation := range evaluation.Violations {
+			violationMessages = append(violationMessages, violation.Reason)
+		}
+		return fmt.Errorf("deployment policy violations: %v", violationMessages)
+	}
+
+	s.logger.Info("✅ Deployment passed all policy validations")
+	return nil
 }

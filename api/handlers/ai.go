@@ -10,29 +10,10 @@ import (
 	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/ai"
+	"github.com/krzachariassen/ZTDP/internal/application"
 	"github.com/krzachariassen/ZTDP/internal/deployments"
 	"github.com/krzachariassen/ZTDP/internal/policies"
 )
-
-// AIGeneratePlanRequest represents the request for AI plan generation
-// AIGeneratePlanRequest represents the request for AI plan generation
-type AIGeneratePlanRequest struct {
-	AppName   string   `json:"app_name"`
-	EdgeTypes []string `json:"edge_types,omitempty"`
-	Timeout   int      `json:"timeout,omitempty"` // Timeout in seconds
-}
-
-// AIEvaluatePolicyRequest represents the request for AI policy evaluation
-type AIEvaluatePolicyRequest struct {
-	ApplicationID string `json:"application_id"`
-	EnvironmentID string `json:"environment_id"`
-}
-
-// AIOptimizePlanRequest represents the request for AI plan optimization
-type AIOptimizePlanRequest struct {
-	CurrentPlan   []ai.DeploymentStep `json:"current_plan"`
-	ApplicationID string              `json:"application_id"`
-}
 
 // AIProviderInfo represents AI provider information
 type AIProviderInfo struct {
@@ -42,190 +23,6 @@ type AIProviderInfo struct {
 	Available    bool              `json:"available"`
 	Model        string            `json:"model,omitempty"`
 	Config       map[string]string `json:"config,omitempty"`
-}
-
-// AIGeneratePlan godoc
-// @Summary      Generate AI deployment plan
-// @Description  Uses AI to generate an intelligent deployment plan for an application
-// @Tags         ai
-// @Accept       json
-// @Produce      json
-// @Param        request  body  AIGeneratePlanRequest  true  "AI plan generation request"
-// @Success      200  {object}  ai.PlanResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /v1/ai/plans/generate [post]
-func AIGeneratePlan(w http.ResponseWriter, r *http.Request) {
-	var req AIGeneratePlanRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if req.AppName == "" {
-		WriteJSONError(w, "app_name is required", http.StatusBadRequest)
-		return
-	}
-
-	// Default timeout
-	timeout := 30 * time.Second
-	if req.Timeout > 0 {
-		timeout = time.Duration(req.Timeout) * time.Second
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	// Create AI platform agent (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	defer agent.Close()
-
-	// Use deployment service for plan generation (clean architecture - business logic in domain service)
-	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
-	plan, err := deploymentService.GenerateDeploymentPlan(ctx, req.AppName)
-	if err != nil {
-		WriteJSONError(w, "Deployment plan generation failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Convert to API response format
-	planResponse := &ai.PlanningResponse{
-		Plan:       plan,
-		Confidence: 0.9, // Default confidence since domain service doesn't return it yet
-		Metadata: map[string]interface{}{
-			"source":             "deployment-service",
-			"clean_architecture": true,
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(planResponse)
-}
-
-// Helper function to convert deployment results to legacy format
-func convertResultToDeploymentSteps(deployments []string) []*ai.DeploymentStep {
-	steps := make([]*ai.DeploymentStep, len(deployments))
-	for i, serviceName := range deployments {
-		steps[i] = &ai.DeploymentStep{
-			ID:          serviceName,
-			Type:        "deploy",
-			Description: "Deploy " + serviceName,
-			Metadata: map[string]interface{}{
-				"position": i + 1,
-				"total":    len(deployments),
-			},
-		}
-	}
-	return steps
-}
-
-// AIEvaluatePolicy godoc
-// @Summary      Evaluate deployment policies using AI
-// @Description  Uses AI to evaluate deployment policies for an application and environment
-// @Tags         ai
-// @Accept       json
-// @Produce      json
-// @Param        request  body  AIEvaluatePolicyRequest  true  "AI policy evaluation request"
-// @Success      200  {object}  ai.PolicyEvaluation
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /v1/ai/policies/evaluate [post]
-func AIEvaluatePolicy(w http.ResponseWriter, r *http.Request) {
-	var req AIEvaluatePolicyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if req.ApplicationID == "" {
-		WriteJSONError(w, "application_id is required", http.StatusBadRequest)
-		return
-	}
-
-	if req.EnvironmentID == "" {
-		WriteJSONError(w, "environment_id is required", http.StatusBadRequest)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Use policy service for evaluation (clean architecture - business logic in domain service)
-	policyService := policies.NewService(getGraphStore(), GlobalGraph, "default")
-	evaluation, err := policyService.EvaluateDeploymentPolicies(ctx, req.ApplicationID, req.EnvironmentID)
-	if err != nil {
-		WriteJSONError(w, "AI policy evaluation failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(evaluation)
-}
-
-// AIOptimizePlan godoc
-// @Summary      Optimize deployment plan using AI
-// @Description  Uses AI to optimize an existing deployment plan for better performance
-// @Tags         ai
-// @Accept       json
-// @Produce      json
-// @Param        request  body  AIOptimizePlanRequest  true  "AI plan optimization request"
-// @Success      200  {object}  ai.PlanningResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /v1/ai/plans/optimize [post]
-func AIOptimizePlan(w http.ResponseWriter, r *http.Request) {
-	var req AIOptimizePlanRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if len(req.CurrentPlan) == 0 {
-		WriteJSONError(w, "current_plan is required", http.StatusBadRequest)
-		return
-	}
-
-	if req.ApplicationID == "" {
-		WriteJSONError(w, "application_id is required", http.StatusBadRequest)
-		return
-	}
-
-	// Create deployment plan from the current plan steps
-	steps := make([]ai.DeploymentStep, len(req.CurrentPlan))
-	for i := range req.CurrentPlan {
-		steps[i] = req.CurrentPlan[i]
-	}
-
-	plan := &ai.DeploymentPlan{
-		ID:            "optimize-" + req.ApplicationID,
-		Application:   req.ApplicationID,
-		Environment:   "default",
-		Steps:         steps,
-		EstimatedTime: "TBD",
-		Metadata: map[string]interface{}{
-			"optimization_request": true,
-			"timestamp":            time.Now(),
-		},
-	}
-
-	// TODO: Implement plan optimization in deployment service
-	// For now, return the original plan with a note about the clean architecture migration
-	optimization := &ai.PlanningResponse{
-		Plan:       plan,
-		Confidence: 0.85,
-		Metadata: map[string]interface{}{
-			"response_type": "clean_architecture_placeholder",
-			"message":       "Plan optimization will be implemented in deployment service",
-			"note":          "Clean architecture migration completed - business logic moved to domain services",
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(optimization)
 }
 
 // AIProviderStatus godoc
@@ -238,7 +35,7 @@ func AIOptimizePlan(w http.ResponseWriter, r *http.Request) {
 // @Router       /v1/ai/provider/status [get]
 func AIProviderStatus(w http.ResponseWriter, r *http.Request) {
 	// Try to create AI platform agent to check availability
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil)
+	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
 
 	providerInfo := AIProviderInfo{
 		Available:    false,
@@ -333,47 +130,6 @@ type AIChatRequest struct {
 	Timeout int      `json:"timeout,omitempty"`
 }
 
-// AIImpactRequest represents the request for impact prediction
-type AIImpactRequest struct {
-	Changes     []map[string]interface{} `json:"changes"`
-	Environment string                   `json:"environment"`
-	Scope       string                   `json:"scope,omitempty"`
-	Timeframe   string                   `json:"timeframe,omitempty"`
-	Timeout     int                      `json:"timeout,omitempty"`
-}
-
-// AITroubleshootRequest represents the request for intelligent troubleshooting
-type AITroubleshootRequest struct {
-	IncidentID  string                   `json:"incident_id"`
-	Description string                   `json:"description"`
-	Symptoms    []string                 `json:"symptoms,omitempty"`
-	Timeline    []map[string]interface{} `json:"timeline,omitempty"`
-	Logs        []string                 `json:"logs,omitempty"`
-	Metrics     map[string]interface{}   `json:"metrics,omitempty"`
-	Environment string                   `json:"environment,omitempty"`
-	Timeout     int                      `json:"timeout,omitempty"`
-}
-
-// AIOptimizeRequest represents the request for proactive optimization
-type AIOptimizeRequest struct {
-	Target      string                 `json:"target"`
-	Areas       []string               `json:"areas,omitempty"`
-	Constraints map[string]interface{} `json:"constraints,omitempty"`
-	Goals       []string               `json:"goals,omitempty"`
-	Timeout     int                    `json:"timeout,omitempty"`
-}
-
-// AILearnRequest represents the request for learning from deployments
-type AILearnRequest struct {
-	DeploymentID string                 `json:"deployment_id"`
-	Success      bool                   `json:"success"`
-	Duration     string                 `json:"duration,omitempty"`
-	Issues       []string               `json:"issues,omitempty"`
-	Metrics      map[string]interface{} `json:"metrics,omitempty"`
-	Context      map[string]interface{} `json:"context,omitempty"`
-	Timeout      int                    `json:"timeout,omitempty"`
-}
-
 // AIChatWithPlatform godoc
 // @Summary      Chat with Platform using AI
 // @Description  Revolutionary conversational AI that allows natural language interaction with platform graph for insights and actions
@@ -403,8 +159,26 @@ func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
 		timeout = time.Duration(req.Timeout) * time.Second
 	}
 
-	// Create AI platform agent
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil)
+	// Create AI provider for domain services
+	aiProvider, err := createAIProvider()
+	if err != nil {
+		WriteJSONError(w, "AI provider unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	// Create deployment service with AI provider
+	deploymentService := deployments.NewDeploymentService(GlobalGraph, aiProvider)
+
+	// Create policy service with proper dependencies
+	graphStore := getGraphStore()
+	env := getEnvOrDefault("ZTDP_ENVIRONMENT", "default")
+	policyService := policies.NewService(graphStore, GlobalGraph, env)
+
+	// Create application service
+	applicationService := application.NewService(GlobalGraph)
+
+	// Create AI platform agent with domain services injected
+	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, deploymentService, policyService, applicationService)
 	if err != nil {
 		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
 		return
@@ -425,296 +199,32 @@ func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// AIPredictImpact godoc
-// @Summary      Predict deployment impact using AI
-// @Description  Revolutionary AI-driven impact prediction that simulates deployment consequences before they happen
-// @Tags         ai,revolutionary
-// @Accept       json
-// @Produce      json
-// @Param        request  body  AIImpactRequest  true  "Impact prediction request"
-// @Success      200  {object}  ai.ImpactPrediction
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /v1/ai/predict-impact [post]
-func AIPredictImpact(w http.ResponseWriter, r *http.Request) {
-	var req AIImpactRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
+// createAIProvider creates an AI provider based on environment configuration
+func createAIProvider() (ai.AIProvider, error) {
+	providerName := os.Getenv("AI_PROVIDER")
+	if providerName == "" {
+		providerName = "openai"
 	}
 
-	if len(req.Changes) == 0 {
-		WriteJSONError(w, "changes are required", http.StatusBadRequest)
-		return
-	}
-
-	if req.Environment == "" {
-		WriteJSONError(w, "environment is required", http.StatusBadRequest)
-		return
-	}
-
-	// Default timeout
-	timeout := 90 * time.Second
-	if req.Timeout > 0 {
-		timeout = time.Duration(req.Timeout) * time.Second
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	// Convert API request to internal format
-	changes := make([]ai.ProposedChange, len(req.Changes))
-	for i, change := range req.Changes {
-		// Extract fields from map with safe defaults
-		changeType, _ := change["type"].(string)
-		target, _ := change["target"].(string)
-
-		changes[i] = ai.ProposedChange{
-			Type:        changeType,
-			Target:      target,
-			Description: fmt.Sprintf("%v", change),
-			Metadata:    change,
+	switch providerName {
+	case "openai":
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("OPENAI_API_KEY environment variable is required")
 		}
-	}
 
-	// Create AI platform agent (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	defer agent.Close()
-
-	// Use deployment service for impact prediction (clean architecture - business logic in domain service)
-	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
-	prediction, err := deploymentService.PredictDeploymentImpact(ctx, changes, req.Environment)
-	if err != nil {
-		WriteJSONError(w, "Impact prediction failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(prediction)
-}
-
-// AITroubleshoot godoc
-// @Summary      Intelligent troubleshooting using AI
-// @Description  Revolutionary AI-driven root cause analysis and intelligent problem diagnosis beyond traditional monitoring
-// @Tags         ai,revolutionary
-// @Accept       json
-// @Produce      json
-// @Param        request  body  AITroubleshootRequest  true  "Troubleshooting request"
-// @Success      200  {object}  ai.TroubleshootingResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /v1/ai/troubleshoot [post]
-func AITroubleshoot(w http.ResponseWriter, r *http.Request) {
-	var req AITroubleshootRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if req.IncidentID == "" {
-		WriteJSONError(w, "incident_id is required", http.StatusBadRequest)
-		return
-	}
-
-	if req.Description == "" {
-		WriteJSONError(w, "description is required", http.StatusBadRequest)
-		return
-	}
-
-	// Default timeout
-	timeout := 120 * time.Second
-	if req.Timeout > 0 {
-		timeout = time.Duration(req.Timeout) * time.Second
-	}
-
-	// Create AI platform agent (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	defer agent.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	// Use deployment service for troubleshooting (clean architecture - business logic in domain service)
-	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
-	response, err := deploymentService.TroubleshootDeployment(ctx, req.IncidentID, req.Description, req.Symptoms)
-	if err != nil {
-		WriteJSONError(w, "Intelligent troubleshooting failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// AIProactiveOptimize godoc
-// @Summary      Proactive optimization using AI
-// @Description  Revolutionary AI that continuously analyzes patterns and recommends architectural optimizations before problems occur
-// @Tags         ai,revolutionary
-// @Accept       json
-// @Produce      json
-// @Param        request  body  AIOptimizeRequest  true  "Proactive optimization request"
-// @Success      200  {object}  ai.OptimizationRecommendations
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /v1/ai/proactive-optimize [post]
-func AIProactiveOptimize(w http.ResponseWriter, r *http.Request) {
-	var req AIOptimizeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if req.Target == "" {
-		WriteJSONError(w, "target is required", http.StatusBadRequest)
-		return
-	}
-
-	// Default focus areas if not provided
-	focus := req.Areas
-	if len(focus) == 0 {
-		focus = []string{"performance", "reliability", "security", "cost"}
-	}
-
-	// Create AI platform agent (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	defer agent.Close()
-
-	// TODO: Implement optimization in deployment service following clean architecture
-	// For now, return a placeholder response while maintaining clean architecture
-	recommendations := &ai.OptimizationRecommendations{
-		Recommendations: []ai.Recommendation{
-			{
-				Title:       "Clean Architecture Compliance",
-				Description: "Optimization feature will be implemented in deployment service following clean architecture principles",
-				Impact:      "Medium",
-				Effort:      "Low",
-				Priority:    "Medium",
-				Category:    "architecture",
-				Steps:       []string{"Implement in deployment service", "Add AI integration", "Test and validate"},
-				Risks:       []string{"None - maintaining clean architecture"},
-				Benefits:    []string{"Proper domain separation", "Testable code", "Maintainable architecture"},
-				Timeline:    "Future implementation",
-			},
-		},
-		Patterns:        []string{"clean_architecture", "domain_separation"},
-		Confidence:      1.0,
-		EstimatedImpact: "This endpoint maintains clean architecture principles",
-		Priority:        "Medium",
-		Timeline:        "Future implementation",
-		Resources:       []string{"deployment_service", "ai_provider"},
-		RiskLevel:       "Low",
-		Validation:      []string{"Follow clean architecture", "Test thoroughly"},
-		Metadata: map[string]interface{}{
-			"status": "placeholder - awaiting deployment service implementation",
-			"target": req.Target,
-			"areas":  focus,
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(recommendations)
-}
-
-// AILearnFromDeployment godoc
-// @Summary      Learn from deployment outcomes using AI
-// @Description  Revolutionary AI that learns from deployment outcomes to continuously improve future deployments
-// @Tags         ai,revolutionary
-// @Accept       json
-// @Produce      json
-// @Param        request  body  AILearnRequest  true  "Learning request"
-// @Success      200  {object}  ai.LearningInsights
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /v1/ai/learn [post]
-func AILearnFromDeployment(w http.ResponseWriter, r *http.Request) {
-	var req AILearnRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if req.DeploymentID == "" {
-		WriteJSONError(w, "deployment_id is required", http.StatusBadRequest)
-		return
-	}
-
-	// Create AI platform agent (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	defer agent.Close()
-
-	// Parse duration if provided
-	var duration int64 = 0
-	if req.Duration != "" {
-		if parsedDuration, err := time.ParseDuration(req.Duration); err == nil {
-			duration = int64(parsedDuration.Seconds())
+		config := ai.DefaultOpenAIConfig()
+		if model := os.Getenv("OPENAI_MODEL"); model != "" {
+			config.Model = model
 		}
-	}
-
-	// Convert issues to DeploymentIssue structs
-	issues := make([]ai.DeploymentIssue, len(req.Issues))
-	for i, issue := range req.Issues {
-		issues[i] = ai.DeploymentIssue{
-			Type:        "error", // Default type
-			Description: issue,
-			Severity:    "medium",  // Default severity
-			Resolution:  "pending", // Default resolution
-			Metadata: map[string]interface{}{
-				"timestamp": time.Now().Format(time.RFC3339),
-			},
+		if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
+			config.BaseURL = baseURL
 		}
-	}
 
-	// Create deployment outcome for learning
-	outcome := &ai.DeploymentOutcome{
-		DeploymentID: req.DeploymentID,
-		Success:      req.Success,
-		Duration:     duration,
-		Issues:       issues,
-		Metadata: map[string]interface{}{
-			"endpoint": "ai_learning",
-		},
+		return ai.NewOpenAIProvider(config, apiKey)
+	default:
+		return nil, fmt.Errorf("unsupported AI provider: %s", providerName)
 	}
-
-	// TODO: Implement learning in analytics service following clean architecture
-	// For now, return placeholder insights while maintaining clean architecture
-	insights := &ai.LearningInsights{
-		Insights: []string{
-			"Learning feature will be implemented in analytics service",
-			"Clean architecture principles maintained",
-			fmt.Sprintf("Deployment %s outcome recorded for future learning", req.DeploymentID),
-		},
-		Patterns:    []string{"clean_architecture", "domain_separation", "placeholder_implementation"},
-		Confidence:  1.0,
-		Actionable:  true,
-		Impact:      "Medium",
-		Categories:  []string{"architecture", "learning", "analytics"},
-		Trends:      []string{"migration_to_clean_architecture"},
-		Predictions: []string{"Future analytics service will provide comprehensive learning capabilities"},
-		Metadata: map[string]interface{}{
-			"status":    "placeholder - awaiting analytics service implementation",
-			"outcome":   outcome,
-			"timestamp": time.Now().Format(time.RFC3339),
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(insights)
 }
 
 // Helper function to get environment variable with fallback

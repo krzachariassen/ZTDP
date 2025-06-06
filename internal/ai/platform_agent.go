@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/logging"
 )
@@ -22,8 +23,9 @@ type PlatformAgent struct {
 	graph *graph.GlobalGraph
 
 	// Domain Service Orchestration (injected dependencies)
-	deploymentService DeploymentService
-	policyService     PolicyService
+	deploymentService   DeploymentService
+	policyService       PolicyService
+	applicationService  ApplicationService
 
 	// AI-Native Capabilities
 	conversationEngine *ConversationEngine
@@ -44,21 +46,29 @@ type PolicyService interface {
 	ValidateDeployment(ctx context.Context, app, env string) error
 }
 
+// ApplicationService interface for domain service integration
+type ApplicationService interface {
+	CreateApplication(app contracts.ApplicationContract) error
+	GetApplication(appName string) (*contracts.ApplicationContract, error)
+}
+
 // NewPlatformAgent creates the Core Platform Agent with proper dependency injection
 func NewPlatformAgent(
 	provider AIProvider,
 	globalGraph *graph.GlobalGraph,
 	deploymentService DeploymentService,
 	policyService PolicyService,
+	applicationService ApplicationService,
 ) *PlatformAgent {
 	logger := logging.GetLogger().ForComponent("platform-agent")
 
 	agent := &PlatformAgent{
-		provider:          provider,
-		logger:            logger,
-		graph:             globalGraph,
-		deploymentService: deploymentService,
-		policyService:     policyService,
+		provider:           provider,
+		logger:             logger,
+		graph:              globalGraph,
+		deploymentService:  deploymentService,
+		policyService:      policyService,
+		applicationService: applicationService,
 	}
 
 	// Initialize AI-native capabilities
@@ -74,6 +84,7 @@ func NewPlatformAgentFromConfig(
 	globalGraph *graph.GlobalGraph,
 	deploymentService DeploymentService,
 	policyService PolicyService,
+	applicationService ApplicationService,
 ) (*PlatformAgent, error) {
 	// Create AI provider (pure infrastructure)
 	provider, err := createAIProvider()
@@ -81,7 +92,7 @@ func NewPlatformAgentFromConfig(
 		return nil, fmt.Errorf("failed to create AI provider: %w", err)
 	}
 
-	return NewPlatformAgent(provider, globalGraph, deploymentService, policyService), nil
+	return NewPlatformAgent(provider, globalGraph, deploymentService, policyService, applicationService), nil
 }
 
 // createAIProvider creates the appropriate AI provider based on configuration
@@ -152,6 +163,35 @@ func (agent *PlatformAgent) executeIntentActions(ctx context.Context, intent *In
 	var actions []Action
 
 	switch intent.Type {
+	case "application_creation":
+		// Orchestrate application creation through domain service
+		if intent.Parameters["app"] != nil {
+			appName := intent.Parameters["app"].(string)
+			
+			// Create basic application contract with AI-extracted information
+			app := contracts.ApplicationContract{
+				Metadata: contracts.Metadata{
+					Name: appName,
+					Owner: "user", // Default owner - could be enhanced with user detection
+				},
+				Spec: contracts.ApplicationSpec{
+					Description: fmt.Sprintf("Application created via AI assistant: %s", appName),
+					Tags:        []string{"ai-created"},
+				},
+			}
+			
+			err := agent.applicationService.CreateApplication(app)
+			if err != nil {
+				return nil, fmt.Errorf("application creation failed: %w", err)
+			}
+
+			actions = append(actions, Action{
+				Type:   "application_created",
+				Result: map[string]interface{}{"application": appName, "status": "created"},
+				Status: "completed",
+			})
+		}
+
 	case "deployment":
 		// Orchestrate deployment through domain service
 		if intent.Parameters["app"] != nil {

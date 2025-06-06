@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	"time"
 )
 
@@ -26,11 +25,13 @@ type Action struct {
 
 // ConversationalResponse represents the AI's conversational response to user queries
 type ConversationalResponse struct {
-	Message   string          `json:"message"`   // main conversational response
-	Intent    string          `json:"intent"`    // detected intent type
-	Actions   []Action        `json:"actions"`   // actions performed
-	Insights  []string        `json:"insights"`  // key insights provided
-	Timestamp context.Context `json:"timestamp"` // response timestamp
+	Answer     string    `json:"answer"`     // main conversational response (renamed for UI compatibility)
+	Message    string    `json:"message"`    // legacy field for backwards compatibility
+	Intent     string    `json:"intent"`     // detected intent type
+	Actions    []Action  `json:"actions"`    // actions performed
+	Insights   []string  `json:"insights"`   // key insights provided
+	Confidence float64   `json:"confidence"` // overall confidence score
+	Timestamp  time.Time `json:"timestamp"`  // response timestamp
 }
 
 // PlatformContext contains comprehensive platform state for AI reasoning

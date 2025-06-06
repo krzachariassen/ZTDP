@@ -22,7 +22,7 @@ func TestEngine_ExecuteApplicationDeployment(t *testing.T) {
 	setupTestApplication(globalGraph)
 
 	// Create AI platform agent for simplified planner
-	agent, err := ai.NewPlatformAgentFromConfig(globalGraph, nil, nil)
+	agent, err := ai.NewPlatformAgentFromConfig(globalGraph, nil, nil, nil)
 	if err != nil {
 		// For tests, use a mock or skip AI agent if not available
 		t.Skipf("AI platform agent not available for testing: %v", err)

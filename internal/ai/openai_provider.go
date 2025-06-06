@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/logging"
@@ -76,6 +77,11 @@ func NewOpenAIProvider(config *OpenAIConfig, apiKey string) (*OpenAIProvider, er
 // This is pure infrastructure - only handles OpenAI API communication
 func (p *OpenAIProvider) CallAI(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	p.logger.Info("🔗 Making OpenAI API call")
+
+	// Ensure system prompt contains "json" for OpenAI's json_object response format requirement
+	if !strings.Contains(strings.ToLower(systemPrompt), "json") {
+		systemPrompt += "\n\nPlease provide your response in valid JSON format."
+	}
 
 	// Build the request payload
 	payload := map[string]interface{}{

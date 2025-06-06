@@ -96,7 +96,7 @@ func SetDeploymentStatus(metadata map[string]interface{}, status DeploymentStatu
 	}
 	deploymentMeta["status"] = string(status)
 	deploymentMeta["message"] = message
-	deploymentMeta["last_updated"] = time.Now().Format(time.RFC3339)
+	deploymentMeta["last_updated"] = time.Now().Format(time.RFC3339Nano)
 	metadata[DeploymentMetadataKey] = deploymentMeta
 	return nil
 }
