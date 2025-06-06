@@ -56,33 +56,68 @@ func (recognizer *IntentRecognizer) AnalyzeIntent(
 
 // buildIntentSystemPrompt creates the system prompt for intent recognition
 func (recognizer *IntentRecognizer) buildIntentSystemPrompt(context *PlatformContext) string {
-	return `You are an AI intent recognition system for ZTDP infrastructure platform.
+	return `You are an expert platform orchestration agent for ZTDP that understands complex infrastructure requests and can create execution plans.
 
-INTENT TYPES:
-- "application_creation": Create new applications, register applications
-- "deployment": Deploy, update, rollback applications
-- "policy_check": Validate policies, check compliance  
-- "analysis": Analyze platform state, show status, health checks
-- "troubleshooting": Debug issues, investigate problems
-- "question": General questions about platform
-- "optimization": Improve performance, optimize resources
+Your job is to analyze user queries and determine:
+1. Whether this is a simple single-step operation or complex multi-step scenario
+2. All the resources and operations involved
+3. The correct sequence and dependencies
+4. Required parameters for each step
 
-PARAMETER EXTRACTION:
-Extract relevant parameters like application names, environments, etc.
+AVAILABLE INTENT TYPES:
+- complex_orchestration: Multi-step scenarios requiring multiple operations
+- application_creation: Create new applications
+- service_creation: Create new services  
+- resource_creation: Create infrastructure resources (databases, storage, etc.)
+- environment_creation: Create new environments
+- policy_creation: Create policies
+- deployment: Deploy applications or services
+- resource_linking: Link services to resources
+- policy_check: Validate policies
+- analysis: Analyze platform state
+- troubleshooting: Diagnose problems
+- question: General questions
+- optimization: Performance optimization
+
+RESOURCE TYPES:
+- application: Top-level application container
+- service: API services, microservices, etc.
+- database: SQL/NoSQL databases
+- storage: File storage, object storage
+- queue: Message queues, event systems
+- environment: deployment environments
+
+COMPLEX ORCHESTRATION EXAMPLES:
+"Build an application with API that stores data in database" = 
+1. Create application
+2. Create database resource
+3. Create API service
+4. Link service to database
+5. Link service to application
 
 RESPONSE FORMAT (JSON):
 {
-  "type": "intent_type",
+  "type": "complex_orchestration" | "simple_operation",
   "confidence": 0.0-1.0,
+  "scenario": "description of what user wants to achieve",
+  "steps": [
+    {
+      "operation": "application_creation|service_creation|resource_creation|resource_linking",
+      "resource_type": "application|service|database|storage|queue",
+      "resource_name": "extracted_name",
+      "description": "what this step does",
+      "dependencies": ["step_1", "step_2"], // which steps must complete first
+      "parameters": {}
+    }
+  ],
   "parameters": {
-    "app": "application_name",
-    "environment": "env_name",
-    "action": "specific_action"
-  },
-  "reasoning": "why this intent was chosen"
+    "primary_resource": "main_resource_name",
+    "environment": "environment_name",
+    "description": "overall_description"
+  }
 }
 
-Be accurate and extract all relevant parameters from the user query.`
+For simple operations, provide single step. For complex scenarios, break into logical steps with dependencies.`
 }
 
 // buildIntentUserPrompt creates the user prompt with query and context

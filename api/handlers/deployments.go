@@ -115,12 +115,11 @@ func DeployApplication(w http.ResponseWriter, r *http.Request) {
 	// Create AI platform agent for enhanced operations
 	var aiProvider ai.AIProvider
 	if isPlan || isDryRun || isOptimize || isAnalyze {
-		agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-		if err != nil {
-			WriteJSONError(w, "AI service unavailable for preview operations: "+err.Error(), http.StatusServiceUnavailable)
+		agent := GetGlobalV3Agent()
+		if agent == nil {
+			WriteJSONError(w, "AI service unavailable for preview operations", http.StatusServiceUnavailable)
 			return
 		}
-		defer agent.Close()
 		aiProvider = agent.Provider()
 	}
 
@@ -146,12 +145,12 @@ func DeployApplication(w http.ResponseWriter, r *http.Request) {
 				WriteJSONError(w, "Failed to optimize deployment plan: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			
+
 			// Return optimized plan instead
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
-				"operation": "plan-optimized",
-				"plan": plan,
+				"operation":    "plan-optimized",
+				"plan":         plan,
 				"optimization": optimizedResult,
 			})
 			return
@@ -163,11 +162,11 @@ func DeployApplication(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"operation": "plan-analyzed",
-				"plan": plan,
+				"plan":      plan,
 				"analysis": map[string]interface{}{
 					"estimated_duration": "5-10 minutes",
-					"risk_level": "low",
-					"affected_services": len(plan.Steps),
+					"risk_level":         "low",
+					"affected_services":  len(plan.Steps),
 				},
 			})
 			return
@@ -177,7 +176,7 @@ func DeployApplication(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"operation": "plan",
-			"plan": plan,
+			"plan":      plan,
 		})
 		return
 	}
@@ -230,12 +229,11 @@ func PredictImpact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI platform agent for deployment service (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer agent.Close()
 
 	// Use deployment service for impact prediction (clean architecture - business logic in domain service)
 	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
@@ -286,12 +284,11 @@ func TroubleshootDeployment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI platform agent for deployment service (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer agent.Close()
 
 	// Use deployment service for troubleshooting (clean architecture - business logic in domain service)
 	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
@@ -378,12 +375,11 @@ func AIGeneratePlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI platform agent for deployment service (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer agent.Close()
 
 	// Use deployment service for AI plan generation (clean architecture - business logic in domain service)
 	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
@@ -425,12 +421,11 @@ func AIImpactAnalysis(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI platform agent for deployment service (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer agent.Close()
 
 	// Use deployment service for impact analysis (clean architecture - business logic in domain service)
 	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
@@ -441,7 +436,7 @@ func AIImpactAnalysis(w http.ResponseWriter, r *http.Request) {
 		// Extract fields from map with safe defaults
 		changeType, _ := change["type"].(string)
 		target, _ := change["target"].(string)
-		
+
 		changes[i] = ai.ProposedChange{
 			Type:        changeType,
 			Target:      target,
@@ -492,12 +487,11 @@ func AITroubleshootDeployment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI platform agent for deployment service (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer agent.Close()
 
 	// Use deployment service for AI troubleshooting (clean architecture - business logic in domain service)
 	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
@@ -539,12 +533,11 @@ func AIOptimizePlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI platform agent for deployment service (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer agent.Close()
 
 	// Use deployment service for AI plan optimization (clean architecture - business logic in domain service)
 	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())

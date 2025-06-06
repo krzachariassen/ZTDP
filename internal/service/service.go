@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -93,6 +94,34 @@ func (s *ServiceService) ListServiceVersions(serviceName string) ([]map[string]i
 		result = append(result, contractToMap(contract))
 	}
 	return result, nil
+}
+
+// CreateServiceFromContract creates service from contract with context support
+// This method supports contract-driven AI operations while maintaining business logic
+func (s *ServiceService) CreateServiceFromContract(ctx context.Context, svc *contracts.ServiceContract) (interface{}, error) {
+	if err := svc.Validate(); err != nil {
+		return nil, err
+	}
+
+	node, err := graph.ResolveContract(*svc)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Graph.AddNode(node)
+	s.Graph.AddEdge(svc.Spec.Application, svc.Metadata.Name, "owns")
+
+	if err := s.Graph.Save(); err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"name":        svc.Metadata.Name,
+		"status":      "created",
+		"application": svc.Spec.Application,
+		"port":        svc.Spec.Port,
+		"public":      svc.Spec.Public,
+	}, nil
 }
 
 // Helper functions to convert between contracts and maps

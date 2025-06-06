@@ -74,12 +74,11 @@ func AIProactiveOptimize(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Create AI platform agent for operations service (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer agent.Close()
 
 	// Use operations service for proactive optimization (clean architecture - business logic in domain service)
 	operationsService := operations.NewOperationsService(GlobalGraph, agent.Provider())
@@ -148,12 +147,11 @@ func AILearnFromDeployment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create AI platform agent for analytics service (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer agent.Close()
 
 	// Create deployment outcome for learning
 	outcome := &ai.DeploymentOutcome{

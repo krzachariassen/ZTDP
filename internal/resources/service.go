@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -478,5 +479,50 @@ func (s *Service) CreateResourceFromData(resourceData map[string]interface{}) (m
 		"kind":     resp.Kind,
 		"metadata": resp.Metadata,
 		"spec":     resp.Spec,
+	}, nil
+}
+
+// CreateResourceFromContract creates resource from contract with context support
+// This method supports contract-driven AI operations while maintaining business logic
+func (s *Service) CreateResourceFromContract(ctx context.Context, resource *contracts.ResourceContract) (interface{}, error) {
+	if err := resource.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Check if resource type exists
+	resourceTypeNode, err := s.Graph.GetNode(resource.Spec.Type)
+	if err != nil || resourceTypeNode == nil || resourceTypeNode.Kind != "resource_type" {
+		return nil, fmt.Errorf("resource type '%s' not found", resource.Spec.Type)
+	}
+
+	// Create resource instance
+	resourceInstance := &graph.Node{
+		ID:   resource.Metadata.Name,
+		Kind: "resource",
+		Metadata: map[string]interface{}{
+			"name":  resource.Metadata.Name,
+			"owner": resource.Metadata.Owner,
+		},
+		Spec: map[string]interface{}{
+			"type":     resource.Spec.Type,
+			"version":  resource.Spec.Version,
+			"tier":     resource.Spec.Tier,
+			"capacity": resource.Spec.Capacity,
+			"plan":     resource.Spec.Plan,
+		},
+	}
+
+	s.Graph.AddNode(resourceInstance)
+	s.Graph.AddEdge(resource.Metadata.Name, resource.Spec.Type, graph.EdgeTypeInstanceOf)
+
+	if err := s.Graph.Save(); err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"name":   resource.Metadata.Name,
+		"status": "created",
+		"type":   resource.Spec.Type,
+		"tier":   resource.Spec.Tier,
 	}, nil
 }

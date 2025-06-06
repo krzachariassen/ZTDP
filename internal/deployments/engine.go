@@ -54,7 +54,7 @@ func NewEngine(g *graph.GlobalGraph, agent *ai.PlatformAgent) *Engine {
 		logger.Error("❌ AI agent is required for deployment engine - this is an AI-native platform")
 		return nil
 	}
-	
+
 	planner := NewAIDeploymentPlanner(g, agent.Provider())
 
 	return &Engine{
@@ -76,7 +76,7 @@ func NewEngineWithProvider(g *graph.GlobalGraph, provider ai.AIProvider) *Engine
 		// Return nil engine since we can't operate without AI
 		return nil
 	}
-	
+
 	planner := NewAIDeploymentPlanner(g, provider)
 
 	return &Engine{

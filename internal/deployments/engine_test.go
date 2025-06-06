@@ -21,10 +21,10 @@ func TestEngine_ExecuteApplicationDeployment(t *testing.T) {
 	// Setup test application
 	setupTestApplication(globalGraph)
 
-	// Create AI platform agent for simplified planner
-	agent, err := ai.NewPlatformAgentFromConfig(globalGraph, nil, nil, nil)
+	// For tests, create a mock AI platform agent or skip if not available
+	// In a real test environment, you'd use a mock implementation
+	agent, err := createTestAIAgent(globalGraph)
 	if err != nil {
-		// For tests, use a mock or skip AI agent if not available
 		t.Skipf("AI platform agent not available for testing: %v", err)
 	}
 
@@ -156,4 +156,19 @@ func setupTestApplication(globalGraph *graph.GlobalGraph) {
 
 	// Setup environment access (only allow dev for testing)
 	globalGraph.AddEdge("test-app", "dev", "allowed_in")
+}
+
+// createTestAIAgent creates a test AI agent for unit tests
+func createTestAIAgent(globalGraph *graph.GlobalGraph) (*ai.PlatformAgent, error) {
+	// Try to create with minimal services for testing
+	// In a real test environment, you'd use mock implementations
+	return ai.NewPlatformAgentFromConfig(
+		globalGraph,
+		nil, // deploymentService - use nil for tests
+		nil, // policyService - use nil for tests  
+		nil, // applicationService - use nil for tests
+		nil, // serviceService - use nil for tests
+		nil, // resourceService - use nil for tests
+		nil, // environmentService - use nil for tests
+	)
 }

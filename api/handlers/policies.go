@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
@@ -67,12 +66,11 @@ func AIEvaluatePolicy(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Create AI platform agent for policy service (infrastructure layer)
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer agent.Close()
 
 	// Use policy service for AI evaluation (clean architecture - business logic in domain service)
 	policyService := policies.NewService(getGraphStore(), getGlobalGraph(), req.Environment)

@@ -345,12 +345,11 @@ func testNaturalLanguageOperations() {
 
 	// Test AI chat endpoint for natural language interaction
 	payload := map[string]interface{}{
-		"message": "I want to deploy ai-test-app to ai-test-env but I'm concerned about potential issues. Can you help me understand the risks and create a safe deployment plan?",
-		"context": map[string]interface{}{
-			"application": "ai-test-app",
-			"environment": "ai-test-env",
-			"user_intent": "deployment_planning",
-		},
+		"query":   "I want to deploy ai-test-app to ai-test-env but I'm concerned about potential issues. Can you help me understand the risks and create a safe deployment plan?",
+		"context": "application: ai-test-app, environment: ai-test-env, user_intent: deployment_planning",
+		"scope":   []string{"deployment", "planning"},
+		"session": "demo-session",
+		"timeout": 60,
 	}
 
 	body, _ := json.Marshal(payload)
@@ -450,13 +449,11 @@ func testConversationalDeployment() {
 		fmt.Printf("\n💬 Step %d: %s\n", i+1, message)
 
 		payload := map[string]interface{}{
-			"message": message,
-			"context": map[string]interface{}{
-				"application":     "ai-test-app",
-				"environment":     "ai-test-env",
-				"conversation_id": "demo-conversation",
-				"step":            i + 1,
-			},
+			"query":   message,
+			"context": fmt.Sprintf("application: ai-test-app, environment: ai-test-env, conversation_id: demo-conversation, step: %d", i+1),
+			"scope":   []string{"deployment", "conversation"},
+			"session": "demo-conversation",
+			"timeout": 30,
 		}
 
 		body, _ := json.Marshal(payload)

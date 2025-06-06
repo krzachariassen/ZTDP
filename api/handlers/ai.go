@@ -10,9 +10,6 @@ import (
 	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/ai"
-	"github.com/krzachariassen/ZTDP/internal/application"
-	"github.com/krzachariassen/ZTDP/internal/deployments"
-	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
 // AIProviderInfo represents AI provider information
@@ -34,18 +31,18 @@ type AIProviderInfo struct {
 // @Failure      500  {object}  map[string]string
 // @Router       /v1/ai/provider/status [get]
 func AIProviderStatus(w http.ResponseWriter, r *http.Request) {
-	// Try to create AI platform agent to check availability
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil, nil)
+	// Try to get global AI platform agent to check availability
+	agent := GetGlobalV3Agent()
 
 	providerInfo := AIProviderInfo{
 		Available:    false,
 		Capabilities: []string{"plan_generation", "policy_evaluation", "plan_optimization"},
 	}
 
-	if err != nil {
+	if agent == nil {
 		providerInfo.Name = "OpenAI (Unavailable)"
 		providerInfo.Config = map[string]string{
-			"error": err.Error(),
+			"error": "AI agent not initialized",
 		}
 	} else {
 		// Get provider info from AI platform agent
@@ -159,31 +156,12 @@ func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
 		timeout = time.Duration(req.Timeout) * time.Second
 	}
 
-	// Create AI provider for domain services
-	aiProvider, err := createAIProvider()
-	if err != nil {
-		WriteJSONError(w, "AI provider unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	// Use global AI platform agent with all domain services already injected
+	agent := GetGlobalV3Agent()
+	if agent == nil {
+		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-
-	// Create deployment service with AI provider
-	deploymentService := deployments.NewDeploymentService(GlobalGraph, aiProvider)
-
-	// Create policy service with proper dependencies
-	graphStore := getGraphStore()
-	env := getEnvOrDefault("ZTDP_ENVIRONMENT", "default")
-	policyService := policies.NewService(graphStore, GlobalGraph, env)
-
-	// Create application service
-	applicationService := application.NewService(GlobalGraph)
-
-	// Create AI platform agent with domain services injected
-	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, deploymentService, policyService, applicationService)
-	if err != nil {
-		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	defer agent.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -192,6 +170,57 @@ func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
 	response, err := agent.ChatWithPlatform(ctx, req.Query, req.Context)
 	if err != nil {
 		WriteJSONError(w, "Conversational AI failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+
+
+// V3ChatRequest represents a request to the V3 AI chat endpoint
+type V3ChatRequest struct {
+	Message string `json:"message" binding:"required"`
+}
+
+// V3AIChat godoc
+// @Summary      Chat with V3 AI Platform Agent (Ultra Simple)
+// @Description  Ultra-simple ChatGPT-style AI interface. AI drives everything naturally.
+// @Tags         ai
+// @Accept       json
+// @Produce      json
+// @Param        request  body      V3ChatRequest  true  "Chat request"
+// @Success      200      {object}  ai.ConversationalResponse
+// @Failure      400      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /v3/ai/chat [post]
+func V3AIChat(w http.ResponseWriter, r *http.Request) {
+	var req V3ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteJSONError(w, "Invalid request format", http.StatusBadRequest)
+		return
+	}
+
+	if req.Message == "" {
+		WriteJSONError(w, "Message is required", http.StatusBadRequest)
+		return
+	}
+
+	// Use global V3 agent 
+	v3Agent := GetGlobalV3Agent()
+	if v3Agent == nil {
+		WriteJSONError(w, "V3 Agent not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+
+	// Use the ultra simple Chat method!
+	response, err := v3Agent.Chat(ctx, req.Message)
+	if err != nil {
+		WriteJSONError(w, "V3 AI chat failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

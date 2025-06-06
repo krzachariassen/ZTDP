@@ -1,6 +1,7 @@
 package environment
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 
@@ -25,6 +26,28 @@ func (s *Service) CreateEnvironment(env contracts.EnvironmentContract) error {
 	}
 	s.Graph.AddNode(node)
 	return s.Graph.Save()
+}
+
+// CreateEnvironmentFromContract creates environment from contract with context support
+// This method supports contract-driven AI operations while maintaining business logic
+func (s *Service) CreateEnvironmentFromContract(ctx context.Context, env *contracts.EnvironmentContract) (interface{}, error) {
+	node, err := graph.ResolveContract(*env)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Graph.AddNode(node)
+
+	if err := s.Graph.Save(); err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"name":        env.Metadata.Name,
+		"status":      "created",
+		"description": env.Spec.Description,
+		"owner":       env.Metadata.Owner,
+	}, nil
 }
 
 // CreateEnvironmentFromData creates an environment from raw data

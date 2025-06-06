@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 
@@ -46,6 +47,41 @@ func (s *Service) CreateApplication(app contracts.ApplicationContract) error {
 	}
 
 	return nil
+}
+
+// CreateApplicationFromContract creates application from contract with context support
+// This method supports contract-driven AI operations while maintaining business logic
+func (s *Service) CreateApplicationFromContract(ctx context.Context, app *contracts.ApplicationContract) (interface{}, error) {
+	if err := app.Validate(); err != nil {
+		return nil, err
+	}
+
+	node, _ := graph.ResolveContract(*app)
+	s.Graph.AddNode(node)
+
+	// Save the graph
+	if err := s.Graph.Save(); err != nil {
+		return nil, err
+	}
+
+	// Emit HIGH-LEVEL BUSINESS EVENT
+	if events.GlobalEventBus != nil {
+		payload := map[string]interface{}{
+			"application_name": app.Metadata.Name,
+			"description":      app.Spec.Description,
+			"owner":            app.Metadata.Owner,
+			"tags":             app.Spec.Tags,
+		}
+		events.GlobalEventBus.Emit(events.EventTypeApplicationCreated, "ztdp-platform", app.Metadata.Name, payload)
+	}
+
+	return map[string]interface{}{
+		"name":        app.Metadata.Name,
+		"status":      "created",
+		"description": app.Spec.Description,
+		"owner":       app.Metadata.Owner,
+		"tags":        app.Spec.Tags,
+	}, nil
 }
 
 // ListApplications returns all applications in the graph

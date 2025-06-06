@@ -78,7 +78,7 @@ func TestPlatformAgent(t *testing.T) {
 	mockProvider := &MockAIProvider{}
 
 	// Create platform agent
-	agent := NewPlatformAgent(mockProvider, globalGraph, nil, nil)
+	agent := NewPlatformAgent(mockProvider, globalGraph, nil, nil, nil, nil, nil, nil)
 
 	t.Run("Provider", func(t *testing.T) {
 		// Test that we can get the provider

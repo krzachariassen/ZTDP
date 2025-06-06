@@ -125,9 +125,9 @@ func (engine *ConversationEngine) parseConversationalResponse(
 ) (*ConversationalResponse, error) {
 	// Clean the response
 	rawResponse = strings.TrimSpace(rawResponse)
-	
+
 	var finalMessage string
-	
+
 	// Try to parse as JSON first (fallback for old responses)
 	if strings.HasPrefix(rawResponse, "{") {
 		var jsonResponse map[string]interface{}

@@ -100,6 +100,13 @@ func SetupRoutes(r *chi.Mux) {
 	})
 
 	// =============================================================================
+	// V3 AI ENDPOINTS - Ultra-simple ChatGPT-style AI-native interface
+	// =============================================================================
+	r.Route("/v3", func(v3 chi.Router) {
+		v3.Post("/ai/chat", handlers.V3AIChat) // ChatGPT-style AI chat endpoint
+	})
+
+	// =============================================================================
 	// STATIC CONTENT & DOCUMENTATION
 	// =============================================================================
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
