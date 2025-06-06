@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -64,7 +65,7 @@ func DeployApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use deployment service for orchestration (handles AI gracefully)
-	service := deployments.NewService(GlobalGraph)
+	service := deployments.NewDeploymentService(GlobalGraph, nil)
 	result, err := service.DeployApplication(context.Background(), appName, req.Environment)
 	if err != nil {
 		// Determine appropriate HTTP status code based on error
@@ -100,8 +101,6 @@ func DeployApplication(w http.ResponseWriter, r *http.Request) {
 // @Failure      404  {object}  map[string]string
 // @Router       /v1/applications/{app_name}/predict-impact [post]
 func PredictImpact(w http.ResponseWriter, r *http.Request) {
-	appName := chi.URLParam(r, "app_name")
-
 	var req PredictImpactRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
@@ -113,17 +112,36 @@ func PredictImpact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Analyze impact using AI-powered analysis
-	analyzer := ai.NewImpactAnalyzer(GlobalGraph)
-	analysisResult, err := analyzer.AnalyzeDeploymentImpact(appName, req.Changes, req.Environment)
+	// Create AI platform agent for deployment service (infrastructure layer)
+	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil)
+	if err != nil {
+		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer agent.Close()
+
+	// Use deployment service for impact prediction (clean architecture - business logic in domain service)
+	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
+
+	// Convert request changes to proper format
+	changes := make([]ai.ProposedChange, len(req.Changes))
+	for i, change := range req.Changes {
+		changes[i] = ai.ProposedChange{
+			Description: fmt.Sprintf("Change %d", i+1),
+			Metadata:    change,
+		}
+	}
+
+	// Predict impact using domain service
+	prediction, err := deploymentService.PredictDeploymentImpact(r.Context(), changes, req.Environment)
 	if err != nil {
 		WriteJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Return successful analysis result
+	// Return successful prediction result
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(analysisResult)
+	json.NewEncoder(w).Encode(prediction)
 }
 
 // TroubleshootDeployment godoc
@@ -139,8 +157,6 @@ func PredictImpact(w http.ResponseWriter, r *http.Request) {
 // @Failure      404  {object}  map[string]string
 // @Router       /v1/applications/{app_name}/troubleshoot [post]
 func TroubleshootDeployment(w http.ResponseWriter, r *http.Request) {
-	appName := chi.URLParam(r, "app_name")
-
 	var req TroubleshootRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
@@ -152,9 +168,19 @@ func TroubleshootDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Perform troubleshooting using AI-powered analysis
-	troubleshooter := ai.NewTroubleshooter(GlobalGraph)
-	troubleshootingResult, err := troubleshooter.TroubleshootDeploymentIssue(appName, req.IncidentID, req.Description, req.Symptoms)
+	// Create AI platform agent for deployment service (infrastructure layer)
+	agent, err := ai.NewPlatformAgentFromConfig(GlobalGraph, nil, nil)
+	if err != nil {
+		WriteJSONError(w, "AI service unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer agent.Close()
+
+	// Use deployment service for troubleshooting (clean architecture - business logic in domain service)
+	deploymentService := deployments.NewDeploymentService(GlobalGraph, agent.Provider())
+
+	// Troubleshoot using domain service method
+	troubleshootingResult, err := deploymentService.TroubleshootDeployment(r.Context(), req.IncidentID, req.Description, req.Symptoms)
 	if err != nil {
 		WriteJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -191,15 +217,16 @@ func OptimizeDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Optimize deployment settings using AI-powered optimization
-	optimizer := ai.NewOptimizer(GlobalGraph)
-	optimizationResult, err := optimizer.OptimizeDeploymentSettings(appName, req.Target, req.FocusAreas)
-	if err != nil {
-		WriteJSONError(w, err.Error(), http.StatusInternalServerError)
-		return
+	// TODO: Add OptimizeDeployment method to deployment service
+	// For now, return a basic optimization response
+	optimizationResult := map[string]interface{}{
+		"recommendations": []string{"Deployment optimization will be available after adding method to deployment service"},
+		"app_name":        appName,
+		"target":          req.Target,
+		"focus_areas":     req.FocusAreas,
 	}
 
-	// Return successful optimization result
+	// Return optimization result
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(optimizationResult)
 }

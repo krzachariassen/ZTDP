@@ -40,21 +40,26 @@ type DeploymentSummary struct {
 // Engine handles application deployments with policy enforcement using Event-Driven Architecture
 type Engine struct {
 	graph   *graph.GlobalGraph
-	brain   *ai.AIBrain
+	agent   *ai.PlatformAgent
 	planner DeploymentPlanner
 	logger  *logging.Logger
 }
 
-// NewEngine creates a new event-driven deployment engine
-func NewEngine(g *graph.GlobalGraph, brain *ai.AIBrain) *Engine {
+// NewEngine creates a new event-driven deployment engine with a PlatformAgent
+func NewEngine(g *graph.GlobalGraph, agent *ai.PlatformAgent) *Engine {
 	logger := logging.GetLogger().ForComponent("deployment-engine")
 
 	// Create AI deployment planner - simplified interface, AI discovers edges automatically
-	planner := NewAIDeploymentPlanner(g, brain.GetProvider())
+	var planner DeploymentPlanner
+	if agent != nil {
+		planner = NewAIDeploymentPlanner(g, agent.Provider())
+	} else {
+		planner = NewAIDeploymentPlanner(g, nil)
+	}
 
 	return &Engine{
 		graph:   g,
-		brain:   brain,
+		agent:   agent,
 		planner: planner,
 		logger:  logger,
 	}
@@ -76,7 +81,7 @@ func NewEngineWithProvider(g *graph.GlobalGraph, provider ai.AIProvider) *Engine
 
 	return &Engine{
 		graph:   g,
-		brain:   nil, // No AI Brain dependency
+		agent:   nil, // No AI agent dependency
 		planner: planner,
 		logger:  logger,
 	}

@@ -115,9 +115,9 @@ func (p *AIDeploymentPlanner) buildPlanningContext(appName string, globalGraph *
 	}
 
 	return &ai.PlanningContext{
-		TargetNodes:   targetNodes,
-		RelatedNodes:  targetNodes,
-		Edges:         edges,
+		TargetNodes:   p.convertGraphNodesToAINodes(targetNodes),
+		RelatedNodes:  p.convertGraphNodesToAINodes(targetNodes),
+		Edges:         p.convertGraphEdgesToAIEdges(edges),
 		PolicyContext: nil,
 		EnvironmentID: "default",
 	}
@@ -239,8 +239,8 @@ func (p *AIDeploymentPlanner) convertPlanToOrder(plan *ai.DeploymentPlan) ([]str
 	stepMap := make(map[string]*ai.DeploymentStep)
 
 	// Build step lookup
-	for _, step := range plan.Steps {
-		stepMap[step.ID] = step
+	for i, step := range plan.Steps {
+		stepMap[step.ID] = &plan.Steps[i]
 	}
 
 	// Resolve dependencies and build order
@@ -268,7 +268,7 @@ func (p *AIDeploymentPlanner) convertPlanToOrder(plan *ai.DeploymentPlan) ([]str
 		}
 
 		// Add this step
-		order = append(order, step.Target)
+		order = append(order, step.ID)
 		processed[step.ID] = true
 		processing[step.ID] = false
 
@@ -276,13 +276,40 @@ func (p *AIDeploymentPlanner) convertPlanToOrder(plan *ai.DeploymentPlan) ([]str
 	}
 
 	// Process all steps
-	for _, step := range plan.Steps {
+	for i, step := range plan.Steps {
 		if !processed[step.ID] {
-			if err := processStep(step); err != nil {
+			if err := processStep(&plan.Steps[i]); err != nil {
 				return nil, err
 			}
 		}
 	}
 
 	return order, nil
+}
+
+// convertGraphNodesToAINodes converts graph nodes to AI nodes
+func (p *AIDeploymentPlanner) convertGraphNodesToAINodes(graphNodes []*graph.Node) []*ai.Node {
+	aiNodes := make([]*ai.Node, len(graphNodes))
+	for i, node := range graphNodes {
+		aiNodes[i] = &ai.Node{
+			ID:       node.ID,
+			Kind:     node.Kind,
+			Metadata: node.Metadata,
+			Spec:     node.Spec,
+		}
+	}
+	return aiNodes
+}
+
+// convertGraphEdgesToAIEdges converts graph edges to AI edges
+func (p *AIDeploymentPlanner) convertGraphEdgesToAIEdges(graphEdges []*graph.Edge) []*ai.Edge {
+	aiEdges := make([]*ai.Edge, len(graphEdges))
+	for i, edge := range graphEdges {
+		aiEdges[i] = &ai.Edge{
+			To:       edge.To,
+			Type:     edge.Type,
+			Metadata: edge.Metadata,
+		}
+	}
+	return aiEdges
 }

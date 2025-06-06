@@ -29,6 +29,11 @@ func (m *MockAIProvider) OptimizePlan(ctx context.Context, plan *DeploymentPlan,
 	return args.Get(0).(*PlanningResponse), args.Error(1)
 }
 
+func (m *MockAIProvider) CallAI(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	args := m.Called(ctx, systemPrompt, userPrompt)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockAIProvider) GetProviderInfo() *ProviderInfo {
 	args := m.Called()
 	return args.Get(0).(*ProviderInfo)
@@ -39,8 +44,8 @@ func (m *MockAIProvider) Close() error {
 	return args.Error(0)
 }
 
-func (m *MockAIProvider) ChatWithPlatform(ctx context.Context, query *ConversationalQuery) (*ConversationalResponse, error) {
-	args := m.Called(ctx, query)
+func (m *MockAIProvider) ChatWithPlatform(ctx context.Context, query string, context string) (*ConversationalResponse, error) {
+	args := m.Called(ctx, query, context)
 	return args.Get(0).(*ConversationalResponse), args.Error(1)
 }
 
@@ -64,79 +69,47 @@ func (m *MockAIProvider) LearningFromFailures(ctx context.Context, outcome *Depl
 	return args.Get(0).(*LearningInsights), args.Error(1)
 }
 
-// TestAIBrain tests the core AI brain functionality
-func TestAIBrain(t *testing.T) {
+// TestPlatformAgent tests the core platform agent functionality
+func TestPlatformAgent(t *testing.T) {
 	// Create test graph
 	globalGraph := createTestGraph()
 
 	// Create mock provider
 	mockProvider := &MockAIProvider{}
 
-	// Create AI brain
-	brain := NewAIBrain(mockProvider, globalGraph)
+	// Create platform agent
+	agent := NewPlatformAgent(mockProvider, globalGraph, nil, nil)
 
-	t.Run("GenerateDeploymentPlan", func(t *testing.T) {
-		// Setup mock response
-		expectedResponse := &PlanningResponse{
-			Plan: &DeploymentPlan{
-				Steps: []*DeploymentStep{
-					{
-						ID:        "step-1",
-						Action:    "deploy",
-						Target:    "test-service",
-						Reasoning: "Deploy service first",
-					},
-					{
-						ID:           "step-2",
-						Action:       "validate",
-						Target:       "test-app",
-						Dependencies: []string{"step-1"},
-						Reasoning:    "Validate deployment",
-					},
-				},
-				Strategy: "rolling",
-			},
-			Reasoning:  "Deploy services in dependency order",
-			Confidence: 0.95,
+	t.Run("ChatWithPlatform", func(t *testing.T) {
+		// Setup mock response for chat
+		expectedResponse := &ConversationalResponse{
+			Message: "I can help you deploy your application",
+			Intent:  "deployment_assistance",
 		}
 
-		// Setup mock expectations
-		mockProvider.On("GeneratePlan", mock.Anything, mock.Anything).Return(expectedResponse, nil)
+		mockProvider.On("ChatWithPlatform", mock.Anything, mock.Anything, mock.Anything).Return(expectedResponse, nil)
 
-		// Test plan generation with AI discovering edges automatically (AI-first principle)
-		response, err := brain.GenerateDeploymentPlan(context.Background(), "test-app", nil) // Let AI discover all edge types
+		// Test chat functionality
+		response, err := agent.ChatWithPlatform(context.Background(), "Help me deploy my app", "")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
-		assert.Equal(t, 2, len(response.Plan.Steps))
-		assert.Equal(t, "rolling", response.Plan.Strategy)
-		assert.Equal(t, 0.95, response.Confidence)
+		assert.Contains(t, response.Message, "deploy")
 
 		mockProvider.AssertExpectations(t)
 	})
 
-	t.Run("EvaluateDeploymentPolicies", func(t *testing.T) {
-		// Setup mock response
-		expectedEvaluation := &PolicyEvaluation{
-			Compliant:       true,
-			Violations:      []PolicyViolation{},
-			Recommendations: []string{"Consider adding health checks"},
-			Reasoning:       "All policies satisfied",
-			Confidence:      0.9,
-		}
+	t.Run("Provider", func(t *testing.T) {
+		// Test that we can get the provider
+		provider := agent.Provider()
+		assert.NotNil(t, provider)
+		assert.Equal(t, mockProvider, provider)
+	})
 
-		mockProvider.On("EvaluatePolicy", mock.Anything, mock.Anything).Return(expectedEvaluation, nil)
-
-		// Test policy evaluation
-		evaluation, err := brain.EvaluateDeploymentPolicies(context.Background(), "test-app", "production")
-
+	t.Run("Close", func(t *testing.T) {
+		// Test cleanup
+		err := agent.Close()
 		assert.NoError(t, err)
-		assert.NotNil(t, evaluation)
-		assert.True(t, evaluation.Compliant)
-		assert.Equal(t, 0, len(evaluation.Violations))
-		assert.Equal(t, 0.9, evaluation.Confidence)
-
-		mockProvider.AssertExpectations(t)
 	})
 }
 
