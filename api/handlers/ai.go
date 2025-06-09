@@ -177,8 +177,6 @@ func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-
-
 // V3ChatRequest represents a request to the V3 AI chat endpoint
 type V3ChatRequest struct {
 	Message string `json:"message" binding:"required"`
@@ -207,14 +205,14 @@ func V3AIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use global V3 agent 
+	// Use global V3 agent
 	v3Agent := GetGlobalV3Agent()
 	if v3Agent == nil {
 		WriteJSONError(w, "V3 Agent not available", http.StatusServiceUnavailable)
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 	defer cancel()
 
 	// Use the ultra simple Chat method!

@@ -82,7 +82,7 @@ func main() {
 
 	// Initialize AI infrastructure with domain services
 	logger.Info("🤖 Initializing AI platform with domain services...")
-	
+
 	// Create AI provider for services
 	aiProvider, err := createAIProvider()
 	if err != nil {
@@ -149,7 +149,7 @@ func createDeploymentService(globalGraph *graph.GlobalGraph, aiProvider ai.AIPro
 	return deployments.NewDeploymentService(globalGraph, aiProvider)
 }
 
-// createPolicyService initializes the policy service  
+// createPolicyService initializes the policy service
 func createPolicyService(globalGraph *graph.GlobalGraph, aiProvider ai.AIProvider) ai.PolicyService {
 	graphStore := graph.NewGraphStore(globalGraph.Backend)
 	return policies.NewService(graphStore, globalGraph, os.Getenv("ZTDP_ENV"))

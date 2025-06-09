@@ -112,14 +112,10 @@ func DeployApplication(w http.ResponseWriter, r *http.Request) {
 	isOptimize := queryParams.Get("optimize") == "true"
 	isAnalyze := queryParams.Get("analyze") == "true"
 
-	// Create AI platform agent for enhanced operations
+	// Create AI platform agent - AI is now required for all deployment operations (AI-native platform)
+	agent := GetGlobalV3Agent()
 	var aiProvider ai.AIProvider
-	if isPlan || isDryRun || isOptimize || isAnalyze {
-		agent := GetGlobalV3Agent()
-		if agent == nil {
-			WriteJSONError(w, "AI service unavailable for preview operations", http.StatusServiceUnavailable)
-			return
-		}
+	if agent != nil {
 		aiProvider = agent.Provider()
 	}
 

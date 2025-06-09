@@ -20,10 +20,10 @@ type V3Agent struct {
 	provider AIProvider
 	logger   *logging.Logger
 	graph    *graph.GlobalGraph
-	
+
 	// Use actual service interfaces with correct method signatures
 	applicationService ApplicationService
-	serviceService     ServiceService  
+	serviceService     ServiceService
 	resourceService    ResourceService
 	environmentService EnvironmentService
 	deploymentService  DeploymentService
@@ -58,63 +58,111 @@ func NewV3Agent(
 func (agent *V3Agent) Chat(ctx context.Context, userMessage string) (*ConversationalResponse, error) {
 	agent.logger.Info("🤖 V3 User: %s", userMessage)
 
-	// Get contracts dynamically
-	contracts := agent.loadAllContracts()
-	
 	// Get platform state
 	state := agent.getPlatformState()
 
-	// Pure natural conversation like the ChatGPT example
-	systemPrompt := fmt.Sprintf(`You are a platform AI that helps users create and manage resources using contracts.
-
-AVAILABLE CONTRACTS:
-%s
+	// Get contract schemas to understand what's required vs optional
+	contractSchemas := agent.loadAllContracts()
+	// Simple, natural conversation - let AI be AI
+	systemPrompt := fmt.Sprintf(`You are a platform AI assistant that creates resources through natural conversation.
 
 CURRENT PLATFORM STATE:
 %s
 
-INSTRUCTIONS:
-- Drive the conversation naturally to understand what the user wants
-- For resource creation, guide them through the contract fields step by step
-- Ask clarifying questions to collect missing information
-- When you have a complete valid contract, output the final JSON with "FINAL_CONTRACT:" prefix
-- For listing/info operations, provide the information directly
-- For updates, help modify existing contracts
-- Be conversational and helpful
+AVAILABLE CONTRACTS:
+%s
 
-Remember: Drive the conversation naturally. Just be helpful and guide them to complete contracts.`, contracts, state)
+CRITICAL: When users ask to create something, DO IT with smart defaults instead of asking for more details.
+
+RESOURCE TYPES AND ARCHITECTURE:
+- "application" - Container/grouping for related services (like a project boundary)
+- "service" - Actual running code: APIs, consumers, workers, microservices  
+- "resource" - Infrastructure: databases, storage, queues, caches
+- "environment" - Deployment targets: dev, staging, prod
+
+HIERARCHY AND LINKING:
+Applications contain Services. Services use Resources. 
+Services MUST have "app" field in metadata to link to parent application.
+
+COMPLEX EXAMPLE:
+User: "Create an application with an API that receives recipes and stores them in a database"
+Should create:
+1. Application container: {"kind":"application","metadata":{"name":"recipe-app"}}
+2. API service: {"kind":"service","metadata":{"name":"recipe-api","app":"recipe-app"},"spec":{"type":"api"}}
+3. Database resource: {"kind":"resource","metadata":{"name":"recipe-db","type":"database"}}
+
+The service links to application via "app" field, and can be linked to resources via graph edges.
+
+When creating something, respond naturally and include FINAL_CONTRACT for EACH resource needed.
+For complex requests, create multiple contracts in sequence.
+
+ACT with smart defaults. Only ask questions if truly ambiguous.`, state, contractSchemas)
 
 	response, err := agent.provider.CallAI(ctx, systemPrompt, userMessage)
 	if err != nil {
 		return nil, fmt.Errorf("AI call failed: %w", err)
 	}
 
-	return agent.handleResponse(ctx, response)
+	agent.logger.Info("🤖 AI Response: %s", response)
+	return agent.handleResponse(ctx, response, userMessage)
 }
 
 // handleResponse processes AI's natural response and executes if contract is ready
-func (agent *V3Agent) handleResponse(ctx context.Context, aiResponse string) (*ConversationalResponse, error) {
+func (agent *V3Agent) handleResponse(ctx context.Context, aiResponse string, userMessage string) (*ConversationalResponse, error) {
 	// Check if AI provided a final contract to execute
 	if contractStart := strings.Index(aiResponse, "FINAL_CONTRACT:"); contractStart != -1 {
-		// Extract the JSON contract
+		// Extract everything after FINAL_CONTRACT:
 		jsonPart := strings.TrimSpace(aiResponse[contractStart+len("FINAL_CONTRACT:"):])
-		
-		// Try to execute the contract
-		if result, err := agent.executeContract(ctx, jsonPart); err == nil {
-			// Remove the FINAL_CONTRACT part from the message
-			cleanMessage := strings.TrimSpace(aiResponse[:contractStart])
-			return &ConversationalResponse{
-				Message: cleanMessage + "\n\n✅ Resource created successfully!",
-				Actions: []Action{{Type: "resource_created", Result: result}},
-			}, nil
-		} else {
-			return &ConversationalResponse{
-				Message: fmt.Sprintf("I created the contract but couldn't execute it: %v", err),
-				Actions: []Action{{Type: "error", Result: err.Error()}},
-			}, nil
+
+		agent.logger.Info("🔍 Raw JSON part: %q", jsonPart)
+
+		// Try to extract just the JSON object by finding the first { and matching }
+		if startIdx := strings.Index(jsonPart, "{"); startIdx != -1 {
+			// Find the matching closing brace
+			braceCount := 0
+			endIdx := -1
+			for i := startIdx; i < len(jsonPart); i++ {
+				switch jsonPart[i] {
+				case '{':
+					braceCount++
+				case '}':
+					braceCount--
+					if braceCount == 0 {
+						endIdx = i + 1
+						break
+					}
+				}
+			}
+
+			if endIdx != -1 {
+				cleanJSON := jsonPart[startIdx:endIdx]
+				agent.logger.Info("🔍 Extracted JSON: %q", cleanJSON)
+
+				// Try to execute the contract with user context
+				if result, err := agent.executeContract(ctx, cleanJSON, userMessage); err == nil {
+					// Remove the FINAL_CONTRACT part from the message
+					cleanMessage := strings.TrimSpace(aiResponse[:contractStart])
+					return &ConversationalResponse{
+						Message: cleanMessage + "\n\n✅ Resource created successfully!",
+						Actions: []Action{{Type: "resource_created", Result: result}},
+					}, nil
+				} else {
+					agent.logger.Error("❌ Contract execution failed: %v", err)
+					return &ConversationalResponse{
+						Message: fmt.Sprintf("I created the contract but couldn't execute it: %v", err),
+						Actions: []Action{{Type: "error", Result: err.Error()}},
+					}, nil
+				}
+			}
 		}
+
+		// Fallback: if we couldn't extract clean JSON, return error
+		return &ConversationalResponse{
+			Message: "I tried to create a contract but couldn't parse the JSON properly.",
+			Actions: []Action{{Type: "error", Result: "JSON parsing failed"}},
+		}, nil
 	}
-	
+
 	// For all other responses, just return the AI's natural response
 	return &ConversationalResponse{
 		Message: aiResponse,
@@ -123,14 +171,22 @@ func (agent *V3Agent) handleResponse(ctx context.Context, aiResponse string) (*C
 }
 
 // executeContract executes a contract JSON using the appropriate service
-func (agent *V3Agent) executeContract(ctx context.Context, contractJSON string) (interface{}, error) {
+func (agent *V3Agent) executeContract(ctx context.Context, contractJSON string, userMessage string) (interface{}, error) {
 	var contractData map[string]interface{}
 	if err := json.Unmarshal([]byte(contractJSON), &contractData); err != nil {
 		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 
-	resourceType := agent.detectResourceType(contractData)
-	
+	// Trust AI to specify resource type directly via "kind" field
+	resourceType, ok := contractData["kind"].(string)
+	if !ok {
+		// If AI didn't specify kind, default to application (most common case)
+		resourceType = "application"
+		agent.logger.Info("🤖 No 'kind' specified, defaulting to application")
+	}
+
+	agent.logger.Info("🎯 AI specified resource type: %s", resourceType)
+
 	switch resourceType {
 	case "application":
 		// Convert to ApplicationContract
@@ -138,19 +194,19 @@ func (agent *V3Agent) executeContract(ctx context.Context, contractJSON string) 
 		if err := json.Unmarshal([]byte(contractJSON), &appContract); err != nil {
 			return nil, fmt.Errorf("invalid application contract: %w", err)
 		}
-		
+
 		// Use correct method signature: CreateApplication(contracts.ApplicationContract) error
 		if err := agent.applicationService.CreateApplication(appContract); err != nil {
 			return nil, err
 		}
-		
+
 		return appContract, nil
-		
+
 	case "environment":
 		// Use CreateEnvironmentFromData method which exists
 		result, err := agent.environmentService.CreateEnvironmentFromData(contractData)
 		return result, err
-		
+
 	case "service":
 		// Extract app name and service data for CreateService
 		if metadata, ok := contractData["metadata"].(map[string]interface{}); ok {
@@ -161,85 +217,123 @@ func (agent *V3Agent) executeContract(ctx context.Context, contractJSON string) 
 			}
 		}
 		return nil, fmt.Errorf("service contract missing app name in metadata")
-		
+
 	case "resource":
 		// Convert to ResourceRequest for CreateResource
 		var resourceReq resources.ResourceRequest
 		if err := json.Unmarshal([]byte(contractJSON), &resourceReq); err != nil {
 			return nil, fmt.Errorf("invalid resource contract: %w", err)
 		}
-		
+
 		// Use CreateResource(resources.ResourceRequest) method
 		result, err := agent.resourceService.CreateResource(resourceReq)
 		return result, err
-		
+
 	default:
 		return nil, fmt.Errorf("unknown resource type: %s", resourceType)
 	}
 }
 
-// detectResourceType determines resource type from contract structure
-func (agent *V3Agent) detectResourceType(contractData map[string]interface{}) string {
-	// Look for metadata.name and spec structure to determine type
-	if spec, ok := contractData["spec"].(map[string]interface{}); ok {
-		// Check spec fields to determine type
-		if _, hasLifecycle := spec["lifecycle"]; hasLifecycle {
-			return "application"
-		}
-		if _, hasEnvironments := spec["environments"]; hasEnvironments {
-			return "service"
-		}
-		if _, hasKind := contractData["kind"]; hasKind {
-			return "resource"
-		}
-		// Simple environment if only has description
-		if _, hasDescription := spec["description"]; hasDescription && len(spec) == 1 {
-			return "environment"
-		}
-	}
-	return ""
-}
-
 // loadAllContracts dynamically loads all contract definitions
 func (agent *V3Agent) loadAllContracts() string {
 	contractsDir := "/mnt/c/Work/git/ztdp/internal/contracts"
-	
+
 	contracts := ""
 	contractFiles := []string{"application.go", "service.go", "environment.go", "resource.go"}
-	
+
 	for _, file := range contractFiles {
 		if content, err := os.ReadFile(filepath.Join(contractsDir, file)); err == nil {
 			contracts += fmt.Sprintf("\n// %s\n%s\n", file, string(content))
 		}
 	}
-	
+
 	return contracts
 }
 
-// getPlatformState gets current platform state
+// getPlatformState gets current platform state with detailed information
 func (agent *V3Agent) getPlatformState() string {
 	if agent.graph == nil {
 		return "Platform state: Not available"
 	}
-	
+
 	// Get the current graph
 	currentGraph, err := agent.graph.Graph()
 	if err != nil {
 		return "Platform state: Error loading graph"
 	}
-	
-	return fmt.Sprintf(`
-Platform State:
+
+	// Get detailed lists
+	applications := agent.getNodesByKind(currentGraph.Nodes, "application")
+	services := agent.getNodesByKind(currentGraph.Nodes, "service")
+	environments := agent.getNodesByKind(currentGraph.Nodes, "environment")
+	resources := agent.getNodesByKind(currentGraph.Nodes, "resource")
+
+	state := fmt.Sprintf(`Platform State:
 - Total nodes: %d
-- Applications: %d
-- Services: %d  
-- Environments: %d
-- Resources: %d
-`, len(currentGraph.Nodes), 
-	agent.countNodesByKind(currentGraph.Nodes, "application"),
-	agent.countNodesByKind(currentGraph.Nodes, "service"),
-	agent.countNodesByKind(currentGraph.Nodes, "environment"),
-	agent.countNodesByKind(currentGraph.Nodes, "resource"))
+
+APPLICATIONS (%d):`, len(currentGraph.Nodes), len(applications))
+
+	if len(applications) == 0 {
+		state += "\n  (No applications created yet)"
+	} else {
+		for _, app := range applications {
+			name := agent.getNodeName(app)
+			state += fmt.Sprintf("\n  - %s", name)
+		}
+	}
+
+	state += fmt.Sprintf("\n\nSERVICES (%d):", len(services))
+	if len(services) == 0 {
+		state += "\n  (No services created yet)"
+	} else {
+		for _, service := range services {
+			name := agent.getNodeName(service)
+			state += fmt.Sprintf("\n  - %s", name)
+		}
+	}
+
+	state += fmt.Sprintf("\n\nENVIRONMENTS (%d):", len(environments))
+	if len(environments) == 0 {
+		state += "\n  (No environments created yet)"
+	} else {
+		for _, env := range environments {
+			name := agent.getNodeName(env)
+			state += fmt.Sprintf("\n  - %s", name)
+		}
+	}
+
+	state += fmt.Sprintf("\n\nRESOURCES (%d):", len(resources))
+	if len(resources) == 0 {
+		state += "\n  (No resources created yet)"
+	} else {
+		for _, resource := range resources {
+			name := agent.getNodeName(resource)
+			state += fmt.Sprintf("\n  - %s", name)
+		}
+	}
+
+	return state
+}
+
+// getNodeName extracts the name from a node's metadata
+func (agent *V3Agent) getNodeName(node *graph.Node) string {
+	if node.Metadata != nil {
+		if name, ok := node.Metadata["name"].(string); ok {
+			return name
+		}
+	}
+	return node.ID // fallback to ID if no name found
+}
+
+// getNodesByKind returns all nodes of a specific kind
+func (agent *V3Agent) getNodesByKind(nodes map[string]*graph.Node, kind string) []*graph.Node {
+	var result []*graph.Node
+	for _, node := range nodes {
+		if node.Kind == kind {
+			result = append(result, node)
+		}
+	}
+	return result
 }
 
 // countNodesByKind counts nodes of a specific kind
@@ -264,10 +358,10 @@ func (agent *V3Agent) GetProviderInfo() *ProviderInfo {
 			Capabilities: []string{"chat"},
 		}
 	}
-	
+
 	return &ProviderInfo{
 		Name:         "V3 Agent with AI",
-		Version:      "3.0.0", 
+		Version:      "3.0.0",
 		Capabilities: []string{"chat", "create", "update", "list", "deploy"},
 	}
 }

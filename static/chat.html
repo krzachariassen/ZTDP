@@ -417,8 +417,8 @@
 
     <div class="chat-container">
         <div class="chat-header">
-            <h2><i class="fas fa-comments"></i> Chat with Your Platform</h2>
-            <p>Ask anything about deployments, applications, policies, or infrastructure</p>
+            <h2><i class="fas fa-comments"></i> Chat with V3 AI Agent</h2>
+            <p>Ultra-simple ChatGPT-style conversation for deployments, applications, and infrastructure</p>
         </div>
 
         <div class="messages-container" id="messagesContainer">
@@ -536,15 +536,13 @@
             showTypingIndicator();
 
             try {
-                const response = await fetch('/v1/ai/chat', {
+                const response = await fetch('/v3/ai/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        query: message,
-                        session: 'web-chat-' + Date.now(),
-                        timeout: 60
+                        message: message
                     })
                 });
 
@@ -618,9 +616,9 @@
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
             
-            // Main AI response
+            // Main AI response - V3Agent uses 'message' field (capital M)
             const responseText = document.createElement('div');
-            responseText.textContent = data.answer || 'I processed your request successfully.';
+            responseText.textContent = data.message || data.Message || data.answer || data.response || 'I processed your request successfully.';
             contentDiv.appendChild(responseText);
 
             // Add insights if available
@@ -632,21 +630,40 @@
                 contentDiv.appendChild(insightsDiv);
             }
 
-            // Add suggestions if available
+            // Add suggestions if available - V3Agent returns actions as objects with Type and Result
             if (data.actions && Array.isArray(data.actions) && data.actions.length > 0) {
                 const suggestionsDiv = document.createElement('div');
                 suggestionsDiv.className = 'ai-suggestions';
-                suggestionsDiv.innerHTML = '<h4>🚀 Suggested Actions</h4>' + 
-                    data.actions.map(action => 
-                        `<div class="suggestion-item" onclick="sendQuickMessage('${action.description || action}')">${action.description || action}</div>`
-                    ).join('');
+                suggestionsDiv.innerHTML = '<h4>🚀 Actions</h4>' + 
+                    data.actions.map(action => {
+                        // Handle V3Agent action objects: {Type: "...", Result: "..."}
+                        let actionText;
+                        if (typeof action === 'string') {
+                            actionText = action;
+                        } else if (action && action.Type) {
+                            actionText = `${action.Type}: ${action.Result || ''}`;
+                        } else {
+                            actionText = action.description || action.name || 'Action';
+                        }
+                        
+                        // Only make clickable if it's a meaningful action
+                        if (action.Type === 'conversation_continue') {
+                            return `<div class="suggestion-item">💬 ${actionText}</div>`;
+                        } else if (action.Type === 'resource_created') {
+                            return `<div class="suggestion-item">✅ ${actionText}</div>`;
+                        } else if (action.Type === 'error') {
+                            return `<div class="suggestion-item">❌ ${actionText}</div>`;
+                        } else {
+                            return `<div class="suggestion-item" onclick="sendQuickMessage('${actionText.replace(/'/g, '\\\'')}')">${actionText}</div>`;
+                        }
+                    }).join('');
                 contentDiv.appendChild(suggestionsDiv);
             }
 
             // Add confidence and metadata
             const metaDiv = document.createElement('div');
             metaDiv.className = 'message-meta';
-            const confidence = data.confidence ? Math.round(data.confidence * 100) : 0;
+            const confidence = data.confidence ? Math.round(data.confidence * 100) : 95; // V3Agent doesn't return confidence, so default to high
             metaDiv.innerHTML = `
                 <i class="fas fa-brain"></i> Confidence: ${confidence}%
                 <i class="fas fa-clock"></i> ${new Date().toLocaleTimeString()}

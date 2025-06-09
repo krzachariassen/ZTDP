@@ -165,7 +165,7 @@ func createTestAIAgent(globalGraph *graph.GlobalGraph) (*ai.PlatformAgent, error
 	return ai.NewPlatformAgentFromConfig(
 		globalGraph,
 		nil, // deploymentService - use nil for tests
-		nil, // policyService - use nil for tests  
+		nil, // policyService - use nil for tests
 		nil, // applicationService - use nil for tests
 		nil, // serviceService - use nil for tests
 		nil, // resourceService - use nil for tests
