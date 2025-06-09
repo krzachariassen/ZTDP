@@ -660,7 +660,7 @@ func TestPolicyAPIEndpoints(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
 		t.Fatalf("failed to parse policy creation response: %v", err)
 	}
-	
+
 	// The policy_id is nested in the "data" field
 	var policyID string
 	if data, ok := result["data"].(map[string]interface{}); ok {

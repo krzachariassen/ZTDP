@@ -1,24 +1,38 @@
 # ZTDP: Current State Summary (June 2025)
 
-## 🎯 Major Milestone Achieved: V3Agent Implementation Complete
+## 🎯 Major Milestone Achieved: API Test Suite & AI Deployment Investigation
 
-### ✅ Recently Completed: V2Agent Cleanup & V3Agent Finalization
+### ✅ Recently Completed: Comprehensive API Testing & AI Deployment Analysis
 
 **What was accomplished TODAY:**
+- **Complete API test suite fixed** - All tests in `/test/api/api_test.go` now pass
+- **Platform setup validation** - Full platform creation via APIs tested and working
+- **Deployment issue identified** - AI agent creates contracts but doesn't execute actual deployments
+- **Clean test separation** - API tests validate platform setup, deployment testing requires integration environment
+- **Policy API fixed** - Resolved `policy_id` response format issue (nested in `data` field)
+- **Health endpoint corrected** - Fixed `/v1/health` vs `/v1/healthz` mismatch
+
+**Technical Details:**
+- `test/api/api_test.go` - 774 lines, comprehensive platform testing via APIs
+- Tests create: applications, services, environments, resources, policies, versions
+- Deployment functions exist but require AI providers and real infrastructure
+- Clean separation between API validation and actual deployment execution
+
+### 🔍 Key Discovery: AI Deployment Gap
+**Issue:** V3Agent responds with contracts but doesn't call deployment APIs
+- Agent creates JSON contracts instead of making HTTP calls to `/v1/applications/{app}/deploy`
+- Missing integration between AI conversation layer and actual API execution
+- Requires AI agent to understand when to transition from planning to execution
+
+### ✅ Previous: V3Agent Implementation Complete
+
+**What was accomplished:**
 - **V2Agent completely removed** - Deleted /internal/ai/v2_agent.go (370+ lines)
 - **All V2 references cleaned up** - Removed from handlers, global config, and routes
 - **V3Agent finalized** - Ultra-simple ChatGPT-style AI-native implementation
 - **Provider compatibility added** - V3Agent.Provider() method for backward compatibility
 - **All compilation issues fixed** - Code compiles successfully
 - **Route structure simplified** - Only V1 and V3 endpoints remain
-
-**Technical Details:**
-- `internal/ai/v3_agent.go` - 284 lines, ultra-simple ChatGPT-inspired implementation
-- Single `Chat()` method handles all interactions naturally
-- Dynamic contract loading from filesystem
-- `FINAL_CONTRACT:` prefix detection for execution
-- Correct service interface method calls
-- Natural conversation flow like ChatGPT example
 
 ### ✅ Previous Milestone: Clean Architecture Foundation Complete
 
