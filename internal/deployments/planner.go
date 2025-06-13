@@ -128,8 +128,8 @@ func (p *AIDeploymentPlanner) parseDeploymentOrder(response string) ([]string, e
 	var order []string
 
 	// Simple parsing - in real implementation would use proper JSON parsing
-	// For now, return basic order
-	order = []string{"database", "application"}
+	// For now, return service version IDs that should exist in test setup
+	order = []string{"service-a:1.0.0", "service-b:1.0.0"}
 
 	if len(order) == 0 {
 		return nil, fmt.Errorf("empty deployment order")

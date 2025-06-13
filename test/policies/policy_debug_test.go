@@ -10,50 +10,13 @@ import (
 
 // MockGraphBackend implements graph.GraphBackend for testing
 type MockGraphBackend struct {
-	graphs map[string]*graph.Graph
 	global *graph.Graph
 }
 
 func NewMockGraphBackend() *MockGraphBackend {
 	return &MockGraphBackend{
-		graphs: map[string]*graph.Graph{
-			"default": graph.NewGraph(),
-		},
 		global: graph.NewGraph(),
 	}
-}
-
-func (m *MockGraphBackend) AddNode(env string, node *graph.Node) error {
-	g, ok := m.graphs[env]
-	if !ok {
-		m.graphs[env] = graph.NewGraph()
-		g = m.graphs[env]
-	}
-	return g.AddNode(node)
-}
-
-func (m *MockGraphBackend) AddEdge(env, fromID, toID, relType string) error {
-	g, ok := m.graphs[env]
-	if !ok {
-		return nil // For simplicity in test
-	}
-	return g.AddEdge(fromID, toID, relType)
-}
-
-func (m *MockGraphBackend) GetNode(env, id string) (*graph.Node, error) {
-	g, ok := m.graphs[env]
-	if !ok {
-		return nil, nil // For simplicity in test
-	}
-	return g.GetNode(id)
-}
-
-func (m *MockGraphBackend) GetAll(env string) (*graph.Graph, error) {
-	g, ok := m.graphs[env]
-	if !ok {
-		return graph.NewGraph(), nil
-	}
-	return g, nil
 }
 
 func (m *MockGraphBackend) SaveGlobal(g *graph.Graph) error {
@@ -63,6 +26,12 @@ func (m *MockGraphBackend) SaveGlobal(g *graph.Graph) error {
 
 func (m *MockGraphBackend) LoadGlobal() (*graph.Graph, error) {
 	return m.global, nil
+}
+
+// Clear removes all global data (for testing)
+func (m *MockGraphBackend) Clear() error {
+	m.global = graph.NewGraph()
+	return nil
 }
 
 // A simple test to debug and verify policy enforcement
@@ -75,8 +44,8 @@ func TestGraphPolicyEnforcement(t *testing.T) {
 	graphStore := graph.NewGraphStore(backend)
 	env := "default"
 
-	// Get the environment graph (already exists in mock)
-	g, err := backend.GetAll(env)
+	// Get the environment graph using GraphStore
+	g, err := graphStore.GetGraph(env)
 	if err != nil {
 		t.Fatalf("Failed to get graph: %v", err)
 	}

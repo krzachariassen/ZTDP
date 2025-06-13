@@ -13,6 +13,12 @@ func TestGlobalGraph_Apply_RedisBackend(t *testing.T) {
 		t.Skip("REDIS_HOST not set, skipping Redis backend test")
 	}
 	backend := NewRedisGraph(RedisGraphConfig{Addr: addr, Password: os.Getenv("REDIS_PASSWORD")})
+
+	// Clear any existing test data for proper test isolation
+	if err := backend.Clear(); err != nil {
+		t.Fatalf("failed to clear Redis data: %v", err)
+	}
+
 	gg := NewGlobalGraph(backend)
 
 	app := contracts.ApplicationContract{
@@ -47,8 +53,12 @@ func TestGlobalGraph_Apply_RedisBackend(t *testing.T) {
 	svcNode, _ := ResolveContract(svc)
 	gg.AddNode(svcNode)
 
-	if err := gg.AddEdge("checkout-api", "checkout", "owns"); err != nil {
-		t.Fatalf("failed to add edge: %v", err)
+	// Applications own services, not the other way around
+	if err := gg.AddEdge("checkout", "checkout-api", "owns"); err != nil {
+		// For tests with persistent Redis backend: ignore "edge already exists" errors
+		if err.Error() != "edge already exists" {
+			t.Fatalf("failed to add edge: %v", err)
+		}
 	}
 
 	applied, err := gg.Apply("dev")
@@ -59,7 +69,9 @@ func TestGlobalGraph_Apply_RedisBackend(t *testing.T) {
 	if len(applied.Nodes) != 2 {
 		t.Errorf("expected 2 nodes, got %d", len(applied.Nodes))
 	}
-	if len(applied.Edges["checkout-api"]) != 1 || applied.Edges["checkout-api"][0].To != "checkout" || applied.Edges["checkout-api"][0].Type != "owns" {
-		t.Errorf("expected edge checkout-api --owns--> checkout not found")
+
+	// Verify the correct edge direction: checkout --owns--> checkout-api
+	if len(applied.Edges["checkout"]) != 1 || applied.Edges["checkout"][0].To != "checkout-api" || applied.Edges["checkout"][0].Type != "owns" {
+		t.Errorf("expected edge checkout --owns--> checkout-api not found")
 	}
 }

@@ -49,78 +49,7 @@ func NewRedisGraph(cfg RedisGraphConfig) GraphBackend {
 	panic(fmt.Errorf("failed to connect to Redis after 3 attempts: %w", err))
 }
 
-func redisKeyNode(env, id string) string {
-	return fmt.Sprintf("ztgp:%s:node:%s", env, id)
-}
-
-func redisKeyEdges(env, fromID string) string {
-	return fmt.Sprintf("ztgp:%s:edges:%s", env, fromID)
-}
-
-func (r *redisGraph) AddNode(env string, node *Node) error {
-	data, err := json.Marshal(node)
-	if err != nil {
-		return fmt.Errorf("marshal node: %w", err)
-	}
-	return r.client.Set(context.Background(), redisKeyNode(env, node.ID), data, 0).Err()
-}
-
-func (r *redisGraph) GetNode(env, id string) (*Node, error) {
-	data, err := r.client.Get(context.Background(), redisKeyNode(env, id)).Bytes()
-	if err != nil {
-		return nil, fmt.Errorf("get node: %w", err)
-	}
-	var node Node
-	if err := json.Unmarshal(data, &node); err != nil {
-		return nil, fmt.Errorf("unmarshal node: %w", err)
-	}
-	return &node, nil
-}
-
-func (r *redisGraph) AddEdge(env, fromID, toID, relType string) error {
-	// Store as JSON: {to: ..., type: ...}
-	data, err := json.Marshal(Edge{To: toID, Type: relType})
-	if err != nil {
-		return err
-	}
-	return r.client.SAdd(context.Background(), redisKeyEdges(env, fromID), data).Err()
-}
-
-func (r *redisGraph) GetAll(env string) (*Graph, error) {
-	ctx := context.Background()
-	graph := NewGraph()
-
-	iter := r.client.Scan(ctx, 0, fmt.Sprintf("ztgp:%s:node:*", env), 0).Iterator()
-	for iter.Next(ctx) {
-		key := iter.Val()
-		data, err := r.client.Get(ctx, key).Bytes()
-		if err != nil {
-			continue
-		}
-		var node Node
-		if err := json.Unmarshal(data, &node); err == nil {
-			graph.Nodes[node.ID] = &node
-		}
-	}
-
-	for id := range graph.Nodes {
-		edgeKey := redisKeyEdges(env, id)
-		edgeDatas, err := r.client.SMembers(ctx, edgeKey).Result()
-		if err != nil {
-			continue
-		}
-		for _, edgeData := range edgeDatas {
-			var edge Edge
-			if err := json.Unmarshal([]byte(edgeData), &edge); err == nil {
-				graph.Edges[id] = append(graph.Edges[id], edge)
-			}
-		}
-	}
-
-	return graph, nil
-}
-
-// Global graph persistence
+// Global graph persistence - the only storage mechanism
 func (r *redisGraph) SaveGlobal(g *Graph) error {
 	data, err := json.Marshal(g)
 	if err != nil {
@@ -139,4 +68,10 @@ func (r *redisGraph) LoadGlobal() (*Graph, error) {
 		return nil, fmt.Errorf("unmarshal global graph: %w", err)
 	}
 	return &graph, nil
+}
+
+// Clear removes all global data (useful for testing)
+func (r *redisGraph) Clear() error {
+	ctx := context.Background()
+	return r.client.Del(ctx, "ztgp:graph:global").Err()
 }

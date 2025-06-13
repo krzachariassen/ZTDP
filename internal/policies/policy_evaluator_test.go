@@ -1,7 +1,6 @@
 package policies_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/krzachariassen/ZTDP/internal/events"
@@ -11,60 +10,13 @@ import (
 
 // Mock implementation for GraphBackend
 type MockGraphBackend struct {
-	graphs map[string]*graph.Graph
 	global *graph.Graph
 }
 
 func NewMockGraphBackend() *MockGraphBackend {
 	return &MockGraphBackend{
-		graphs: map[string]*graph.Graph{
-			"default": graph.NewGraph(),
-		},
 		global: graph.NewGraph(),
 	}
-}
-
-// Add a node - if it exists, update it
-func (m *MockGraphBackend) AddNode(env string, node *graph.Node) error {
-	g, ok := m.graphs[env]
-	if !ok {
-		m.graphs[env] = graph.NewGraph()
-		g = m.graphs[env]
-	}
-
-	// First check if node exists, and if so, update it instead of adding a new one
-	_, err := g.GetNode(node.ID)
-	if err == nil {
-		// Node exists, replace it
-		return g.UpdateNode(node)
-	}
-
-	// Node doesn't exist, add it
-	return g.AddNode(node)
-}
-
-func (m *MockGraphBackend) AddEdge(env, fromID, toID, relType string) error {
-	g, ok := m.graphs[env]
-	if !ok {
-		return errors.New("environment not found")
-	}
-	return g.AddEdge(fromID, toID, relType)
-}
-
-func (m *MockGraphBackend) GetNode(env, id string) (*graph.Node, error) {
-	g, ok := m.graphs[env]
-	if !ok {
-		return nil, errors.New("environment not found")
-	}
-	return g.GetNode(id)
-}
-
-func (m *MockGraphBackend) GetAll(env string) (*graph.Graph, error) {
-	g, ok := m.graphs[env]
-	if !ok {
-		return graph.NewGraph(), nil
-	}
-	return g, nil
 }
 
 // Implement SaveGlobal and LoadGlobal to satisfy the GraphBackend interface
@@ -75,6 +27,12 @@ func (m *MockGraphBackend) SaveGlobal(g *graph.Graph) error {
 
 func (m *MockGraphBackend) LoadGlobal() (*graph.Graph, error) {
 	return m.global, nil
+}
+
+// Clear removes all global data (for testing)
+func (m *MockGraphBackend) Clear() error {
+	m.global = graph.NewGraph()
+	return nil
 }
 
 func TestPolicyEvaluator(t *testing.T) {
@@ -114,7 +72,7 @@ func TestPolicyEvaluator(t *testing.T) {
 		}
 
 		// Verify policy exists in graph
-		retrievedNode, err := backend.GetNode(env, policyNode.ID)
+		retrievedNode, err := graphStore.GetNode(env, policyNode.ID)
 		if err != nil {
 			t.Fatalf("Failed to retrieve policy node: %v", err)
 		}
@@ -128,8 +86,8 @@ func TestPolicyEvaluator(t *testing.T) {
 	t.Run("PolicySatisfactionFlow", func(t *testing.T) {
 		env := "test-env"
 
-		// Create a fresh graph for this test
-		backend.graphs[env] = graph.NewGraph()
+		// Clear the backend for this test
+		backend.Clear()
 
 		evaluator := policies.NewPolicyEvaluator(graphStore, env)
 
@@ -148,8 +106,8 @@ func TestPolicyEvaluator(t *testing.T) {
 			Spec:     map[string]interface{}{},
 		}
 
-		backend.AddNode(env, appNode)
-		backend.AddNode(env, envNode)
+		graphStore.AddNode(env, appNode)
+		graphStore.AddNode(env, envNode)
 
 		// Create a policy node
 		policyNode, err := evaluator.CreatePolicyNode(
@@ -166,7 +124,7 @@ func TestPolicyEvaluator(t *testing.T) {
 		}
 
 		// Get the graph
-		g, err := backend.GetAll(env)
+		g, err := graphStore.GetGraph(env)
 		if err != nil {
 			t.Fatalf("Failed to get graph: %v", err)
 		}
@@ -177,9 +135,8 @@ func TestPolicyEvaluator(t *testing.T) {
 			t.Fatalf("Failed to attach policy to transition: %v", err)
 		}
 
-		// Since we're working directly with the graph, we need to make sure the changes
-		// are reflected in the backend instance
-		backend.graphs[env] = g
+		// Save the updated graph back to the store
+		backend.SaveGlobal(g)
 
 		// Create a check node
 		checkNode, err := evaluator.CreateCheckNode(

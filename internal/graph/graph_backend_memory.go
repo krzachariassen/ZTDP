@@ -1,57 +1,17 @@
 package graph
 
 import (
-	"errors"
 	"fmt"
 )
 
 type memoryGraph struct {
-	Graphs map[string]*Graph
 	Global *Graph
 }
 
 func NewMemoryGraph() GraphBackend {
 	return &memoryGraph{
-		Graphs: make(map[string]*Graph),
 		Global: NewGraph(),
 	}
-}
-
-func (m *memoryGraph) getOrCreate(env string) *Graph {
-	if g, ok := m.Graphs[env]; ok {
-		return g
-	}
-	g := NewGraph()
-	m.Graphs[env] = g
-	return g
-}
-
-func (m *memoryGraph) AddNode(env string, node *Node) error {
-	if node == nil {
-		return errors.New("cannot add nil node")
-	}
-	g := m.getOrCreate(env)
-	// If node exists, update it instead of erroring
-	if _, err := g.GetNode(node.ID); err == nil {
-		return g.UpdateNode(node)
-	}
-	return g.AddNode(node)
-}
-
-func (m *memoryGraph) AddEdge(env, fromID, toID, relType string) error {
-	return m.getOrCreate(env).AddEdge(fromID, toID, relType)
-}
-
-func (m *memoryGraph) GetNode(env, id string) (*Node, error) {
-	return m.getOrCreate(env).GetNode(id)
-}
-
-func (m *memoryGraph) GetAll(env string) (*Graph, error) {
-	g, ok := m.Graphs[env]
-	if !ok {
-		return nil, fmt.Errorf("graph for env %s not found", env)
-	}
-	return g, nil
 }
 
 func (m *memoryGraph) SaveGlobal(g *Graph) error {
@@ -64,4 +24,10 @@ func (m *memoryGraph) LoadGlobal() (*Graph, error) {
 		return nil, fmt.Errorf("no global graph stored")
 	}
 	return m.Global, nil
+}
+
+// Clear removes all global data (useful for testing)
+func (m *memoryGraph) Clear() error {
+	m.Global = NewGraph()
+	return nil
 }
