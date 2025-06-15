@@ -42,10 +42,10 @@ func InitLogManager() {
 func subscribeToEvents() {
 	logger := logging.GetLogger().ForComponent("event-subscriber")
 
-	// Subscribe to the three main application event types we have
-	events.GlobalEventBus.Subscribe(events.EventTypeApplicationCreated, createEventHandler(logger, "application", "Application Created"))
-	events.GlobalEventBus.Subscribe(events.EventTypeApplicationUpdated, createEventHandler(logger, "application", "Application Updated"))
-	events.GlobalEventBus.Subscribe(events.EventTypeApplicationDeleted, createEventHandler(logger, "application", "Application Deleted"))
+	// Subscribe to generic event types for application lifecycle events
+	events.GlobalEventBus.Subscribe(events.EventTypeNotify, createEventHandler(logger, "application", "Application Event"))
+	events.GlobalEventBus.Subscribe(events.EventTypeRequest, createEventHandler(logger, "request", "Agent Request"))
+	events.GlobalEventBus.Subscribe(events.EventTypeResponse, createEventHandler(logger, "response", "Agent Response"))
 }
 
 // createEventHandler creates a generic event handler for the simplified event system
