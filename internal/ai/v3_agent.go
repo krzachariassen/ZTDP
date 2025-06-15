@@ -419,7 +419,7 @@ func (agent *V3Agent) consultPolicyAgent(ctx context.Context, intent string, con
 	if err := agent.eventBus.Emit(events.EventTypeRequest, "v3-agent", intent, context); err != nil {
 		return nil, fmt.Errorf("failed to emit policy request: %w", err)
 	}
-	
+
 	// For now, create a simple success response since we don't have request-response correlation yet
 	// TODO: Implement proper request-response correlation in Phase 3
 	responsePayload := map[string]interface{}{
@@ -428,7 +428,7 @@ func (agent *V3Agent) consultPolicyAgent(ctx context.Context, intent string, con
 		"confidence": 0.8,
 		"handled":    true,
 	}
-	
+
 	return &events.Event{
 		Type:    events.EventTypeResponse,
 		Source:  "policy-agent",
@@ -446,13 +446,13 @@ func (agent *V3Agent) validateDeploymentViaEvents(ctx context.Context, appName, 
 		"environment": env,
 		"timestamp":   time.Now(),
 	}
-	
+
 	// Consult policy agent via events
 	response, err := agent.consultPolicyAgent(ctx, "validate deployment", policyContext)
 	if err != nil {
 		return fmt.Errorf("policy consultation failed: %w", err)
 	}
-	
+
 	// Check response
 	if decision, ok := response.Payload["decision"].(string); ok {
 		if decision == "blocked" {
@@ -462,6 +462,6 @@ func (agent *V3Agent) validateDeploymentViaEvents(ctx context.Context, appName, 
 			return fmt.Errorf("deployment blocked by policy")
 		}
 	}
-	
+
 	return nil
 }

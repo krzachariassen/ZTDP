@@ -43,7 +43,7 @@ func (s *Service) CreateApplication(app contracts.ApplicationContract) error {
 			"owner":            app.Metadata.Owner,
 			"tags":             app.Spec.Tags,
 		}
-		events.GlobalEventBus.Emit(events.EventTypeApplicationCreated, "ztdp-platform", app.Metadata.Name, payload)
+		events.GlobalEventBus.Emit(events.EventTypeNotify, "ztdp-platform", "application_created", payload)
 	}
 
 	return nil
@@ -72,7 +72,7 @@ func (s *Service) CreateApplicationFromContract(ctx context.Context, app *contra
 			"owner":            app.Metadata.Owner,
 			"tags":             app.Spec.Tags,
 		}
-		events.GlobalEventBus.Emit(events.EventTypeApplicationCreated, "ztdp-platform", app.Metadata.Name, payload)
+		events.GlobalEventBus.Emit(events.EventTypeNotify, "ztdp-platform", "application_created", payload)
 	}
 
 	return map[string]interface{}{

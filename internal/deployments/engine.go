@@ -39,17 +39,17 @@ type DeploymentSummary struct {
 
 // Engine handles application deployments with policy enforcement using Event-Driven Architecture
 type Engine struct {
-	graph   *graph.GlobalGraph
-	agent   *ai.PlatformAgent
-	planner DeploymentPlanner
-	logger  *logging.Logger
+	graph    *graph.GlobalGraph
+	provider ai.AIProvider
+	planner  DeploymentPlanner
+	logger   *logging.Logger
 }
 
-// NewEngine creates a new event-driven deployment engine with a PlatformAgent
-func NewEngine(g *graph.GlobalGraph, agent *ai.PlatformAgent) *Engine {
+// NewEngine creates a new event-driven deployment engine with a V3Agent (extracts AI provider)
+func NewEngine(g *graph.GlobalGraph, agent *ai.V3Agent) *Engine {
 	logger := logging.GetLogger().ForComponent("deployment-engine")
 
-	// Create AI deployment planner - AI agent is required for AI-native platform
+	// Extract AI provider from agent for clean architecture
 	if agent == nil {
 		logger.Error("❌ AI agent is required for deployment engine - this is an AI-native platform")
 		return nil
@@ -58,10 +58,10 @@ func NewEngine(g *graph.GlobalGraph, agent *ai.PlatformAgent) *Engine {
 	planner := NewAIDeploymentPlanner(g, agent.Provider())
 
 	return &Engine{
-		graph:   g,
-		agent:   agent,
-		planner: planner,
-		logger:  logger,
+		graph:    g,
+		provider: agent.Provider(),
+		planner:  planner,
+		logger:   logger,
 	}
 }
 
@@ -80,10 +80,10 @@ func NewEngineWithProvider(g *graph.GlobalGraph, provider ai.AIProvider) *Engine
 	planner := NewAIDeploymentPlanner(g, provider)
 
 	return &Engine{
-		graph:   g,
-		agent:   nil, // No AI agent dependency
-		planner: planner,
-		logger:  logger,
+		graph:    g,
+		provider: provider,
+		planner:  planner,
+		logger:   logger,
 	}
 }
 
@@ -163,7 +163,7 @@ func (e *Engine) ExecuteApplicationDeployment(appName, environment string) (*Dep
 	// EDA COMPLIANCE: Emit deployment requested event instead of calling RPs directly
 	// Resource Providers subscribe to this event and react accordingly
 	// ==================================================================================
-	events.GlobalEventBus.Emit(events.EventTypeApplicationCreated, "deployment-engine", appName, map[string]interface{}{
+	events.GlobalEventBus.Emit(events.EventTypeNotify, "deployment-engine", "deployment_requested", map[string]interface{}{
 		"type":          "deployment_requested",
 		"application":   appName,
 		"environment":   environment,
@@ -237,7 +237,7 @@ func (e *Engine) ExecuteApplicationDeployment(appName, environment string) (*Dep
 	if len(deployments) > 0 {
 		if err := e.graph.Save(); err != nil {
 			// Emit failure event
-			events.GlobalEventBus.Emit(events.EventTypeApplicationUpdated, "deployment-engine", appName, map[string]interface{}{
+			events.GlobalEventBus.Emit(events.EventTypeNotify, "deployment-engine", "deployment_failed", map[string]interface{}{
 				"type":          "deployment_failed",
 				"application":   appName,
 				"environment":   environment,
@@ -252,7 +252,7 @@ func (e *Engine) ExecuteApplicationDeployment(appName, environment string) (*Dep
 		e.updatePolicyChecks(appName, environment)
 
 		// Emit deployment started event (Resource Providers will begin actual deployment)
-		events.GlobalEventBus.Emit(events.EventTypeApplicationUpdated, "deployment-engine", appName, map[string]interface{}{
+		events.GlobalEventBus.Emit(events.EventTypeNotify, "deployment-engine", "deployment_started", map[string]interface{}{
 			"type":          "deployment_started",
 			"application":   appName,
 			"environment":   environment,
@@ -276,7 +276,7 @@ func (e *Engine) ExecuteApplicationDeployment(appName, environment string) (*Dep
 	// Status depends on whether we have failures or if everything was skipped
 	if len(failed) > 0 {
 		result.Status = "failed"
-		events.GlobalEventBus.Emit(events.EventTypeApplicationUpdated, "deployment-engine", appName, map[string]interface{}{
+		events.GlobalEventBus.Emit(events.EventTypeNotify, "deployment-engine", "deployment_failed", map[string]interface{}{
 			"type":          "deployment_failed",
 			"application":   appName,
 			"environment":   environment,
@@ -301,7 +301,7 @@ func (e *Engine) ExecuteApplicationDeployment(appName, environment string) (*Dep
 		result.Status = "in_progress" // Resource Providers will complete asynchronously
 	} else {
 		result.Status = "completed" // Nothing to deploy (all skipped)
-		events.GlobalEventBus.Emit(events.EventTypeApplicationUpdated, "deployment-engine", appName, map[string]interface{}{
+		events.GlobalEventBus.Emit(events.EventTypeNotify, "deployment-engine", "deployment_completed", map[string]interface{}{
 			"type":          "deployment_completed",
 			"application":   appName,
 			"environment":   environment,
@@ -400,7 +400,7 @@ func (e *Engine) HandleResourceProvisionCompleted(resourceID, resourceType strin
 		node.Metadata["status"] = "provisioned"
 
 		// Emit resource provision completed event
-		events.GlobalEventBus.Emit(events.EventTypeApplicationUpdated, "deployment-engine", resourceID, map[string]interface{}{
+		events.GlobalEventBus.Emit(events.EventTypeNotify, "deployment-engine", "resource_provision_completed", map[string]interface{}{
 			"type":            "resource_provision_completed",
 			"resource_id":     resourceID,
 			"resource_type":   resourceType,
