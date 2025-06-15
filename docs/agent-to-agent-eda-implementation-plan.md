@@ -2,9 +2,73 @@
 ## Event-Driven Architecture for Decoupled Agent Coordination
 
 **Date:** June 15, 2025  
-**Status:** Planning Phase  
+**Status:** 🚧 **Phase 3 In Progress** (Phase 1 & 2 Complete)  
 **Priority:** High  
 **Complexity:** High  
+
+---
+
+## ✅ **IMPLEMENTATION PROGRESS UPDATE**
+
+### **COMPLETED PHASES**
+
+#### **✅ Phase 1: Foundation (Complete)**
+- ✅ Event bus implementation (`/internal/events/`)
+- ✅ Core event types and schemas
+- ✅ Generic agent interface (`/internal/agents/interface.go`)
+- ✅ Agent registration and discovery (`/internal/agents/registry.go`)
+- ✅ Basic event publishing/subscribing
+- ✅ **All tests passing**
+
+#### **✅ Phase 2: Policy Agent Integration (Complete)**
+- ✅ Refactored Policy service to PolicyAgent (`/internal/policies/policy_agent.go`)
+- ✅ Event-based policy evaluation
+- ✅ Policy Agent event handlers
+- ✅ Integration with existing policy system
+- ✅ **All PolicyAgent tests passing**
+- ✅ Decision type normalization (maps `not_applicable` → `allowed`, `pending_approval` → `conditional`)
+- ✅ Reasoning always provided in responses
+
+#### **🚧 Phase 3: Platform Agent Refactoring (In Progress)**
+- ✅ Removed hardcoded PolicyService interface from Platform Agent
+- ✅ Implemented event-based coordination infrastructure  
+- ✅ Added event infrastructure (EventBus, AgentRegistry) to V3Agent
+- ✅ Implemented `consultPolicyAgent()` and `validateDeploymentViaEvents()` methods
+- ✅ Updated API initialization to remove PolicyService dependency
+- 🔄 Request-response correlation (basic implementation, needs enhancement)
+- 🚧 **Compilation issues in other domain services** (see backlog below)
+
+---
+
+## 🔍 **KEY ARCHITECTURAL FINDINGS**
+
+### **Critical Discovery: V3Agent vs PlatformAgent**
+- **V3Agent** (`/internal/ai/v3_agent.go`) is the **CURRENT IMPLEMENTATION** used by all API handlers
+- **PlatformAgent** (`/internal/ai/platform_agent.go`) is **LEGACY CODE** that should be removed
+- All API handlers use `GetGlobalV3Agent()` - V3Agent is the active platform agent
+
+### **Service Interface Dependencies in V3Agent**
+```go
+// Current V3Agent still has hardcoded service dependencies:
+type V3Agent struct {
+    // Event-Driven Communication (NEW)
+    eventBus      *events.EventBus
+    agentRegistry agents.AgentRegistry
+    
+    // Service interfaces (TEMPORARY - to be replaced with event-driven agents)
+    applicationService ApplicationService  // ⚠️ TO MIGRATE
+    serviceService     ServiceService      // ⚠️ TO MIGRATE  
+    resourceService    ResourceService     // ⚠️ TO MIGRATE
+    environmentService EnvironmentService  // ⚠️ TO MIGRATE
+    deploymentService  DeploymentService   // ⚠️ TO MIGRATE
+    // policyService removed ✅ - now uses event-driven PolicyAgent
+}
+```
+
+### **Answer to Core Question: Policy Hardcoding**
+❌ **No, we should NOT hardcode policies into platform agent**  
+✅ **Successfully implemented event-driven PolicyAgent communication**  
+✅ **Platform Agent now consults PolicyAgent via events for full observability**
 
 ---
 
@@ -578,4 +642,79 @@ func TestFullUserJourneyWithAgents(t *testing.T) {
 
 ---
 
-**This implementation plan transforms ZTDP into a truly AI-native, event-driven agent ecosystem where agents coordinate intelligently without hardcoded dependencies.**
+## 📊 **CURRENT ARCHITECTURE STATUS**
+
+### **✅ SUCCESSFULLY IMPLEMENTED**
+
+1. **Event-Driven PolicyAgent Communication**
+   - ✅ Platform Agent (V3Agent) no longer has hardcoded PolicyService dependency
+   - ✅ Policy evaluation happens via events with full observability
+   - ✅ `consultPolicyAgent()` method implemented for event-based policy consultation
+   - ✅ All PolicyAgent tests passing with proper decision normalization
+
+2. **Clean Agent Infrastructure**
+   - ✅ Generic AgentInterface for all AI agents
+   - ✅ Agent registration and discovery system
+   - ✅ Event bus with publish/subscribe capabilities
+   - ✅ Base agent implementation with common functionality
+
+3. **Domain Separation Achieved**
+   - ✅ Business logic stays in domain services
+   - ✅ AI providers are pure infrastructure tools
+   - ✅ Events are generic, not domain-specific
+   - ✅ Agent communication is observable and auditable
+
+### **🚧 PARTIALLY IMPLEMENTED**
+
+1. **Platform Agent Refactoring (V3Agent)**
+   - ✅ PolicyService removed and replaced with event-driven communication
+   - 🚧 Other service dependencies still hardcoded (see migration backlog)
+   - 🚧 Request-response correlation needs enhancement
+   - 🚧 Some compilation errors in dependent services
+
+### **❌ NOT YET IMPLEMENTED**
+
+1. **Additional Domain Agents**
+   - ❌ ApplicationAgent, ServiceAgent, ResourceAgent, DeploymentAgent, EnvironmentAgent
+   - ❌ Multi-agent workflows
+   - ❌ Advanced agent capabilities
+
+2. **Production Features**
+   - ❌ Redis/NATS transport for event bus
+   - ❌ Agent clustering and high availability
+   - ❌ Proper security and authentication
+
+---
+
+## 🎯 **NEXT IMMEDIATE ACTIONS**
+
+### **Priority 1: Fix Compilation Issues**
+1. Fix domain-specific event type references in application/deployment services
+2. Update deployment engine to remove PlatformAgent references
+3. Ensure clean build across all packages
+
+### **Priority 2: Complete Phase 3**
+1. Implement proper request-response correlation with correlation IDs
+2. Add timeout handling for agent responses
+3. Enhance event-driven communication patterns
+
+### **Priority 3: Begin Phase 4**
+1. Start with ApplicationAgent implementation
+2. Create event-driven patterns for application lifecycle management
+3. Gradually migrate remaining service interfaces
+
+---
+
+## ✨ **KEY ACHIEVEMENTS SUMMARY**
+
+🎉 **Successfully answered the core question**: "Should we hardcode policies into platform agent?"
+
+**Answer: NO** - and we've proven it works by:
+- ✅ Removing hardcoded PolicyService from Platform Agent
+- ✅ Implementing clean event-driven PolicyAgent communication  
+- ✅ Maintaining full observability of all policy decisions
+- ✅ Following clean architecture principles throughout
+
+The foundation for a truly AI-native, event-driven agent ecosystem is now in place! 🚀
+
+---
