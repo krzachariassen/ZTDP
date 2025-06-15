@@ -27,6 +27,9 @@ const (
 	EdgeTypeInstanceOf = common.EdgeTypeInstanceOf
 	EdgeTypeRequires   = common.EdgeTypeRequires
 	EdgeTypeSatisfies  = common.EdgeTypeSatisfies
+	EdgeTypeAccesses   = "accesses"
+	EdgeTypeConnectsTo = "connects_to"
+	EdgeTypeDependsOn  = "depends_on"
 
 	// Policy types
 	PolicyTypeCheck    = common.PolicyTypeCheck
@@ -50,6 +53,9 @@ var AllowedEdgeTypes = map[string]struct{}{
 	EdgeTypeInstanceOf: {},
 	EdgeTypeRequires:   {},
 	EdgeTypeSatisfies:  {},
+	EdgeTypeAccesses:   {},
+	EdgeTypeConnectsTo: {},
+	EdgeTypeDependsOn:  {},
 	"allowed_in":       {}, // Policy edge type for environment access
 	// Add more as needed
 }

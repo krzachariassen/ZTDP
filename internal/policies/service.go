@@ -2,788 +2,402 @@ package policies
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/graph"
-	"github.com/krzachariassen/ZTDP/internal/logging"
 )
 
-// Service wraps Policy Evaluator and provides business logic methods for policy operations
-// Enhanced with AI-first policy evaluation capabilities using clean AI provider interface
+// Service provides AI-native policy evaluation capabilities
+// This is the main domain service that orchestrates policy evaluation
 type Service struct {
-	evaluator   *PolicyEvaluator
-	aiProvider  ai.AIProvider // Clean AI provider for infrastructure-only calls
-	graphStore  GraphStoreInterface
+	aiProvider  ai.AIProvider
+	graphStore  *graph.GraphStore
 	globalGraph *graph.GlobalGraph
+	policyStore PolicyStore
 	env         string
-	logger      *logging.Logger
+	eventBus    EventBus
 }
 
-// NewService creates a new policy service with AI capabilities
-func NewService(graphStore GraphStoreInterface, globalGraph *graph.GlobalGraph, env string) *Service {
-	evaluator := NewPolicyEvaluator(graphStore, env)
+// NewService creates a new AI-native policy service
+func NewService(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph, env string, eventBus EventBus) *Service {
+	return NewServiceWithPolicyStore(graphStore, globalGraph, nil, env, eventBus)
+}
 
-	// Initialize clean AI provider from config (no AI Brain dependency)
+// NewServiceWithPolicyStore creates a new AI-native policy service with a policy store
+func NewServiceWithPolicyStore(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph, policyStore PolicyStore, env string, eventBus EventBus) *Service {
+	// Initialize AI provider - REQUIRED for AI-native operation
 	var aiProvider ai.AIProvider
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey != "" {
 		config := ai.DefaultOpenAIConfig()
-
-		// Allow model override via environment
 		if model := os.Getenv("OPENAI_MODEL"); model != "" {
 			config.Model = model
 		}
-
-		// Allow base URL override for custom deployments
 		if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
 			config.BaseURL = baseURL
 		}
-
 		if provider, err := ai.NewOpenAIProvider(config, apiKey); err == nil {
 			aiProvider = provider
 		}
 	}
 
 	return &Service{
-		evaluator:   evaluator,
 		aiProvider:  aiProvider,
 		graphStore:  graphStore,
 		globalGraph: globalGraph,
+		policyStore: policyStore,
 		env:         env,
-		logger:      logging.GetLogger().ForComponent("policy-service"),
+		eventBus:    eventBus,
 	}
 }
 
-// PolicyOperationRequest represents a policy operation request
-type PolicyOperationRequest struct {
-	Operation   string                 `json:"operation"`
-	FromID      string                 `json:"from_id,omitempty"`
-	ToID        string                 `json:"to_id,omitempty"`
-	EdgeType    string                 `json:"edge_type,omitempty"`
-	PolicyID    string                 `json:"policy_id,omitempty"`
-	CheckID     string                 `json:"check_id,omitempty"`
-	Name        string                 `json:"name,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	Type        string                 `json:"type,omitempty"`
-	Status      string                 `json:"status,omitempty"`
-	Parameters  map[string]interface{} `json:"parameters,omitempty"`
-	Results     map[string]interface{} `json:"results,omitempty"`
-}
-
-// PolicyOperationResponse represents a policy operation response
-type PolicyOperationResponse struct {
-	Success bool                   `json:"success"`
-	Message string                 `json:"message,omitempty"`
-	Error   string                 `json:"error,omitempty"`
-	Data    map[string]interface{} `json:"data,omitempty"`
-}
-
-// ExecuteOperation executes a policy operation
-func (s *Service) ExecuteOperation(req PolicyOperationRequest, user string) (*PolicyOperationResponse, error) {
-	switch req.Operation {
-	case "check":
-		return s.checkTransition(req, user)
-	case "create_policy":
-		return s.createPolicy(req)
-	case "create_check":
-		return s.createCheck(req)
-	case "update_check":
-		return s.updateCheck(req)
-	case "satisfy":
-		return s.satisfyPolicy(req)
-	default:
-		return &PolicyOperationResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Unknown operation: %s", req.Operation),
-		}, fmt.Errorf("unknown operation: %s", req.Operation)
+// NewServiceWithAIProvider creates a new service with a custom AI provider (for testing)
+func NewServiceWithAIProvider(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph, aiProvider ai.AIProvider, policyStore PolicyStore, env string, eventBus EventBus) *Service {
+	return &Service{
+		aiProvider:  aiProvider,
+		graphStore:  graphStore,
+		globalGraph: globalGraph,
+		policyStore: policyStore,
+		env:         env,
+		eventBus:    eventBus,
 	}
 }
 
-// checkTransition validates if a transition is allowed
-func (s *Service) checkTransition(req PolicyOperationRequest, user string) (*PolicyOperationResponse, error) {
-	err := s.evaluator.ValidateTransition(req.FromID, req.ToID, req.EdgeType, user)
-	if err != nil {
-		return &PolicyOperationResponse{
-			Success: false,
-			Error:   err.Error(),
-			Data: map[string]interface{}{
-				"allowed": false,
-			},
-		}, nil // Don't return error as this is a valid business response
-	}
+// =============================================================================
+// BUSINESS LOGIC - Node Policy Evaluation
+// =============================================================================
 
-	return &PolicyOperationResponse{
-		Success: true,
-		Data: map[string]interface{}{
-			"allowed": true,
-		},
-	}, nil
-}
-
-// createPolicy creates a new policy node
-func (s *Service) createPolicy(req PolicyOperationRequest) (*PolicyOperationResponse, error) {
-	policyNode, err := s.evaluator.CreatePolicyNode(
-		req.Name,
-		req.Description,
-		req.Type,
-		req.Parameters,
-	)
-	if err != nil {
-		return &PolicyOperationResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to create policy: %v", err),
-		}, err
-	}
-
-	return &PolicyOperationResponse{
-		Success: true,
-		Message: "Policy created",
-		Data: map[string]interface{}{
-			"policy_id": policyNode.ID,
-		},
-	}, nil
-}
-
-// createCheck creates a new check node
-func (s *Service) createCheck(req PolicyOperationRequest) (*PolicyOperationResponse, error) {
-	checkNode, err := s.evaluator.CreateCheckNode(
-		req.CheckID,
-		req.Name,
-		req.Type,
-		req.Parameters,
-	)
-	if err != nil {
-		return &PolicyOperationResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to create check: %v", err),
-		}, err
-	}
-
-	return &PolicyOperationResponse{
-		Success: true,
-		Message: "Check created",
-		Data: map[string]interface{}{
-			"check_id": checkNode.ID,
-		},
-	}, nil
-}
-
-// updateCheck updates a check's status
-func (s *Service) updateCheck(req PolicyOperationRequest) (*PolicyOperationResponse, error) {
-	err := s.evaluator.UpdateCheckStatus(req.CheckID, req.Status, req.Results)
-	if err != nil {
-		return &PolicyOperationResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to update check: %v", err),
-		}, err
-	}
-
-	return &PolicyOperationResponse{
-		Success: true,
-		Message: "Check updated",
-	}, nil
-}
-
-// satisfyPolicy marks a check as satisfying a policy
-func (s *Service) satisfyPolicy(req PolicyOperationRequest) (*PolicyOperationResponse, error) {
-	err := s.evaluator.SatisfyPolicy(req.CheckID, req.PolicyID)
-	if err != nil {
-		return &PolicyOperationResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to satisfy policy: %v", err),
-		}, err
-	}
-
-	return &PolicyOperationResponse{
-		Success: true,
-		Message: "Policy satisfied",
-	}, nil
-}
-
-// ListPolicies returns all policies in the environment
-func (s *Service) ListPolicies() ([]interface{}, error) {
-	policies := []interface{}{}
-
-	graph, err := s.graphStore.GetGraph(s.env)
-	if err != nil {
-		// If environment graph doesn't exist, return empty array
-		return policies, nil
-	}
-
-	for _, node := range graph.Nodes {
-		if node.Kind == "policy" {
-			policies = append(policies, node)
-		}
-	}
-
-	return policies, nil
-}
-
-// GetPolicy returns a policy by ID
-func (s *Service) GetPolicy(policyID string) (*graph.Node, error) {
-	graph, err := s.graphStore.GetGraph(s.env)
-	if err != nil {
-		return nil, fmt.Errorf("environment not found")
-	}
-
-	policy, ok := graph.Nodes[policyID]
-	if !ok || policy.Kind != "policy" {
-		return nil, fmt.Errorf("policy not found")
-	}
-
-	return policy, nil
-}
-
-// EvaluateDeploymentPolicies provides AI-powered policy evaluation for deployments
-// This owns the policy domain business logic and uses AI provider for inference
-func (s *Service) EvaluateDeploymentPolicies(ctx context.Context, applicationID string, environmentID string) (*ai.PolicyEvaluation, error) {
-	s.logger.Info("🔍 Evaluating deployment policies: %s -> %s", applicationID, environmentID)
-
-	// AI provider is required for AI-native platform
+// EvaluateNodePolicy evaluates a single node against a single policy - AI NATIVE ONLY
+func (s *Service) EvaluateNodePolicy(ctx context.Context, env string, node *graph.Node, policy *Policy) (*PolicyResult, error) {
 	if s.aiProvider == nil {
-		return nil, fmt.Errorf("AI provider is required for policy evaluation - this is an AI-native platform")
+		return nil, fmt.Errorf("AI provider not available - ZTDP is AI-native only")
 	}
 
-	// Use AI evaluation
-	evaluation, err := s.evaluatePoliciesWithAI(ctx, applicationID, environmentID)
-	if err != nil {
-		return nil, fmt.Errorf("AI policy evaluation failed: %w", err)
-	}
-
-	s.logger.Info("✅ AI policy evaluation completed (compliant: %t)", evaluation.Compliant)
-	return evaluation, nil
-}
-
-// ValidateTransitionWithAI uses AI to validate complex policy transitions
-// This provides intelligent reasoning about policy compliance beyond simple rules
-func (s *Service) ValidateTransitionWithAI(ctx context.Context, fromID, toID, edgeType, user string) (*ai.PolicyEvaluation, error) {
-	s.logger.Info("🔍 Validating transition with AI: %s -> %s", fromID, toID)
-
-	// Try AI validation first
-	if s.aiProvider != nil {
-		evaluation, err := s.validateTransitionWithAI(ctx, fromID, toID, edgeType, user)
-		if err != nil {
-			s.logger.Warn("⚠️ AI transition validation failed, falling back to basic validation: %v", err)
-		} else {
-			s.logger.Info("✅ AI transition validation completed (allowed: %t)", evaluation.Compliant)
-			return evaluation, nil
-		}
-	}
-
-	// Fallback to basic transition validation
-	s.logger.Info("🔄 Using basic transition validation (AI unavailable)")
-	return s.validateBasicTransition(fromID, toID, edgeType, user), nil
-}
-
-// HasAICapabilities returns whether AI policy evaluation is available
-func (s *Service) HasAICapabilities() bool {
-	return s.aiProvider != nil
-}
-
-// EvaluatePolicyWithAI provides AI-powered policy evaluation for specific actions
-// This method is called by the API handler and owns the business logic for AI policy evaluation
-func (s *Service) EvaluatePolicyWithAI(ctx context.Context, applicationID, environment, action string, context map[string]interface{}, aiProvider ai.AIProvider) (*ai.PolicyEvaluation, error) {
-	s.logger.Info("🔍 Evaluating policy with AI: %s -> %s (action: %s)", applicationID, environment, action)
-
-	// Use the provided AI provider if given, otherwise use service's AI provider
-	provider := s.aiProvider
-	if aiProvider != nil {
-		provider = aiProvider
-	}
-
-	// Try AI evaluation first
-	if provider != nil {
-		evaluation, err := s.evaluatePolicyWithAI(ctx, applicationID, environment, action, context, provider)
-		if err != nil {
-			s.logger.Warn("⚠️ AI policy evaluation failed, falling back to basic evaluation: %v", err)
-		} else {
-			s.logger.Info("✅ AI policy evaluation completed (compliant: %t)", evaluation.Compliant)
-			return evaluation, nil
-		}
-	}
-
-	// Fallback to basic policy evaluation
-	s.logger.Info("🔄 Using basic policy evaluation (AI unavailable)")
-	return s.evaluateBasicPolicyCompliance(applicationID, environment), nil
-}
-
-// evaluatePolicyWithAI performs AI-driven policy evaluation for specific actions
-func (s *Service) evaluatePolicyWithAI(ctx context.Context, applicationID, environment, action string, requestContext map[string]interface{}, provider ai.AIProvider) (*ai.PolicyEvaluation, error) {
-	// Build comprehensive policy context for AI evaluation
-	policyContext := map[string]interface{}{
-		"application_id": applicationID,
-		"environment":    environment,
-		"action":         action,
-		"context":        requestContext,
-		"timestamp":      time.Now(),
-	}
-
-	// Add graph context if available
-	if graphContext, err := s.buildPolicyEvaluationContext(applicationID, environment); err == nil {
-		for k, v := range graphContext {
-			policyContext[k] = v
-		}
-	}
-
-	// Build prompts for AI
-	systemPrompt := s.buildPolicyEvaluationSystemPrompt()
-	userPrompt, err := s.buildPolicyEvaluationUserPrompt(policyContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build user prompt: %w", err)
-	}
-
-	// Call AI provider
-	response, err := provider.CallAI(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("AI call failed: %w", err)
-	}
-
-	// Parse response
-	evaluation, err := s.parsePolicyEvaluationResponse(response)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse AI response: %w", err)
-	}
-
-	return evaluation, nil
-}
-
-// evaluatePoliciesWithAI performs AI-driven policy evaluation
-func (s *Service) evaluatePoliciesWithAI(ctx context.Context, applicationID, environmentID string) (*ai.PolicyEvaluation, error) {
-	// Build policy context for AI evaluation
-	policyContext, err := s.buildPolicyEvaluationContext(applicationID, environmentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build policy context: %w", err)
-	}
-
-	// Build prompts for AI
-	systemPrompt := s.buildPolicyEvaluationSystemPrompt()
-	userPrompt, err := s.buildPolicyEvaluationUserPrompt(policyContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build user prompt: %w", err)
-	}
-
-	// Call AI provider
-	response, err := s.aiProvider.CallAI(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("AI call failed: %w", err)
-	}
-
-	// Parse response
-	evaluation, err := s.parsePolicyEvaluationResponse(response)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse AI response: %w", err)
-	}
-
-	return evaluation, nil
-}
-
-// validateTransitionWithAI performs AI-driven transition validation
-func (s *Service) validateTransitionWithAI(ctx context.Context, fromID, toID, edgeType, user string) (*ai.PolicyEvaluation, error) {
-	// Build transition context for AI evaluation
-	transitionContext := s.buildTransitionValidationContext(fromID, toID, edgeType, user)
-
-	// Build prompts for AI
-	systemPrompt := s.buildTransitionValidationSystemPrompt()
-	userPrompt, err := s.buildTransitionValidationUserPrompt(transitionContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build user prompt: %w", err)
-	}
-
-	// Call AI provider
-	response, err := s.aiProvider.CallAI(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("AI call failed: %w", err)
-	}
-
-	// Parse response
-	evaluation, err := s.parsePolicyEvaluationResponse(response)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse AI response: %w", err)
-	}
-
-	return evaluation, nil
-}
-
-// evaluateBasicPolicyCompliance provides fallback policy evaluation
-func (s *Service) evaluateBasicPolicyCompliance(applicationID, environmentID string) *ai.PolicyEvaluation {
-	s.logger.Info("🔄 Generating basic policy evaluation for %s -> %s", applicationID, environmentID)
-
-	// Basic heuristic: production environments have stricter policies
-	compliant := true
-	violations := []ai.PolicyViolation{}
-
-	if environmentID == "production" {
-		// In production, require additional checks
-		violations = append(violations, ai.PolicyViolation{
-			Policy:      "prod-approval-required",
-			Severity:    "medium",
-			Reason:      "Production deployments require approval",
-			Remediation: "Obtain approval from operations team",
+	// Emit evaluation started event
+	if s.eventBus != nil {
+		s.eventBus.Emit("policy.node.evaluation.started", map[string]interface{}{
+			"node_id":   node.ID,
+			"policy_id": policy.ID,
+			"env":       env,
 		})
-		compliant = false
 	}
 
-	return &ai.PolicyEvaluation{
-		Compliant:   compliant,
-		Violations:  violations,
-		Suggestions: []string{"Follow standard deployment procedures", "Monitor deployment progress"},
-		Metadata: map[string]interface{}{
-			"evaluation_type": "deterministic",
-			"timestamp":       time.Now(),
-			"environment":     environmentID,
-		},
-	}
-}
-
-// validateBasicTransition provides fallback transition validation
-func (s *Service) validateBasicTransition(fromID, toID, edgeType, user string) *ai.PolicyEvaluation {
-	s.logger.Info("🔄 Generating basic transition validation: %s -> %s", fromID, toID)
-
-	// Basic validation rules
-	compliant := true
-	violations := []ai.PolicyViolation{}
-
-	// Simple rule: deployments require proper permissions
-	if edgeType == "deploy" && user != "admin" {
-		violations = append(violations, ai.PolicyViolation{
-			Policy:      "deploy-permission-required",
-			Severity:    "high",
-			Reason:      "Deployment requires administrative permissions",
-			Remediation: "Request deployment permissions or use administrative account",
-		})
-		compliant = false
+	// Check if policy applies to this node
+	if policy.Scope != PolicyScopeNode || !s.isPolicyApplicableToNode(policy, node) {
+		result := &PolicyResult{
+			NodeID:        node.ID,
+			NodeKind:      node.Kind,
+			Environment:   env,
+			OverallStatus: PolicyStatusNotApplicable,
+			Status:        PolicyStatusNotApplicable,
+			Evaluations:   make(map[string]*PolicyEvaluation),
+			EvaluatedAt:   time.Now(),
+			EvaluatedBy:   "system",
+		}
+		return result, nil
 	}
 
-	return &ai.PolicyEvaluation{
-		Compliant:   compliant,
-		Violations:  violations,
-		Suggestions: []string{"Verify user permissions", "Follow deployment protocols"},
-		Metadata: map[string]interface{}{
-			"evaluation_type": "deterministic",
-			"timestamp":       time.Now(),
-			"transition":      fmt.Sprintf("%s->%s", fromID, toID),
-		},
-	}
+	// Use AI evaluation infrastructure
+	return s.evaluateNodePolicyWithAI(ctx, node, []*Policy{policy})
 }
 
-// buildPolicyEvaluationContext creates comprehensive context for AI policy evaluation
-func (s *Service) buildPolicyEvaluationContext(applicationID, environmentID string) (map[string]interface{}, error) {
-	graph, err := s.globalGraph.Graph()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get graph: %w", err)
-	}
+// EvaluateNode evaluates a node against all applicable policies
+func (s *Service) EvaluateNode(ctx context.Context, env string, node *graph.Node) (*PolicyResult, error) {
+	// Get applicable policies for this node type
+	var policies []*Policy
+	var err error
 
-	context := map[string]interface{}{
-		"application_id":   applicationID,
-		"environment_id":   environmentID,
-		"graph_state":      s.extractGraphState(graph, applicationID),
-		"policies":         s.extractRelevantPolicies(graph, environmentID),
-		"constraints":      s.extractEnvironmentConstraints(environmentID),
-		"current_time":     time.Now(),
-		"evaluation_scope": "deployment",
+	if s.policyStore != nil {
+		policies, err = s.policyStore.GetPoliciesForNodeType(node.Kind)
+		if err != nil {
+			// Fall back to test policies if store fails
+			policies = s.getTestNodePolicies()
+		}
+	} else {
+		// Use test policies if no store available
+		policies = s.getTestNodePolicies()
 	}
 
-	return context, nil
-}
-
-// buildTransitionValidationContext creates context for transition validation
-func (s *Service) buildTransitionValidationContext(fromID, toID, edgeType, user string) map[string]interface{} {
-	return map[string]interface{}{
-		"from_id":          fromID,
-		"to_id":            toID,
-		"edge_type":        edgeType,
-		"user":             user,
-		"current_time":     time.Now(),
-		"validation_scope": "transition",
-		"environment":      s.env,
-	}
-}
-
-// buildPolicyEvaluationSystemPrompt creates the system prompt for policy evaluation
-func (s *Service) buildPolicyEvaluationSystemPrompt() string {
-	return `You are an expert AI policy evaluator for ZTDP (Zero Touch Developer Platform). Your role is to analyze policy compliance and provide intelligent recommendations.
-
-CONTEXT:
-- ZTDP enforces governance through graph-based policies
-- Policies can be attached to nodes, edges, and transitions
-- Your job is to evaluate compliance and suggest remediation
-
-CAPABILITIES:
-- Deep analysis of policy requirements and current state
-- Intelligent compliance evaluation beyond simple rule matching
-- Context-aware recommendations for policy satisfaction
-- Risk assessment and mitigation strategies
-
-RESPONSE FORMAT:
-You must respond with valid JSON only:
-{
-  "compliant": true|false,
-  "violations": [
-    {
-      "policy_id": "policy-name",
-      "severity": "low|medium|high|critical", 
-      "description": "violation description",
-      "suggestion": "remediation suggestion"
-    }
-  ],
-  "recommendations": ["recommendation1", "recommendation2"],
-  "reasoning": "detailed reasoning for evaluation",
-  "confidence": 0.95,
-  "metadata": {}
-}
-
-PRINCIPLES:
-1. Understand the intent behind policies, not just literal rules
-2. Consider context and nuanced scenarios
-3. Provide actionable suggestions for compliance
-4. Balance governance with developer productivity
-5. Explain your reasoning clearly and thoroughly`
-}
-
-// buildTransitionValidationSystemPrompt creates the system prompt for transition validation
-func (s *Service) buildTransitionValidationSystemPrompt() string {
-	return `You are an expert AI transition validator for ZTDP (Zero Touch Developer Platform). Your role is to validate graph transitions according to policies and security requirements.
-
-CONTEXT:
-- ZTDP manages infrastructure through a graph model
-- Transitions represent state changes (deploy, create, configure, etc.)
-- Your job is to validate if transitions are allowed
-
-CAPABILITIES:
-- Intelligent validation beyond simple permission checks
-- Context-aware security and compliance evaluation
-- Risk assessment for infrastructure changes
-- Policy interpretation and application
-
-RESPONSE FORMAT:
-You must respond with valid JSON only:
-{
-  "compliant": true|false,
-  "violations": [
-    {
-      "policy_id": "policy-name",
-      "severity": "low|medium|high|critical",
-      "description": "violation description", 
-      "suggestion": "remediation suggestion"
-    }
-  ],
-  "recommendations": ["recommendation1", "recommendation2"],
-  "reasoning": "detailed reasoning for validation decision",
-  "confidence": 0.95,
-  "metadata": {}
-}
-
-PRINCIPLES:
-1. Security and compliance come first
-2. Consider blast radius and potential impact
-3. Validate user permissions and context
-4. Provide clear explanations for rejections
-5. Suggest alternative approaches when possible`
-}
-
-// buildPolicyEvaluationUserPrompt creates the user prompt with policy context
-func (s *Service) buildPolicyEvaluationUserPrompt(policyContext map[string]interface{}) (string, error) {
-	return fmt.Sprintf(`Please evaluate policy compliance for this deployment context:
-
-POLICY CONTEXT:
-Application ID: %v
-Environment ID: %v
-Current Time: %v
-Evaluation Scope: %v
-
-GRAPH STATE:
-%v
-
-APPLICABLE POLICIES:
-%v
-
-ENVIRONMENT CONSTRAINTS:
-%v
-
-EVALUATION REQUIREMENTS:
-1. Analyze all applicable policies and their requirements
-2. Assess current compliance status for the deployment
-3. Identify any violations or potential issues
-4. Provide actionable recommendations for achieving compliance
-5. Consider the business context and practical constraints
-
-Focus on practical, actionable guidance that helps achieve compliance while maintaining developer productivity.`,
-		policyContext["application_id"],
-		policyContext["environment_id"],
-		policyContext["current_time"],
-		policyContext["evaluation_scope"],
-		policyContext["graph_state"],
-		policyContext["policies"],
-		policyContext["constraints"]), nil
-}
-
-// buildTransitionValidationUserPrompt creates the user prompt for transition validation
-func (s *Service) buildTransitionValidationUserPrompt(transitionContext map[string]interface{}) (string, error) {
-	return fmt.Sprintf(`Please validate this infrastructure transition:
-
-TRANSITION CONTEXT:
-From ID: %v
-To ID: %v
-Edge Type: %v
-User: %v
-Environment: %v
-Current Time: %v
-
-VALIDATION REQUIREMENTS:
-1. Verify user has appropriate permissions for this transition
-2. Check if the transition violates any security policies
-3. Assess potential impact and risk
-4. Validate the transition makes sense in the current context
-5. Consider environment-specific restrictions
-
-Provide a clear decision with detailed reasoning for your validation result.`,
-		transitionContext["from_id"],
-		transitionContext["to_id"],
-		transitionContext["edge_type"],
-		transitionContext["user"],
-		transitionContext["environment"],
-		transitionContext["current_time"]), nil
-}
-
-// parsePolicyEvaluationResponse parses AI response into PolicyEvaluation
-func (s *Service) parsePolicyEvaluationResponse(response string) (*ai.PolicyEvaluation, error) {
-	var evaluation ai.PolicyEvaluation
-
-	if err := json.Unmarshal([]byte(response), &evaluation); err != nil {
-		return nil, fmt.Errorf("failed to parse policy evaluation: %w", err)
-	}
-
-	return &evaluation, nil
-}
-
-// Helper methods for context extraction
-func (s *Service) extractGraphState(graph *graph.Graph, applicationID string) map[string]interface{} {
-	appState := map[string]interface{}{
-		"nodes": []map[string]interface{}{},
-		"edges": []map[string]interface{}{},
-	}
-
-	// Find application node and related nodes
-	for nodeID, node := range graph.Nodes {
-		if nodeID == applicationID || s.isRelatedToApplication(graph, nodeID, applicationID) {
-			appState["nodes"] = append(appState["nodes"].([]map[string]interface{}), map[string]interface{}{
-				"id":       node.ID,
-				"kind":     node.Kind,
-				"metadata": node.Metadata,
-			})
+	// Filter to applicable policies
+	var applicablePolicies []*Policy
+	for _, policy := range policies {
+		if policy.Scope == PolicyScopeNode && s.isPolicyApplicableToNode(policy, node) {
+			applicablePolicies = append(applicablePolicies, policy)
 		}
 	}
 
-	// Find related edges
-	for fromID, edges := range graph.Edges {
-		if fromID == applicationID || s.isRelatedToApplication(graph, fromID, applicationID) {
-			for _, edge := range edges {
-				appState["edges"] = append(appState["edges"].([]map[string]interface{}), map[string]interface{}{
-					"from": fromID,
-					"to":   edge.To,
-					"type": edge.Type,
-				})
-			}
-		}
+	if len(applicablePolicies) == 0 {
+		return &PolicyResult{
+			NodeID:        node.ID,
+			NodeKind:      node.Kind,
+			Environment:   env,
+			OverallStatus: PolicyStatusNotApplicable,
+			Evaluations:   make(map[string]*PolicyEvaluation),
+			EvaluatedAt:   time.Now(),
+		}, nil
 	}
 
-	return appState
+	// Use AI evaluation infrastructure
+	return s.evaluateNodePolicyWithAI(ctx, node, applicablePolicies)
 }
 
-func (s *Service) extractRelevantPolicies(graph *graph.Graph, environmentID string) []map[string]interface{} {
-	policies := []map[string]interface{}{}
+// =============================================================================
+// BUSINESS LOGIC - Edge Policy Evaluation
+// =============================================================================
 
-	for _, node := range graph.Nodes {
-		if node.Kind == "policy" {
-			if env, exists := node.Metadata["environment"]; exists && env == environmentID {
-				policies = append(policies, map[string]interface{}{
-					"policy_id":   node.ID,
-					"policy_type": node.Metadata["type"],
-					"severity":    node.Metadata["severity"],
-					"description": node.Metadata["description"],
-				})
-			}
-		}
+// EvaluateEdgePolicy evaluates a single edge against a single policy
+func (s *Service) EvaluateEdgePolicy(ctx context.Context, env string, edge *graph.Edge, policy *Policy) (*PolicyResult, error) {
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider not available - ZTDP is AI-native only")
 	}
 
-	return policies
+	// Check if policy applies to this edge
+	if policy.Scope != PolicyScopeEdge || !s.isPolicyApplicableToEdge(policy, edge) {
+		return &PolicyResult{
+			EdgeTo:        edge.To,
+			Relationship:  edge.Type,
+			Environment:   env,
+			OverallStatus: PolicyStatusNotApplicable,
+			Status:        PolicyStatusNotApplicable,
+			Evaluations:   make(map[string]*PolicyEvaluation),
+			EvaluatedAt:   time.Now(),
+			EvaluatedBy:   "system",
+		}, nil
+	}
+
+	// Use AI evaluation infrastructure
+	return s.evaluateEdgePolicyWithAI(ctx, edge, []*Policy{policy})
 }
 
-func (s *Service) extractEnvironmentConstraints(environmentID string) map[string]interface{} {
-	constraints := map[string]interface{}{
-		"environment": environmentID,
+// EvaluateEdge evaluates an edge against all applicable policies
+func (s *Service) EvaluateEdge(ctx context.Context, env string, edge *graph.Edge) (*PolicyResult, error) {
+	// Get applicable policies for this edge type
+	var policies []*Policy
+	var err error
+
+	if s.policyStore != nil {
+		policies, err = s.policyStore.GetPoliciesForEdgeType(edge.Type)
+		if err != nil {
+			// Fall back to test policies if store fails
+			policies = s.getTestEdgePolicies()
+		}
+	} else {
+		// Use test policies if no store available
+		policies = s.getTestEdgePolicies()
 	}
 
-	// Add environment-specific constraints
-	if environmentID == "production" {
-		constraints["approval_required"] = true
-		constraints["change_window"] = "maintenance"
-		constraints["rollback_required"] = true
+	// Filter to applicable policies
+	var applicablePolicies []*Policy
+	for _, policy := range policies {
+		if policy.Scope == PolicyScopeEdge && s.isPolicyApplicableToEdge(policy, edge) {
+			applicablePolicies = append(applicablePolicies, policy)
+		}
 	}
 
-	return constraints
+	if len(applicablePolicies) == 0 {
+		return &PolicyResult{
+			EdgeTo:        edge.To,
+			Relationship:  edge.Type,
+			Environment:   env,
+			OverallStatus: PolicyStatusNotApplicable,
+			Evaluations:   make(map[string]*PolicyEvaluation),
+			EvaluatedAt:   time.Now(),
+		}, nil
+	}
+
+	// Use AI evaluation infrastructure
+	return s.evaluateEdgePolicyWithAI(ctx, edge, applicablePolicies)
 }
 
-func (s *Service) isRelatedToApplication(graph *graph.Graph, nodeID, applicationID string) bool {
-	// Check if node is directly connected to application
-	if edges, exists := graph.Edges[applicationID]; exists {
-		for _, edge := range edges {
-			if edge.To == nodeID {
-				return true
-			}
+// =============================================================================
+// BUSINESS LOGIC - Graph Policy Evaluation
+// =============================================================================
+
+// EvaluateGraphPolicy evaluates a graph against a single policy
+func (s *Service) EvaluateGraphPolicy(ctx context.Context, env string, g *graph.Graph, policy *Policy) (*PolicyResult, error) {
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider not available - ZTDP is AI-native only")
+	}
+
+	// Check if policy applies to graphs
+	if policy.Scope != PolicyScopeGraph {
+		return &PolicyResult{
+			GraphScope:    true,
+			Environment:   env,
+			OverallStatus: PolicyStatusNotApplicable,
+			Status:        PolicyStatusNotApplicable,
+			Evaluations:   make(map[string]*PolicyEvaluation),
+			EvaluatedAt:   time.Now(),
+			EvaluatedBy:   "system",
+		}, nil
+	}
+
+	// Use AI evaluation infrastructure
+	return s.evaluateGraphPolicyWithAI(ctx, g, []*Policy{policy})
+}
+
+// EvaluateGraph evaluates a graph against all applicable policies
+func (s *Service) EvaluateGraph(ctx context.Context, env string, g *graph.Graph) (*PolicyResult, error) {
+	// Get applicable policies for graphs
+	var policies []*Policy
+	var err error
+
+	if s.policyStore != nil {
+		policies, err = s.policyStore.GetGraphPolicies()
+		if err != nil {
+			// Fall back to test policies if store fails
+			policies = s.getTestGraphPolicies()
+		}
+	} else {
+		// Use test policies if no store available
+		policies = s.getTestGraphPolicies()
+	}
+
+	// Filter to graph-scope policies
+	var applicablePolicies []*Policy
+	for _, policy := range policies {
+		if policy.Scope == PolicyScopeGraph {
+			applicablePolicies = append(applicablePolicies, policy)
 		}
 	}
 
-	// Check reverse direction
-	if edges, exists := graph.Edges[nodeID]; exists {
-		for _, edge := range edges {
-			if edge.To == applicationID {
-				return true
-			}
-		}
+	if len(applicablePolicies) == 0 {
+		return &PolicyResult{
+			GraphScope:    true,
+			Environment:   env,
+			OverallStatus: PolicyStatusNotApplicable,
+			Evaluations:   make(map[string]*PolicyEvaluation),
+			EvaluatedAt:   time.Now(),
+		}, nil
 	}
 
+	// Use AI evaluation infrastructure
+	return s.evaluateGraphPolicyWithAI(ctx, g, applicablePolicies)
+}
+
+// =============================================================================
+// BUSINESS LOGIC HELPERS
+// =============================================================================
+
+// isPolicyApplicableToNode checks if a policy applies to a specific node
+func (s *Service) isPolicyApplicableToNode(policy *Policy, node *graph.Node) bool {
+	// If no specific node types specified, applies to all
+	if len(policy.NodeTypes) == 0 {
+		return true
+	}
+
+	// Check if node kind matches any specified types
+	for _, nodeType := range policy.NodeTypes {
+		if nodeType == node.Kind {
+			return true
+		}
+	}
 	return false
 }
 
-// EvaluatePolicy evaluates a policy request using AI or fallback logic
-// This method implements the PolicyService interface for AI platform agent integration
-func (s *Service) EvaluatePolicy(ctx context.Context, request *ai.PolicyEvaluationRequest) (*ai.PolicyEvaluation, error) {
-	if request == nil {
-		return nil, fmt.Errorf("policy evaluation request cannot be nil")
+// isPolicyApplicableToEdge checks if a policy applies to a specific edge
+func (s *Service) isPolicyApplicableToEdge(policy *Policy, edge *graph.Edge) bool {
+	// If no specific edge types specified, applies to all
+	if len(policy.EdgeTypes) == 0 {
+		return true
 	}
 
-	s.logger.Info("🔍 Evaluating policy request for application: %s -> %s (action: %s)",
-		request.ApplicationID, request.EnvironmentID, request.Action)
-
-	// Use the existing AI-powered policy evaluation logic
-	return s.EvaluateDeploymentPolicies(ctx, request.ApplicationID, request.EnvironmentID)
+	// Check if edge relationship matches any specified types
+	for _, edgeType := range policy.EdgeTypes {
+		if edgeType == edge.Type {
+			return true
+		}
+	}
+	return false
 }
 
-// ValidateDeployment validates if a deployment is allowed by policies
-// This method implements the PolicyService interface for AI platform agent integration
-func (s *Service) ValidateDeployment(ctx context.Context, app, env string) error {
-	s.logger.Info("🔒 Validating deployment policies: %s -> %s", app, env)
+// =============================================================================
+// TEMPORARY TEST HELPERS - TODO: Replace with PolicyStore
+// =============================================================================
 
-	// Evaluate deployment policies using AI or fallback logic
-	evaluation, err := s.EvaluateDeploymentPolicies(ctx, app, env)
-	if err != nil {
-		return fmt.Errorf("policy evaluation failed: %w", err)
+// TODO: These should be replaced with a proper PolicyStore implementation
+func (s *Service) getTestNodePolicies() []*Policy {
+	return []*Policy{
+		{
+			ID:                  "node-security-check",
+			Name:                "Node Security Check",
+			Description:         "Ensures all nodes meet security requirements",
+			Scope:               PolicyScopeNode,
+			NaturalLanguageRule: "All nodes must have security configurations and valid authentication",
+			Enforcement:         EnforcementBlock,
+			RequiredConfidence:  0.8,
+			CreatedAt:           time.Now(),
+			Enabled:             true,
+		},
+		{
+			ID:                  "app-service-limit",
+			Name:                "Application Service Limit",
+			Description:         "Applications must have fewer than 10 services",
+			Scope:               PolicyScopeNode,
+			NodeTypes:           []string{"application"},
+			NaturalLanguageRule: "Applications must have fewer than 10 services to maintain manageable complexity",
+			Enforcement:         EnforcementBlock,
+			RequiredConfidence:  0.8,
+			CreatedAt:           time.Now(),
+			Enabled:             true,
+		},
 	}
+}
 
-	// Check if deployment is compliant with policies
-	if !evaluation.Compliant {
-		violationMessages := []string{}
-		for _, violation := range evaluation.Violations {
-			violationMessages = append(violationMessages, violation.Reason)
-		}
-		return fmt.Errorf("deployment policy violations: %v", violationMessages)
+func (s *Service) getTestEdgePolicies() []*Policy {
+	return []*Policy{
+		{
+			ID:                  "edge-connection-policy",
+			Name:                "Edge Connection Policy",
+			Description:         "Validates edge connections follow architectural patterns",
+			Scope:               PolicyScopeEdge,
+			NaturalLanguageRule: "Edges must connect compatible node types and maintain architectural integrity",
+			Enforcement:         EnforcementBlock,
+			RequiredConfidence:  0.8,
+			CreatedAt:           time.Now(),
+			Enabled:             true,
+		},
+		{
+			ID:                  "no-direct-prod-deployment",
+			Name:                "No Direct Production Deployment",
+			Description:         "Prevents direct deployment to production without staging",
+			Scope:               PolicyScopeEdge,
+			EdgeTypes:           []string{"deploys_to"},
+			NaturalLanguageRule: "Direct deployment to production is not allowed - must go through staging first",
+			Enforcement:         EnforcementBlock,
+			RequiredConfidence:  0.8,
+			CreatedAt:           time.Now(),
+			Enabled:             true,
+		},
 	}
+}
 
-	s.logger.Info("✅ Deployment passed all policy validations")
-	return nil
+func (s *Service) getTestGraphPolicies() []*Policy {
+	return []*Policy{
+		{
+			ID:                  "graph-compliance-policy",
+			Name:                "Graph Compliance Policy",
+			Description:         "Ensures overall graph structure meets compliance requirements",
+			Scope:               PolicyScopeGraph,
+			NaturalLanguageRule: "Graph must maintain security boundaries and compliance with regulatory requirements",
+			Enforcement:         EnforcementBlock,
+			RequiredConfidence:  0.8,
+			CreatedAt:           time.Now(),
+			Enabled:             true,
+		},
+		{
+			ID:                  "max-apps-per-customer",
+			Name:                "Maximum Applications Per Customer",
+			Description:         "Limits the number of applications per customer",
+			Scope:               PolicyScopeGraph,
+			NaturalLanguageRule: "Each customer should not have more than 5 applications to maintain manageable complexity",
+			Enforcement:         EnforcementBlock,
+			RequiredConfidence:  0.8,
+			CreatedAt:           time.Now(),
+			Enabled:             true,
+		},
+	}
 }
