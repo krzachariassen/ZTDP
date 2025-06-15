@@ -5,7 +5,9 @@ import (
 	"os"
 	"sync"
 
+	"github.com/krzachariassen/ZTDP/internal/agents"
 	"github.com/krzachariassen/ZTDP/internal/ai"
+	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 )
 
@@ -38,11 +40,10 @@ func getGlobalGraph() *graph.GlobalGraph {
 	return GlobalGraph
 }
 
-// InitializeGlobalV3Agent initializes the global V3 AI agent with proper service dependencies
+// InitializeGlobalV3Agent initializes the global V3 AI agent with event-driven architecture
 // This should be called once during application startup in main.go
 func InitializeGlobalV3Agent(
 	deploymentService ai.DeploymentService,
-	policyService ai.PolicyService,
 	applicationService ai.ApplicationService,
 	serviceService ai.ServiceService,
 	resourceService ai.ResourceService,
@@ -57,16 +58,21 @@ func InitializeGlobalV3Agent(
 		return err
 	}
 
-	// Create the V3 Agent - ultra simple ChatGPT-style agent!
+	// Initialize event infrastructure for agent-to-agent communication
+	eventBus := events.NewEventBus(nil, false) // In-memory for now
+	agentRegistry := agents.NewInMemoryAgentRegistry()
+
+	// Create the V3 Agent with event-driven PolicyAgent communication
 	GlobalV3Agent = ai.NewV3Agent(
 		provider,
 		GlobalGraph,
+		eventBus,
+		agentRegistry,
 		applicationService,
 		serviceService,
 		resourceService,
 		environmentService,
 		deploymentService,
-		policyService,
 	)
 
 	return nil

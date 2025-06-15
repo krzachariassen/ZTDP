@@ -13,16 +13,16 @@ func TestPolicyAgent_AgentInterface(t *testing.T) {
 	t.Run("implements AgentInterface correctly", func(t *testing.T) {
 		// Setup
 		policyAgent := createTestPolicyAgent(t)
-		
+
 		// Test AgentInterface compliance
 		var _ agents.AgentInterface = policyAgent
-		
+
 		// Test capabilities
 		capabilities := policyAgent.GetCapabilities()
 		if len(capabilities) == 0 {
 			t.Error("Policy agent should have capabilities")
 		}
-		
+
 		// Verify policy-specific capabilities
 		hasEvaluation := false
 		for _, cap := range capabilities {
@@ -34,7 +34,7 @@ func TestPolicyAgent_AgentInterface(t *testing.T) {
 		if !hasEvaluation {
 			t.Error("Policy agent should have policy_evaluation capability")
 		}
-		
+
 		// Test status
 		status := policyAgent.GetStatus()
 		if status.Type != "policy" {
@@ -73,17 +73,17 @@ func TestPolicyAgent_EventBasedEvaluation(t *testing.T) {
 			eventPayload: map[string]interface{}{
 				"intent": "Validate application configuration against security policies",
 				"application_config": map[string]interface{}{
-					"name": "test-app",
+					"name":     "test-app",
 					"services": []string{"api", "db"},
 				},
 			},
 			expectResponse: true,
 		},
 		{
-			name:         "Invalid request type",
-			eventType:    events.EventTypeBroadcast,
-			eventSubject: "broadcast message",
-			eventPayload: map[string]interface{}{},
+			name:           "Invalid request type",
+			eventType:      events.EventTypeBroadcast,
+			eventSubject:   "broadcast message",
+			eventPayload:   map[string]interface{}{},
 			expectResponse: true, // Should still respond but indicate not handled
 		},
 	}
@@ -92,7 +92,7 @@ func TestPolicyAgent_EventBasedEvaluation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup
 			policyAgent := createTestPolicyAgent(t)
-			
+
 			// Create event
 			event := &events.Event{
 				Type:    tt.eventType,
@@ -100,10 +100,10 @@ func TestPolicyAgent_EventBasedEvaluation(t *testing.T) {
 				Subject: tt.eventSubject,
 				Payload: tt.eventPayload,
 			}
-			
+
 			// Process event
 			response, err := policyAgent.ProcessEvent(context.Background(), event)
-			
+
 			if tt.expectResponse {
 				if err != nil {
 					t.Fatalf("Expected successful response, got error: %v", err)
@@ -111,16 +111,16 @@ func TestPolicyAgent_EventBasedEvaluation(t *testing.T) {
 				if response == nil {
 					t.Fatal("Expected response, got nil")
 				}
-				
+
 				// Verify response structure
 				if response.Type != events.EventTypeResponse {
 					t.Errorf("Expected response type %s, got %s", events.EventTypeResponse, response.Type)
 				}
-				
+
 				if response.Source != policyAgent.GetStatus().ID {
 					t.Errorf("Expected response source %s, got %s", policyAgent.GetStatus().ID, response.Source)
 				}
-				
+
 				// Check for decision in payload (for policy evaluation requests)
 				if tt.expectDecision != "" {
 					if decision, ok := response.Payload["decision"].(string); ok {
@@ -152,7 +152,7 @@ func TestPolicyAgent_Integration(t *testing.T) {
 	t.Run("integrates with existing policy evaluation", func(t *testing.T) {
 		// Setup
 		policyAgent := createTestPolicyAgent(t)
-		
+
 		// Create a policy evaluation request that matches existing system
 		event := &events.Event{
 			Type:    events.EventTypeRequest,
@@ -175,25 +175,25 @@ func TestPolicyAgent_Integration(t *testing.T) {
 					},
 				},
 				"policy": map[string]interface{}{
-					"id":                   "app-service-limit",
-					"name":                 "Application Service Limit",
+					"id":                    "app-service-limit",
+					"name":                  "Application Service Limit",
 					"natural_language_rule": "Applications must have fewer than 10 services",
 				},
 			},
 		}
-		
+
 		// Process event
 		response, err := policyAgent.ProcessEvent(context.Background(), event)
-		
+
 		// Verify response
 		if err != nil {
 			t.Fatalf("Policy evaluation failed: %v", err)
 		}
-		
+
 		if response == nil {
 			t.Fatal("Expected policy evaluation response")
 		}
-		
+
 		// Should detect violation (15 services > 10 limit)
 		if decision, ok := response.Payload["decision"].(string); ok {
 			if decision != "blocked" {
@@ -202,7 +202,7 @@ func TestPolicyAgent_Integration(t *testing.T) {
 		} else {
 			t.Error("Response should contain decision field")
 		}
-		
+
 		// Should include reasoning
 		if reasoning, ok := response.Payload["reasoning"].(string); ok {
 			if reasoning == "" {
@@ -219,36 +219,36 @@ func TestPolicyAgent_Lifecycle(t *testing.T) {
 	t.Run("starts and stops correctly", func(t *testing.T) {
 		// Setup
 		policyAgent := createTestPolicyAgent(t)
-		
+
 		// Test initial state
 		status := policyAgent.GetStatus()
 		if status.Status == "running" {
 			t.Error("Agent should not be running initially")
 		}
-		
+
 		// Test start
 		err := policyAgent.Start(context.Background())
 		if err != nil {
 			t.Fatalf("Failed to start agent: %v", err)
 		}
-		
+
 		status = policyAgent.GetStatus()
 		if status.Status != "running" {
 			t.Errorf("Expected status 'running', got %s", status.Status)
 		}
-		
+
 		// Test health
 		health := policyAgent.Health()
 		if !health.Healthy {
 			t.Error("Running agent should be healthy")
 		}
-		
+
 		// Test stop
 		err = policyAgent.Stop(context.Background())
 		if err != nil {
 			t.Fatalf("Failed to stop agent: %v", err)
 		}
-		
+
 		status = policyAgent.GetStatus()
 		if status.Status != "stopped" {
 			t.Errorf("Expected status 'stopped', got %s", status.Status)
@@ -262,6 +262,6 @@ func createTestPolicyAgent(t *testing.T) agents.AgentInterface {
 	// Real dependencies can be added as implementation progresses
 	mockPolicyStore := &MockPolicyStore{}
 	mockEventBus := &MockEventBus{}
-	
+
 	return NewPolicyAgent(nil, nil, mockPolicyStore, "test", mockEventBus)
 }

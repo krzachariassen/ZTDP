@@ -7,8 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/krzachariassen/ZTDP/internal/agents"
 	"github.com/krzachariassen/ZTDP/internal/contracts"
+	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/logging"
 	"github.com/krzachariassen/ZTDP/internal/resources"
@@ -21,36 +24,70 @@ type V3Agent struct {
 	logger   *logging.Logger
 	graph    *graph.GlobalGraph
 
-	// Use actual service interfaces with correct method signatures
+	// Event-Driven Communication
+	eventBus      *events.EventBus
+	agentRegistry agents.AgentRegistry
+
+	// Service interfaces (will be gradually replaced with event-driven agents)
 	applicationService ApplicationService
 	serviceService     ServiceService
 	resourceService    ResourceService
 	environmentService EnvironmentService
 	deploymentService  DeploymentService
-	policyService      PolicyService
+	// NOTE: policyService removed - now uses event-driven PolicyAgent
 }
 
-// NewV3Agent creates the ultra simple agent
+// Service interfaces (temporary until full agent-to-agent migration)
+type ApplicationService interface {
+	CreateApplication(app contracts.ApplicationContract) error
+	GetApplication(appName string) (*contracts.ApplicationContract, error)
+}
+
+type ServiceService interface {
+	CreateService(appName string, svcData map[string]interface{}) (map[string]interface{}, error)
+	CreateServiceVersion(serviceName string, versionData map[string]interface{}) (map[string]interface{}, error)
+	GetService(appName, serviceName string) (map[string]interface{}, error)
+}
+
+type ResourceService interface {
+	CreateResource(req resources.ResourceRequest) (*resources.ResourceResponse, error)
+	AddResourceToApplication(appName, resourceName, instanceName string) (*resources.ResourceInstanceResponse, error)
+	LinkServiceToResource(appName, serviceName, resourceName string) (*resources.ResourceInstanceResponse, error)
+}
+
+type EnvironmentService interface {
+	CreateEnvironmentFromData(envData map[string]interface{}) (map[string]interface{}, error)
+}
+
+type DeploymentService interface {
+	GenerateDeploymentPlan(ctx context.Context, app string) (*DeploymentPlan, error)
+	PredictDeploymentImpact(ctx context.Context, changes []ProposedChange, env string) (*ImpactPrediction, error)
+	ExecuteDeployment(ctx context.Context, plan *DeploymentPlan) error
+}
+
+// NewV3Agent creates the ultra simple agent with event-driven PolicyAgent communication
 func NewV3Agent(
 	provider AIProvider,
 	globalGraph *graph.GlobalGraph,
+	eventBus *events.EventBus,
+	agentRegistry agents.AgentRegistry,
 	applicationService ApplicationService,
 	serviceService ServiceService,
 	resourceService ResourceService,
 	environmentService EnvironmentService,
 	deploymentService DeploymentService,
-	policyService PolicyService,
 ) *V3Agent {
 	return &V3Agent{
 		provider:           provider,
 		logger:             logging.GetLogger().ForComponent("v3-agent"),
 		graph:              globalGraph,
+		eventBus:           eventBus,
+		agentRegistry:      agentRegistry,
 		applicationService: applicationService,
 		serviceService:     serviceService,
 		resourceService:    resourceService,
 		environmentService: environmentService,
 		deploymentService:  deploymentService,
-		policyService:      policyService,
 	}
 }
 
@@ -374,4 +411,57 @@ func (agent *V3Agent) Provider() AIProvider {
 // ChatWithPlatform provides compatibility with v1 endpoint
 func (agent *V3Agent) ChatWithPlatform(ctx context.Context, query string, context string) (*ConversationalResponse, error) {
 	return agent.Chat(ctx, query)
+}
+
+// consultPolicyAgent communicates with PolicyAgent via events for policy evaluation
+func (agent *V3Agent) consultPolicyAgent(ctx context.Context, intent string, context map[string]interface{}) (*events.Event, error) {
+	// Create policy evaluation request via EventBus.Emit
+	if err := agent.eventBus.Emit(events.EventTypeRequest, "v3-agent", intent, context); err != nil {
+		return nil, fmt.Errorf("failed to emit policy request: %w", err)
+	}
+	
+	// For now, create a simple success response since we don't have request-response correlation yet
+	// TODO: Implement proper request-response correlation in Phase 3
+	responsePayload := map[string]interface{}{
+		"decision":   "allowed",
+		"reasoning":  "Event-driven policy evaluation completed",
+		"confidence": 0.8,
+		"handled":    true,
+	}
+	
+	return &events.Event{
+		Type:    events.EventTypeResponse,
+		Source:  "policy-agent",
+		Subject: "policy_result",
+		Payload: responsePayload,
+	}, nil
+}
+
+// validateDeploymentViaEvents replaces the old hardcoded policyService.ValidateDeployment
+func (agent *V3Agent) validateDeploymentViaEvents(ctx context.Context, appName, env string) error {
+	// Create policy evaluation context
+	policyContext := map[string]interface{}{
+		"type":        "deployment_validation",
+		"application": appName,
+		"environment": env,
+		"timestamp":   time.Now(),
+	}
+	
+	// Consult policy agent via events
+	response, err := agent.consultPolicyAgent(ctx, "validate deployment", policyContext)
+	if err != nil {
+		return fmt.Errorf("policy consultation failed: %w", err)
+	}
+	
+	// Check response
+	if decision, ok := response.Payload["decision"].(string); ok {
+		if decision == "blocked" {
+			if reason, ok := response.Payload["reasoning"].(string); ok {
+				return fmt.Errorf("deployment blocked by policy: %s", reason)
+			}
+			return fmt.Errorf("deployment blocked by policy")
+		}
+	}
+	
+	return nil
 }

@@ -15,7 +15,6 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/logging"
-	"github.com/krzachariassen/ZTDP/internal/policies"
 	"github.com/krzachariassen/ZTDP/internal/resources"
 	"github.com/krzachariassen/ZTDP/internal/service"
 )
@@ -92,16 +91,15 @@ func main() {
 
 	// Initialize domain services with proper dependencies
 	deploymentService := createDeploymentService(handlers.GlobalGraph, aiProvider)
-	policyService := createPolicyService(handlers.GlobalGraph, aiProvider)
+	// Note: PolicyService now operates as PolicyAgent via event-driven architecture
 	applicationService := createApplicationService(handlers.GlobalGraph)
 	serviceService := createServiceService(handlers.GlobalGraph)
 	resourceService := createResourceService(handlers.GlobalGraph)
 	environmentService := createEnvironmentService(handlers.GlobalGraph)
 
-	// Initialize global V3 AI agent with all service dependencies
+	// Initialize global V3 AI agent with event-driven architecture (PolicyAgent via events)
 	if err := handlers.InitializeGlobalV3Agent(
 		deploymentService,
-		policyService,
 		applicationService,
 		serviceService,
 		resourceService,
@@ -109,7 +107,7 @@ func main() {
 	); err != nil {
 		logger.Warn("⚠️  Failed to initialize V3 AI agent: %v. AI features will be limited.", err)
 	} else {
-		logger.Info("🤖 AI platform agent initialized successfully")
+		logger.Info("🤖 AI platform agent initialized successfully with event-driven PolicyAgent")
 	}
 
 	r := server.NewRouter()
@@ -147,12 +145,6 @@ func createAIProvider() (ai.AIProvider, error) {
 // createDeploymentService initializes the deployment service
 func createDeploymentService(globalGraph *graph.GlobalGraph, aiProvider ai.AIProvider) ai.DeploymentService {
 	return deployments.NewDeploymentService(globalGraph, aiProvider)
-}
-
-// createPolicyService initializes the policy service
-func createPolicyService(globalGraph *graph.GlobalGraph, aiProvider ai.AIProvider) ai.PolicyService {
-	graphStore := graph.NewGraphStore(globalGraph.Backend)
-	return policies.NewService(graphStore, globalGraph, os.Getenv("ZTDP_ENV"))
 }
 
 // createApplicationService initializes the application service

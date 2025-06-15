@@ -1,4 +1,5 @@
-// Package events provides a simple event-driven architecture for ZTDP.
+// Package events provides pure event infrastructure for ZTDP platform.
+// This package contains NO business logic or domain-specific knowledge.
 package events
 
 import (
@@ -11,14 +12,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// EventType defines the type of event
+// Generic event types for infrastructure - NO domain-specific types
 type EventType string
 
-// Application events
 const (
-	EventTypeApplicationCreated EventType = "application.created"
-	EventTypeApplicationUpdated EventType = "application.updated"
-	EventTypeApplicationDeleted EventType = "application.deleted"
+	EventTypeRequest   EventType = "request"   // Generic request event
+	EventTypeResponse  EventType = "response"  // Generic response event
+	EventTypeBroadcast EventType = "broadcast" // Generic broadcast event
+	EventTypeNotify    EventType = "notify"    // Generic notification event
 )
 
 // Event represents a platform event
@@ -160,22 +161,23 @@ func (m *MemoryTransport) Close() error {
 	return nil
 }
 
-// SetupLogging sets up basic event logging
+// SetupLogging sets up basic infrastructure event logging
 func SetupLogging(eventBus *EventBus) {
 	logger := log.New(log.Writer(), "[EVENT] ", log.LstdFlags)
 
-	eventBus.Subscribe(EventTypeApplicationCreated, func(event Event) error {
-		logger.Printf("🎯 Application created: %s", event.Subject)
+	// Generic infrastructure event logging - no domain knowledge
+	eventBus.Subscribe(EventTypeRequest, func(event Event) error {
+		logger.Printf("📨 Request: %s -> %s", event.Source, event.Subject)
 		return nil
 	})
 
-	eventBus.Subscribe(EventTypeApplicationUpdated, func(event Event) error {
-		logger.Printf("✏️  Application updated: %s", event.Subject)
+	eventBus.Subscribe(EventTypeResponse, func(event Event) error {
+		logger.Printf("📬 Response: %s -> %s", event.Source, event.Subject)
 		return nil
 	})
 
-	eventBus.Subscribe(EventTypeApplicationDeleted, func(event Event) error {
-		logger.Printf("🗑️  Application deleted: %s", event.Subject)
+	eventBus.Subscribe(EventTypeBroadcast, func(event Event) error {
+		logger.Printf("� Broadcast: %s", event.Subject)
 		return nil
 	})
 }

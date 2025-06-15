@@ -21,14 +21,14 @@ type PolicyAgent struct {
 func NewPolicyAgent(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph, policyStore PolicyStore, env string, eventBus EventBus) agents.AgentInterface {
 	// Create underlying policy service
 	policyService := NewServiceWithPolicyStore(graphStore, globalGraph, policyStore, env, eventBus)
-	
+
 	// Define policy agent capabilities
 	capabilities := []agents.AgentCapability{
 		{
 			Name:        "policy_evaluation",
 			Description: "Evaluates policies using AI reasoning over graph data",
 			Intents: []string{
-				"evaluate policy", "check compliance", "validate rules", 
+				"evaluate policy", "check compliance", "validate rules",
 				"policy violation", "deployment policy", "security policy",
 				"check if allowed", "policy check", "compliance check",
 			},
@@ -37,16 +37,16 @@ func NewPolicyAgent(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph
 			Version:     "1.0.0",
 		},
 	}
-	
+
 	// Create base agent
 	baseAgent := agents.NewBaseAgent("policy-agent", "policy", "1.0.0", capabilities)
-	
+
 	// Create policy agent
 	policyAgent := &PolicyAgent{
 		BaseAgent:     baseAgent,
 		policyService: policyService,
 	}
-	
+
 	return policyAgent
 }
 
@@ -54,7 +54,7 @@ func NewPolicyAgent(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph
 func (pa *PolicyAgent) ProcessEvent(ctx context.Context, event *events.Event) (*events.Event, error) {
 	// Update activity timestamp
 	pa.LastActivity = time.Now()
-	
+
 	// Only handle request events for policy evaluation
 	if event.Type != events.EventTypeRequest {
 		return &events.Event{
@@ -67,17 +67,17 @@ func (pa *PolicyAgent) ProcessEvent(ctx context.Context, event *events.Event) (*
 			},
 		}, nil
 	}
-	
+
 	// Extract intent from event
 	intent, ok := event.Payload["intent"].(string)
 	if !ok || intent == "" {
 		return nil, fmt.Errorf("policy evaluation requires 'intent' field in payload")
 	}
-	
+
 	// Route to appropriate policy evaluation based on intent content
 	var result *PolicyResult
 	var err error
-	
+
 	// Determine evaluation type based on payload content
 	if nodeData, hasNode := event.Payload["node"]; hasNode {
 		result, err = pa.handleNodePolicyEvaluation(ctx, intent, nodeData, event.Payload)
@@ -89,7 +89,7 @@ func (pa *PolicyAgent) ProcessEvent(ctx context.Context, event *events.Event) (*
 		// Generic policy question - use AI to determine appropriate evaluation
 		result, err = pa.handleGenericPolicyQuestion(ctx, intent, event.Payload)
 	}
-	
+
 	if err != nil {
 		return &events.Event{
 			Type:    events.EventTypeResponse,
@@ -101,7 +101,7 @@ func (pa *PolicyAgent) ProcessEvent(ctx context.Context, event *events.Event) (*
 			},
 		}, nil
 	}
-	
+
 	// Convert PolicyResult to event response
 	return pa.convertPolicyResultToEvent(result), nil
 }
@@ -113,7 +113,7 @@ func (pa *PolicyAgent) handleNodePolicyEvaluation(ctx context.Context, intent st
 	if err != nil {
 		return nil, fmt.Errorf("invalid node data: %w", err)
 	}
-	
+
 	// Check if specific policy is provided
 	if policyData, hasPolicyData := payload["policy"]; hasPolicyData {
 		policy, err := pa.convertToPolicy(policyData)
@@ -122,7 +122,7 @@ func (pa *PolicyAgent) handleNodePolicyEvaluation(ctx context.Context, intent st
 		}
 		return pa.policyService.EvaluateNodePolicy(ctx, pa.policyService.env, node, policy)
 	}
-	
+
 	// Evaluate against all applicable node policies
 	return pa.policyService.EvaluateNode(ctx, pa.policyService.env, node)
 }
@@ -134,7 +134,7 @@ func (pa *PolicyAgent) handleEdgePolicyEvaluation(ctx context.Context, intent st
 	if err != nil {
 		return nil, fmt.Errorf("invalid edge data: %w", err)
 	}
-	
+
 	// Check if specific policy is provided
 	if policyData, hasPolicyData := payload["policy"]; hasPolicyData {
 		policy, err := pa.convertToPolicy(policyData)
@@ -143,7 +143,7 @@ func (pa *PolicyAgent) handleEdgePolicyEvaluation(ctx context.Context, intent st
 		}
 		return pa.policyService.EvaluateEdgePolicy(ctx, pa.policyService.env, edge, policy)
 	}
-	
+
 	// Evaluate against all applicable edge policies
 	return pa.policyService.EvaluateEdge(ctx, pa.policyService.env, edge)
 }
@@ -155,7 +155,7 @@ func (pa *PolicyAgent) handleGraphPolicyEvaluation(ctx context.Context, intent s
 	if err != nil {
 		return nil, fmt.Errorf("invalid graph data: %w", err)
 	}
-	
+
 	// Check if specific policy is provided
 	if policyData, hasPolicyData := payload["policy"]; hasPolicyData {
 		policy, err := pa.convertToPolicy(policyData)
@@ -164,7 +164,7 @@ func (pa *PolicyAgent) handleGraphPolicyEvaluation(ctx context.Context, intent s
 		}
 		return pa.policyService.EvaluateGraphPolicy(ctx, pa.policyService.env, g, policy)
 	}
-	
+
 	// Evaluate against all applicable graph policies
 	return pa.policyService.EvaluateGraph(ctx, pa.policyService.env, g)
 }
@@ -173,7 +173,7 @@ func (pa *PolicyAgent) handleGraphPolicyEvaluation(ctx context.Context, intent s
 func (pa *PolicyAgent) handleGenericPolicyQuestion(ctx context.Context, intent string, payload map[string]interface{}) (*PolicyResult, error) {
 	// For generic questions, create a simple policy evaluation response
 	// This is a placeholder - in a full implementation, this would use AI to understand the intent
-	
+
 	result := &PolicyResult{
 		OverallStatus: PolicyStatusNotApplicable,
 		Status:        PolicyStatusNotApplicable,
@@ -184,7 +184,7 @@ func (pa *PolicyAgent) handleGenericPolicyQuestion(ctx context.Context, intent s
 		AIReasoning:   "Policy agent received a generic question but needs specific context (node, edge, or graph) for evaluation",
 		Confidence:    0.0,
 	}
-	
+
 	return result, nil
 }
 
@@ -211,7 +211,7 @@ func (pa *PolicyAgent) convertPolicyResultToEvent(result *PolicyResult) *events.
 		// Default to blocked for safety
 		decision = "blocked"
 	}
-	
+
 	// Ensure we have reasoning (required by tests)
 	reasoning := result.AIReasoning
 	if reasoning == "" {
@@ -220,27 +220,27 @@ func (pa *PolicyAgent) convertPolicyResultToEvent(result *PolicyResult) *events.
 	if reasoning == "" {
 		reasoning = "Policy evaluation completed successfully"
 	}
-	
+
 	payload := map[string]interface{}{
-		"decision":    decision,
-		"reasoning":   reasoning,
-		"confidence":  result.Confidence,
-		"status":      string(result.Status),
+		"decision":     decision,
+		"reasoning":    reasoning,
+		"confidence":   result.Confidence,
+		"status":       string(result.Status),
 		"evaluated_at": result.EvaluatedAt,
 		"evaluated_by": result.EvaluatedBy,
-		"handled":     true,
+		"handled":      true,
 	}
-	
+
 	// Include reason if available
 	if result.Reason != "" {
 		payload["reason"] = result.Reason
 	}
-	
+
 	// Include evaluations for detailed analysis
 	if len(result.Evaluations) > 0 {
 		payload["evaluations"] = result.Evaluations
 	}
-	
+
 	return &events.Event{
 		Type:    events.EventTypeResponse,
 		Source:  pa.ID,
@@ -256,17 +256,17 @@ func (pa *PolicyAgent) convertToNode(data interface{}) (*graph.Node, error) {
 	if !ok {
 		return nil, fmt.Errorf("node data must be a map")
 	}
-	
+
 	// Extract node fields
 	id, _ := nodeMap["id"].(string)
 	kind, _ := nodeMap["kind"].(string)
 	metadata, _ := nodeMap["metadata"].(map[string]interface{})
 	spec, _ := nodeMap["spec"].(map[string]interface{})
-	
+
 	if id == "" || kind == "" {
 		return nil, fmt.Errorf("node must have id and kind fields")
 	}
-	
+
 	return &graph.Node{
 		ID:       id,
 		Kind:     kind,
@@ -280,16 +280,16 @@ func (pa *PolicyAgent) convertToEdge(data interface{}) (*graph.Edge, error) {
 	if !ok {
 		return nil, fmt.Errorf("edge data must be a map")
 	}
-	
+
 	// Extract edge fields
 	to, _ := edgeMap["to"].(string)
 	edgeType, _ := edgeMap["type"].(string)
 	metadata, _ := edgeMap["metadata"].(map[string]interface{})
-	
+
 	if to == "" || edgeType == "" {
 		return nil, fmt.Errorf("edge must have to and type fields")
 	}
-	
+
 	return &graph.Edge{
 		To:       to,
 		Type:     edgeType,
@@ -311,23 +311,23 @@ func (pa *PolicyAgent) convertToPolicy(data interface{}) (*Policy, error) {
 	if !ok {
 		return nil, fmt.Errorf("policy data must be a map")
 	}
-	
+
 	// Extract policy fields
 	id, _ := policyMap["id"].(string)
 	name, _ := policyMap["name"].(string)
 	description, _ := policyMap["description"].(string)
 	naturalLanguageRule, _ := policyMap["natural_language_rule"].(string)
-	
+
 	if id == "" {
 		return nil, fmt.Errorf("policy must have id field")
 	}
-	
+
 	return &Policy{
 		ID:                  id,
 		Name:                name,
 		Description:         description,
 		NaturalLanguageRule: naturalLanguageRule,
-		Scope:               PolicyScopeNode, // Default scope
+		Scope:               PolicyScopeNode,  // Default scope
 		Enforcement:         EnforcementBlock, // Default enforcement
 		RequiredConfidence:  0.8,              // Default confidence
 		Enabled:             true,
