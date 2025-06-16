@@ -66,6 +66,24 @@ func (b *EventBus) Subscribe(eventType EventType, handler EventHandler) {
 	b.handlers[eventType] = append(b.handlers[eventType], handler)
 }
 
+// SubscribeToRoutingKey registers a handler for events with specific routing keys
+// This is more efficient than subscribing to all events and filtering
+func (b *EventBus) SubscribeToRoutingKey(routingKey string, handler EventHandler) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	
+	// Create a wrapper handler that filters by routing key
+	routingHandler := func(event Event) error {
+		if event.Subject == routingKey {
+			return handler(event)
+		}
+		return nil
+	}
+	
+	// Add directly to handlers without calling Subscribe (avoid deadlock)
+	b.handlers[EventTypeRequest] = append(b.handlers[EventTypeRequest], routingHandler)
+}
+
 // Emit publishes an event to the bus (simple interface)
 func (b *EventBus) Emit(eventType EventType, source, subject string, payload map[string]interface{}) error {
 	event := Event{

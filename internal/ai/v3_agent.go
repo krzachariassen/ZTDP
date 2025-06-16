@@ -10,84 +10,37 @@ import (
 	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/agents"
-	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/logging"
-	"github.com/krzachariassen/ZTDP/internal/resources"
 )
 
-// V3Agent - ULTRA simple AI-native agent inspired by ChatGPT example
-// Philosophy: AI drives everything naturally, zero hardcoded logic
+// V3Agent - PURE AI-NATIVE ORCHESTRATOR
+// Philosophy: AI drives everything naturally, zero hardcoded domain logic
+// This agent is completely domain-agnostic and routes by intent only
 type V3Agent struct {
 	provider AIProvider
 	logger   *logging.Logger
 	graph    *graph.GlobalGraph
 
-	// Event-Driven Communication
+	// Event-Driven Communication - ONLY dependencies for pure orchestration
 	eventBus      *events.EventBus
 	agentRegistry agents.AgentRegistry
-
-	// Service interfaces (will be gradually replaced with event-driven agents)
-	applicationService ApplicationService
-	serviceService     ServiceService
-	resourceService    ResourceService
-	environmentService EnvironmentService
-	deploymentService  DeploymentService
-	// NOTE: policyService removed - now uses event-driven PolicyAgent
 }
 
-// Service interfaces (temporary until full agent-to-agent migration)
-type ApplicationService interface {
-	CreateApplication(app contracts.ApplicationContract) error
-	GetApplication(appName string) (*contracts.ApplicationContract, error)
-}
-
-type ServiceService interface {
-	CreateService(appName string, svcData map[string]interface{}) (map[string]interface{}, error)
-	CreateServiceVersion(serviceName string, versionData map[string]interface{}) (map[string]interface{}, error)
-	GetService(appName, serviceName string) (map[string]interface{}, error)
-}
-
-type ResourceService interface {
-	CreateResource(req resources.ResourceRequest) (*resources.ResourceResponse, error)
-	AddResourceToApplication(appName, resourceName, instanceName string) (*resources.ResourceInstanceResponse, error)
-	LinkServiceToResource(appName, serviceName, resourceName string) (*resources.ResourceInstanceResponse, error)
-}
-
-type EnvironmentService interface {
-	CreateEnvironmentFromData(envData map[string]interface{}) (map[string]interface{}, error)
-}
-
-type DeploymentService interface {
-	GenerateDeploymentPlan(ctx context.Context, app string) (*DeploymentPlan, error)
-	PredictDeploymentImpact(ctx context.Context, changes []ProposedChange, env string) (*ImpactPrediction, error)
-	ExecuteDeployment(ctx context.Context, plan *DeploymentPlan) error
-}
-
-// NewV3Agent creates the ultra simple agent with event-driven PolicyAgent communication
+// NewV3Agent creates the pure orchestrator agent with event-driven communication only
 func NewV3Agent(
 	provider AIProvider,
 	globalGraph *graph.GlobalGraph,
 	eventBus *events.EventBus,
 	agentRegistry agents.AgentRegistry,
-	applicationService ApplicationService,
-	serviceService ServiceService,
-	resourceService ResourceService,
-	environmentService EnvironmentService,
-	deploymentService DeploymentService,
 ) *V3Agent {
 	return &V3Agent{
-		provider:           provider,
-		logger:             logging.GetLogger().ForComponent("v3-agent"),
-		graph:              globalGraph,
-		eventBus:           eventBus,
-		agentRegistry:      agentRegistry,
-		applicationService: applicationService,
-		serviceService:     serviceService,
-		resourceService:    resourceService,
-		environmentService: environmentService,
-		deploymentService:  deploymentService,
+		provider:      provider,
+		logger:        logging.GetLogger().ForComponent("v3-agent"),
+		graph:         globalGraph,
+		eventBus:      eventBus,
+		agentRegistry: agentRegistry,
 	}
 }
 
@@ -95,6 +48,113 @@ func NewV3Agent(
 func (agent *V3Agent) Chat(ctx context.Context, userMessage string) (*ConversationalResponse, error) {
 	agent.logger.Info("🤖 V3 User: %s", userMessage)
 
+	// FIRST: Check if user sent a contract directly (before AI processing)
+	if contractResult := agent.detectDirectContract(ctx, userMessage); contractResult != nil {
+		return contractResult, nil
+	}
+
+	// SECOND: Check if this is an operational intent (not resource creation)
+	if intentResult, err := agent.checkForOperationalIntent(ctx, userMessage); intentResult != nil || err != nil {
+		if err != nil {
+			// Log error but continue with resource creation as fallback
+			agent.logger.Warn("Intent detection failed, falling back to resource creation: %v", err)
+		} else {
+			return intentResult, nil
+		}
+	}
+
+	// THIRD: Handle as resource creation conversation
+	return agent.handleResourceCreationConversation(ctx, userMessage)
+}
+
+// checkForOperationalIntent detects and routes operational intents like policy checks, deployments, etc.
+func (agent *V3Agent) checkForOperationalIntent(ctx context.Context, userMessage string) (*ConversationalResponse, error) {
+	// Use AI to detect if this is an operational intent
+	intentDetectionPrompt := `You are an intent classifier for a platform AI system.
+
+Analyze the user message and determine if it's an OPERATIONAL INTENT or RESOURCE CREATION.
+
+OPERATIONAL INTENTS (route to specialist agents):
+- Policy checking/evaluation: respond with "policy check" 
+- Deployment operations: respond with "deploy application"
+- Status monitoring: respond with "check status"
+
+RESOURCE CREATION (handle directly):
+- Creating applications, services, resources, environments
+- "create", "make", "build", "setup", "configure"
+
+If OPERATIONAL INTENT detected, respond with:
+INTENT: [exact intent from list above]
+
+If RESOURCE CREATION, respond with:
+RESOURCE_CREATION
+
+Examples:
+User: "Do a policy check for checkout" -> INTENT: policy check
+User: "Check compliance for my app" -> INTENT: policy check  
+User: "Evaluate policies for my deployment" -> INTENT: policy check
+User: "Deploy test-app to production" -> INTENT: deploy application
+User: "Create an API service" -> RESOURCE_CREATION`
+
+	response, err := agent.provider.CallAI(ctx, intentDetectionPrompt, userMessage)
+	if err != nil {
+		agent.logger.Error("Intent detection failed: %v", err)
+		return nil, nil // Fall back to resource creation
+	}
+
+	// Check if AI detected an operational intent
+	if strings.HasPrefix(response, "INTENT:") {
+		intent := strings.TrimSpace(strings.TrimPrefix(response, "INTENT:"))
+		agent.logger.Info("🎯 Detected operational intent: %s", intent)
+
+		// Route to appropriate agent via intent-based orchestration
+		result, err := agent.orchestrateViaIntentBasedAgents(ctx, intent, map[string]interface{}{
+			"user_message": userMessage,
+			"source":       "v3-agent-chat",
+		})
+
+		if err != nil {
+			agent.logger.Error("Intent orchestration failed: %v", err)
+			return &ConversationalResponse{
+				Message: fmt.Sprintf("I understood you want to %s, but encountered an error: %v", intent, err),
+				Answer:  fmt.Sprintf("I understood you want to %s, but encountered an error: %v", intent, err),
+			}, nil
+		}
+
+		// Convert result to conversational response
+		var responseMessage string
+		if result != nil {
+			// Check if this is a timeout result
+			if resultMap, ok := result.(map[string]interface{}); ok {
+				if status, exists := resultMap["status"].(string); exists && status == "timeout" {
+					intent := resultMap["intent"].(string)
+					agentID := resultMap["selected_agent"].(string)
+					responseMessage = fmt.Sprintf("I tried to %s but didn't get a response from the %s. This might be because the operation is taking longer than expected or the agent is busy. Please try again in a moment.", intent, agentID)
+				} else if responseContent, ok := resultMap["response_content"].(string); ok {
+					responseMessage = fmt.Sprintf("✅ %s\n\n%s", intent, responseContent)
+				} else {
+					responseMessage = fmt.Sprintf("✅ Successfully handled %s request", intent)
+				}
+			} else {
+				responseMessage = fmt.Sprintf("✅ Successfully handled %s request", intent)
+			}
+		} else {
+			responseMessage = fmt.Sprintf("✅ Successfully handled %s request", intent)
+		}
+		
+		return &ConversationalResponse{
+			Message: responseMessage,
+			Answer:  responseMessage,
+			Intent:  intent,
+		}, nil
+	}
+
+	// Not an operational intent, let resource creation handle it
+	return nil, nil
+}
+
+// handleResourceCreationConversation handles resource creation with the original logic
+func (agent *V3Agent) handleResourceCreationConversation(ctx context.Context, userMessage string) (*ConversationalResponse, error) {
 	// Get platform state
 	state := agent.getPlatformState()
 
@@ -207,68 +267,62 @@ func (agent *V3Agent) handleResponse(ctx context.Context, aiResponse string, use
 	}, nil
 }
 
-// executeContract executes a contract JSON using the appropriate service
+// executeContract executes a contract by extracting intent and routing to appropriate agents
 func (agent *V3Agent) executeContract(ctx context.Context, contractJSON string, userMessage string) (interface{}, error) {
 	var contractData map[string]interface{}
 	if err := json.Unmarshal([]byte(contractJSON), &contractData); err != nil {
 		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 
-	// Trust AI to specify resource type directly via "kind" field
-	resourceType, ok := contractData["kind"].(string)
-	if !ok {
-		// If AI didn't specify kind, default to application (most common case)
-		resourceType = "application"
-		agent.logger.Info("🤖 No 'kind' specified, defaulting to application")
+	// PURE ORCHESTRATOR: Extract intent using AI, no hardcoded domain knowledge
+	intent, err := agent.extractIntentFromContract(ctx, contractData, userMessage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract intent: %w", err)
 	}
 
-	agent.logger.Info("🎯 AI specified resource type: %s", resourceType)
+	agent.logger.Info("🚀 Extracted intent '%s' from contract, orchestrating via agent discovery", intent)
 
-	switch resourceType {
-	case "application":
-		// Convert to ApplicationContract
-		var appContract contracts.ApplicationContract
-		if err := json.Unmarshal([]byte(contractJSON), &appContract); err != nil {
-			return nil, fmt.Errorf("invalid application contract: %w", err)
-		}
+	// Route purely by intent - completely domain-agnostic!
+	return agent.orchestrateViaIntentBasedAgents(ctx, intent, contractData)
+}
 
-		// Use correct method signature: CreateApplication(contracts.ApplicationContract) error
-		if err := agent.applicationService.CreateApplication(appContract); err != nil {
-			return nil, err
-		}
+// extractIntentFromContract uses AI to determine the intent from contract data
+func (agent *V3Agent) extractIntentFromContract(ctx context.Context, contractData map[string]interface{}, userMessage string) (string, error) {
+	// Use AI to understand the intent from the contract and user message
+	systemPrompt := `You are an intent extraction AI. Based on the user's message and the contract data, determine the specific intent.
 
-		return appContract, nil
+Respond with ONLY the intent phrase, nothing else. Examples:
+- "create application"
+- "deploy application" 
+- "create service"
+- "create database resource"
+- "validate policies"
+- "setup environment"
 
-	case "environment":
-		// Use CreateEnvironmentFromData method which exists
-		result, err := agent.environmentService.CreateEnvironmentFromData(contractData)
-		return result, err
+The intent should be specific enough for agent discovery but generic enough to be domain-agnostic.`
 
-	case "service":
-		// Extract app name and service data for CreateService
-		if metadata, ok := contractData["metadata"].(map[string]interface{}); ok {
-			if appName, ok := metadata["app"].(string); ok {
-				// Use CreateService(appName string, serviceData map[string]interface{}) method
-				result, err := agent.serviceService.CreateService(appName, contractData)
-				return result, err
-			}
-		}
-		return nil, fmt.Errorf("service contract missing app name in metadata")
+	userPrompt := fmt.Sprintf(`User said: "%s"
 
-	case "resource":
-		// Convert to ResourceRequest for CreateResource
-		var resourceReq resources.ResourceRequest
-		if err := json.Unmarshal([]byte(contractJSON), &resourceReq); err != nil {
-			return nil, fmt.Errorf("invalid resource contract: %w", err)
-		}
+Contract data: %s
 
-		// Use CreateResource(resources.ResourceRequest) method
-		result, err := agent.resourceService.CreateResource(resourceReq)
-		return result, err
+What is the intent?`, userMessage, string(mustMarshal(contractData)))
 
-	default:
-		return nil, fmt.Errorf("unknown resource type: %s", resourceType)
+	response, err := agent.provider.CallAI(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return "", fmt.Errorf("AI intent extraction failed: %w", err)
 	}
+
+	// Clean up the response to get just the intent
+	intent := strings.TrimSpace(strings.ToLower(response))
+	intent = strings.Trim(intent, `"'`)
+
+	return intent, nil
+}
+
+// mustMarshal helper function
+func mustMarshal(v interface{}) []byte {
+	data, _ := json.Marshal(v)
+	return data
 }
 
 // loadAllContracts dynamically loads all contract definitions
@@ -370,18 +424,8 @@ func (agent *V3Agent) getNodesByKind(nodes map[string]*graph.Node, kind string) 
 			result = append(result, node)
 		}
 	}
-	return result
-}
 
-// countNodesByKind counts nodes of a specific kind
-func (agent *V3Agent) countNodesByKind(nodes map[string]*graph.Node, kind string) int {
-	count := 0
-	for _, node := range nodes {
-		if node.Kind == kind {
-			count++
-		}
-	}
-	return count
+	return result
 }
 
 // Compatibility methods for existing code
@@ -413,55 +457,283 @@ func (agent *V3Agent) ChatWithPlatform(ctx context.Context, query string, contex
 	return agent.Chat(ctx, query)
 }
 
-// consultPolicyAgent communicates with PolicyAgent via events for policy evaluation
-func (agent *V3Agent) consultPolicyAgent(ctx context.Context, intent string, context map[string]interface{}) (*events.Event, error) {
-	// Create policy evaluation request via EventBus.Emit
-	if err := agent.eventBus.Emit(events.EventTypeRequest, "v3-agent", intent, context); err != nil {
-		return nil, fmt.Errorf("failed to emit policy request: %w", err)
+// orchestrateViaIntentBasedAgents - PURE ORCHESTRATOR: Discovers agents by intent and routes events
+// This method contains NO domain-specific logic - it's completely generic!
+func (agent *V3Agent) orchestrateViaIntentBasedAgents(ctx context.Context, intent string, context map[string]interface{}) (interface{}, error) {
+	if agent.agentRegistry == nil {
+		return nil, fmt.Errorf("agent registry not available - cannot discover agents")
 	}
 
-	// For now, create a simple success response since we don't have request-response correlation yet
-	// TODO: Implement proper request-response correlation in Phase 3
-	responsePayload := map[string]interface{}{
-		"decision":   "allowed",
-		"reasoning":  "Event-driven policy evaluation completed",
-		"confidence": 0.8,
-		"handled":    true,
+	agent.logger.Info("🔍 Discovering agents for intent: %s", intent)
+
+	// STEP 1: Discover agents by intent (completely generic)
+	availableAgents, err := agent.discoverAgentsByIntent(ctx, intent)
+	if err != nil {
+		return nil, fmt.Errorf("agent discovery failed for intent '%s': %w", intent, err)
 	}
 
-	return &events.Event{
-		Type:    events.EventTypeResponse,
-		Source:  "policy-agent",
-		Subject: "policy_result",
-		Payload: responsePayload,
-	}, nil
+	if len(availableAgents) == 0 {
+		return nil, fmt.Errorf("no agents found for intent '%s' - register appropriate agents first", intent)
+	}
+
+	agent.logger.Info("🎯 Found %d agents capable of handling intent: %s", len(availableAgents), intent)
+
+	// STEP 2: Route to the best agent and get routing key
+	selectedAgent := availableAgents[0] // Simple: use first available agent
+	
+	// STEP 2.5: Discover the appropriate routing key for this intent
+	routingKey, err := agent.discoverRoutingKeyForIntent(ctx, intent, selectedAgent.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover routing key for intent '%s' and agent '%s': %w", intent, selectedAgent.ID, err)
+	}
+	
+	agent.logger.Info("🔑 Using routing key '%s' for agent: %s", routingKey, selectedAgent.ID)
+
+	// STEP 3: Create request-response correlation
+	correlationID := fmt.Sprintf("orchestration-%d", time.Now().UnixNano())
+	requestID := fmt.Sprintf("req-%d", time.Now().UnixNano())
+	
+	// Create a channel to receive the response
+	responseChan := make(chan *events.Event, 1)
+	
+	// Subscribe to response events for this correlation ID
+	agent.eventBus.Subscribe(events.EventTypeResponse, func(event events.Event) error {
+		// Check if this response is for our request
+		if responseCorrelationID, ok := event.Payload["correlation_id"].(string); ok {
+			if responseCorrelationID == correlationID {
+				// This is our response!
+				select {
+				case responseChan <- &event:
+					agent.logger.Info("📨 Received response for correlation ID: %s", correlationID)
+				default:
+					agent.logger.Warn("Response channel full for correlation ID: %s", correlationID)
+				}
+			}
+		}
+		return nil
+	})
+
+	// STEP 4: Emit targeted event using discovered routing key
+	eventPayload := map[string]interface{}{
+		"correlation_id": correlationID,
+		"intent":         intent,
+		"context":        context,
+		"request_id":     requestID,
+		"source_agent":   "v3-agent",
+	}
+
+	// Targeted event emission using specific routing key for this agent
+	if err := agent.eventBus.Emit(events.EventTypeRequest, "v3-agent", routingKey, eventPayload); err != nil {
+		return nil, fmt.Errorf("failed to emit intent request to routing key %s for agent %s: %w", routingKey, selectedAgent.ID, err)
+	}
+
+	agent.logger.Info("📤 Routed intent '%s' to agent: %s via routing key: %s", intent, selectedAgent.ID, routingKey)
+
+	// STEP 5: Wait for response with timeout
+	select {
+	case response := <-responseChan:
+		agent.logger.Info("✅ Received response from agent for intent: %s", intent)
+		
+		// Extract meaningful content from the agent response
+		var responseContent string
+		if decision, ok := response.Payload["decision"].(string); ok {
+			if reasoning, ok := response.Payload["reasoning"].(string); ok {
+				responseContent = fmt.Sprintf("Decision: %s. Reasoning: %s", decision, reasoning)
+			} else {
+				responseContent = fmt.Sprintf("Decision: %s", decision)
+			}
+		} else if message, ok := response.Payload["message"].(string); ok {
+			responseContent = message
+		} else {
+			responseContent = fmt.Sprintf("Agent completed the %s request successfully", intent)
+		}
+		
+		return map[string]interface{}{
+			"status":           "completed",
+			"intent":           intent,
+			"selected_agent":   response.Source,
+			"response_content": responseContent,
+			"agent_response":   response.Payload,
+		}, nil
+	case <-time.After(10 * time.Second): // 10 second timeout
+		agent.logger.Warn("⏰ Timeout waiting for response from agent for intent: %s", intent)
+		return map[string]interface{}{
+			"status":         "timeout",
+			"intent":         intent,
+			"selected_agent": selectedAgent.ID,
+			"correlation_id": correlationID,
+			"message":        fmt.Sprintf("Intent '%s' sent to agent %s but no response received within timeout", intent, selectedAgent.ID),
+		}, nil
+	}
 }
 
-// validateDeploymentViaEvents replaces the old hardcoded policyService.ValidateDeployment
-func (agent *V3Agent) validateDeploymentViaEvents(ctx context.Context, appName, env string) error {
-	// Create policy evaluation context
-	policyContext := map[string]interface{}{
-		"type":        "deployment_validation",
-		"application": appName,
-		"environment": env,
-		"timestamp":   time.Now(),
-	}
-
-	// Consult policy agent via events
-	response, err := agent.consultPolicyAgent(ctx, "validate deployment", policyContext)
+// discoverAgentsByIntent - Generic agent discovery by matching intent to capabilities
+func (agent *V3Agent) discoverAgentsByIntent(ctx context.Context, intent string) ([]agents.AgentStatus, error) {
+	// Get all available capabilities
+	capabilities, err := agent.agentRegistry.GetAvailableCapabilities(ctx)
 	if err != nil {
-		return fmt.Errorf("policy consultation failed: %w", err)
+		return nil, fmt.Errorf("failed to get available capabilities: %w", err)
 	}
 
-	// Check response
-	if decision, ok := response.Payload["decision"].(string); ok {
-		if decision == "blocked" {
-			if reason, ok := response.Payload["reasoning"].(string); ok {
-				return fmt.Errorf("deployment blocked by policy: %s", reason)
+	var matchingAgents []agents.AgentStatus
+
+	// Find agents whose capabilities match the intent
+	for _, capability := range capabilities {
+		for _, supportedIntent := range capability.Intents {
+			if agent.intentMatches(intent, supportedIntent) {
+				// Find agents with this capability
+				agentsWithCapability, err := agent.agentRegistry.FindAgentsByCapability(ctx, capability.Name)
+				if err != nil {
+					agent.logger.Warn("⚠️ Failed to find agents for capability %s: %v", capability.Name, err)
+					continue
+				}
+				matchingAgents = append(matchingAgents, agentsWithCapability...)
+				break // Found a match, no need to check other intents for this capability
 			}
-			return fmt.Errorf("deployment blocked by policy")
 		}
 	}
 
-	return nil
+	// Remove duplicates (an agent might match multiple intents)
+	return agent.deduplicate(matchingAgents), nil
+}
+
+// intentMatches - Simple intent matching (can be enhanced with AI/NLP)
+func (agent *V3Agent) intentMatches(userIntent, supportedIntent string) bool {
+	// Simple contains check - could be enhanced with semantic matching
+	userWords := strings.ToLower(userIntent)
+	supportedWords := strings.ToLower(supportedIntent)
+
+	// Check if user intent contains key words from supported intent
+	supportedKeywords := strings.Fields(supportedWords)
+	for _, keyword := range supportedKeywords {
+		if len(keyword) > 3 && strings.Contains(userWords, keyword) { // Only match meaningful words
+			return true
+		}
+	}
+
+	return false
+}
+
+// deduplicate - Remove duplicate agents from the list
+func (agent *V3Agent) deduplicate(agentsList []agents.AgentStatus) []agents.AgentStatus {
+	seen := make(map[string]bool)
+	var result []agents.AgentStatus
+
+	for _, a := range agentsList {
+		if !seen[a.ID] {
+			seen[a.ID] = true
+			result = append(result, a)
+		}
+	}
+
+	return result
+}
+
+// discoverRoutingKeyForIntent finds the appropriate routing key for an intent and agent
+func (agent *V3Agent) discoverRoutingKeyForIntent(ctx context.Context, intent string, agentID string) (string, error) {
+	// Get all available capabilities to find routing keys
+	capabilities, err := agent.agentRegistry.GetAvailableCapabilities(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get available capabilities: %w", err)
+	}
+
+	// Find the capability that matches both the intent and the agent
+	for _, capability := range capabilities {
+		// Check if this capability matches the intent
+		for _, supportedIntent := range capability.Intents {
+			if agent.intentMatches(intent, supportedIntent) {
+				// Check if this capability belongs to the target agent
+				agentsWithCapability, err := agent.agentRegistry.FindAgentsByCapability(ctx, capability.Name)
+				if err != nil {
+					continue
+				}
+				
+				for _, agentStatus := range agentsWithCapability {
+					if agentStatus.ID == agentID {
+						// Found the right capability for this agent and intent
+						if len(capability.RoutingKeys) > 0 {
+							// Return the first routing key for this capability
+							return capability.RoutingKeys[0], nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback to a default routing key based on intent type
+	if strings.Contains(strings.ToLower(intent), "policy") {
+		return "policy.request", nil
+	} else if strings.Contains(strings.ToLower(intent), "deploy") {
+		return "deployment.request", nil
+	}
+	
+	// Ultimate fallback
+	return "agent.request", nil
+}
+
+// detectDirectContract checks if user input contains a valid contract and executes it directly
+func (agent *V3Agent) detectDirectContract(ctx context.Context, userMessage string) *ConversationalResponse {
+	// Look for JSON-like patterns in the user message
+	userMessage = strings.TrimSpace(userMessage)
+
+	// Check if message starts with '{' or contains contract keywords
+	if !strings.Contains(userMessage, "{") || !strings.Contains(userMessage, `"kind"`) {
+		return nil // Not a direct contract
+	}
+
+	// Try to extract JSON from the message
+	startIdx := strings.Index(userMessage, "{")
+	if startIdx == -1 {
+		return nil
+	}
+
+	// Find the matching closing brace
+	braceCount := 0
+	endIdx := -1
+	for i := startIdx; i < len(userMessage); i++ {
+		switch userMessage[i] {
+		case '{':
+			braceCount++
+		case '}':
+			braceCount--
+			if braceCount == 0 {
+				endIdx = i + 1
+				break
+			}
+		}
+	}
+
+	if endIdx == -1 {
+		return nil // No complete JSON found
+	}
+
+	contractJSON := userMessage[startIdx:endIdx]
+	agent.logger.Info("🎯 Detected direct contract in user input: %s", contractJSON)
+
+	// Validate it's a proper contract
+	var contractData map[string]interface{}
+	if err := json.Unmarshal([]byte(contractJSON), &contractData); err != nil {
+		return nil // Not valid JSON
+	}
+
+	// Check if it has the required 'kind' field
+	if _, hasKind := contractData["kind"].(string); !hasKind {
+		return nil // Not a contract
+	}
+
+	// Execute the contract directly via intent-based orchestration
+	agent.logger.Info("🚀 Executing direct contract via intent-based orchestration")
+	result, err := agent.executeContract(ctx, contractJSON, userMessage)
+	if err != nil {
+		return &ConversationalResponse{
+			Message: fmt.Sprintf("I found a contract in your message but couldn't execute it: %v", err),
+			Actions: []Action{{Type: "error", Result: err.Error()}},
+		}
+	}
+
+	return &ConversationalResponse{
+		Message: fmt.Sprintf("✅ Contract executed successfully via intent-based orchestration: %v", result),
+		Actions: []Action{{Type: "contract_executed", Result: result}},
+	}
 }

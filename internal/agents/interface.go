@@ -28,6 +28,7 @@ type AgentCapability struct {
 	Intents     []string `json:"intents"`      // Natural language patterns it handles
 	InputTypes  []string `json:"input_types"`  // Expected input data types
 	OutputTypes []string `json:"output_types"` // Response data types
+	RoutingKeys []string `json:"routing_keys"` // Event routing keys this agent subscribes to
 	Version     string   `json:"version"`      // Capability version
 }
 

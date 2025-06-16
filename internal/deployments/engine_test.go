@@ -1,7 +1,10 @@
 package deployments
 
 import (
+	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/events"
@@ -21,8 +24,7 @@ func TestEngine_ExecuteApplicationDeployment(t *testing.T) {
 	// Setup test application
 	setupTestApplication(globalGraph)
 
-	// For tests, create a mock AI platform agent or skip if not available
-	// In a real test environment, you'd use a mock implementation
+	// For tests, create a real AI agent or skip if not available
 	agent, err := createTestAIAgent(globalGraph)
 	if err != nil {
 		t.Skipf("AI platform agent not available for testing: %v", err)
@@ -158,17 +160,36 @@ func setupTestApplication(globalGraph *graph.GlobalGraph) {
 	globalGraph.AddEdge("test-app", "dev", "allowed_in")
 }
 
-// createTestAIAgent creates a test AI agent for unit tests
-func createTestAIAgent(globalGraph *graph.GlobalGraph) (*ai.PlatformAgent, error) {
-	// Try to create with minimal services for testing
-	// In a real test environment, you'd use mock implementations
-	return ai.NewPlatformAgentFromConfig(
+// createTestAIAgent creates a real AI agent for unit tests
+func createTestAIAgent(globalGraph *graph.GlobalGraph) (*ai.V3Agent, error) {
+	// Get OpenAI API key from environment
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("OPENAI_API_KEY environment variable not set")
+	}
+
+	// Create real OpenAI provider
+	config := &ai.OpenAIConfig{
+		APIKey:      apiKey,
+		Model:       "gpt-4o-mini",
+		BaseURL:     "https://api.openai.com/v1",
+		Timeout:     90 * time.Second,
+		MaxTokens:   4000,
+		Temperature: 0.1,
+	}
+	aiProvider, err := ai.NewOpenAIProvider(config, apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OpenAI provider: %w", err)
+	}
+
+	// Create V3Agent with minimal dependencies for testing
+	eventBus := events.NewEventBus(nil, false)
+	agent := ai.NewV3Agent(
+		aiProvider,
 		globalGraph,
-		nil, // deploymentService - use nil for tests
-		nil, // policyService - use nil for tests
-		nil, // applicationService - use nil for tests
-		nil, // serviceService - use nil for tests
-		nil, // resourceService - use nil for tests
-		nil, // environmentService - use nil for tests
+		eventBus, // eventBus
+		nil,      // agentRegistry - use nil for tests
 	)
+
+	return agent, nil
 }

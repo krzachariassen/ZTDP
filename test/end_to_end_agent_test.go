@@ -10,14 +10,9 @@ import (
 	"github.com/krzachariassen/ZTDP/api/handlers"
 	"github.com/krzachariassen/ZTDP/internal/agents"
 	"github.com/krzachariassen/ZTDP/internal/ai"
-	"github.com/krzachariassen/ZTDP/internal/application"
-	"github.com/krzachariassen/ZTDP/internal/deployments"
-	"github.com/krzachariassen/ZTDP/internal/environment"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/policies"
-	"github.com/krzachariassen/ZTDP/internal/resources"
-	"github.com/krzachariassen/ZTDP/internal/service"
 )
 
 // TestEndToEndAgentToAgentArchitecture tests the complete user -> V3Agent -> PolicyAgent workflow
@@ -34,14 +29,7 @@ func TestEndToEndAgentToAgentArchitecture(t *testing.T) {
 		eventBus := events.NewEventBus(nil, false) // In-memory for testing
 		agentRegistry := agents.NewInMemoryAgentRegistry()
 
-		// 3. Initialize services (following clean architecture)
-		applicationService := application.NewService(globalGraph)
-		serviceService := service.NewServiceService(globalGraph)
-		resourceService := resources.NewService(globalGraph)
-		environmentService := environment.NewService(globalGraph)
-		deploymentService := deployments.NewDeploymentService(globalGraph, nil) // No AI for deployment service itself
-
-		// 4. Initialize REAL AI provider for actual intelligence testing
+		// 3. Initialize REAL AI provider for actual intelligence testing
 		realAI := createRealAIProviderForTest(t)
 		if realAI == nil {
 			t.Skip("Skipping AI integration test - set OPENAI_API_KEY environment variable to enable")
@@ -49,26 +37,18 @@ func TestEndToEndAgentToAgentArchitecture(t *testing.T) {
 
 		// === SETUP AGENTS ===
 
-		// 5. Create PolicyAgent (event-driven)
-		policyAgent := policies.NewPolicyAgent(graphStore, globalGraph, nil, "test", &EventBusAdapter{eventBus})
-
-		// 6. Register PolicyAgent with registry
-		err := agentRegistry.RegisterAgent(context.Background(), policyAgent)
+		// 5. Create PolicyAgent (event-driven) with auto-registration
+		policyAgent, err := policies.NewPolicyAgent(graphStore, globalGraph, nil, "test", &EventBusAdapter{eventBus}, agentRegistry)
 		if err != nil {
-			t.Fatalf("Failed to register PolicyAgent: %v", err)
+			t.Fatalf("Failed to create and auto-register PolicyAgent: %v", err)
 		}
 
-		// 7. Create V3Agent (platform agent with event-driven capabilities)
+		// 7. Create V3Agent (pure orchestrator with event-driven capabilities)
 		v3Agent := ai.NewV3Agent(
 			realAI,
 			globalGraph,
 			eventBus,
 			agentRegistry,
-			applicationService,
-			serviceService,
-			resourceService,
-			environmentService,
-			deploymentService,
 		)
 
 		// 8. Initialize global handlers for API-level testing
@@ -234,7 +214,7 @@ func TestEndToEndWithMockAI(t *testing.T) {
 	t.Run("Infrastructure test with mock AI (fallback)", func(t *testing.T) {
 		// This test validates the infrastructure when real AI is not available
 		// but doesn't test actual AI intelligence
-		
+
 		if os.Getenv("OPENAI_API_KEY") != "" {
 			t.Skip("Skipping mock AI test - real AI is available")
 		}
@@ -243,57 +223,44 @@ func TestEndToEndWithMockAI(t *testing.T) {
 		backend := graph.NewMemoryGraph()
 		graphStore := graph.NewGraphStore(backend)
 		globalGraph := graph.NewGlobalGraph(backend)
-		
+
 		eventBus := events.NewEventBus(nil, false)
 		agentRegistry := agents.NewInMemoryAgentRegistry()
-		
-		applicationService := application.NewService(globalGraph)
-		serviceService := service.NewServiceService(globalGraph)
-		resourceService := resources.NewService(globalGraph)
-		environmentService := environment.NewService(globalGraph)
-		deploymentService := deployments.NewDeploymentService(globalGraph, nil)
 
 		// Mock AI for infrastructure testing only
 		mockAI := &MockAIProvider{}
-		
-		policyAgent := policies.NewPolicyAgent(graphStore, globalGraph, nil, "test", &EventBusAdapter{eventBus})
-		
-		err := agentRegistry.RegisterAgent(context.Background(), policyAgent)
+
+		policyAgent, err := policies.NewPolicyAgent(graphStore, globalGraph, nil, "test", &EventBusAdapter{eventBus}, agentRegistry)
 		if err != nil {
-			t.Fatalf("Failed to register PolicyAgent: %v", err)
+			t.Fatalf("Failed to create and auto-register PolicyAgent: %v", err)
 		}
-		
+
 		v3Agent := ai.NewV3Agent(
 			mockAI,
 			globalGraph,
 			eventBus,
 			agentRegistry,
-			applicationService,
-			serviceService,
-			resourceService,
-			environmentService,
-			deploymentService,
 		)
-		
+
 		// Validate V3Agent was created
 		if v3Agent == nil {
 			t.Fatalf("Failed to create V3Agent")
 		}
-		
+
 		// Test infrastructure only (not real AI intelligence)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		
+
 		// Verify agent registration and discovery work
 		agents, err := agentRegistry.FindAgentsByCapability(ctx, "policy_evaluation")
 		if err != nil {
 			t.Fatalf("Failed to discover policy agents: %v", err)
 		}
-		
+
 		if len(agents) == 0 {
 			t.Fatalf("No policy agents discovered")
 		}
-		
+
 		// Test direct PolicyAgent communication
 		testEvent := &events.Event{
 			Type:    events.EventTypeRequest,
@@ -305,16 +272,16 @@ func TestEndToEndWithMockAI(t *testing.T) {
 				"environment": "production",
 			},
 		}
-		
+
 		responseEvent, err := policyAgent.ProcessEvent(ctx, testEvent)
 		if err != nil {
 			t.Fatalf("PolicyAgent failed to process event: %v", err)
 		}
-		
+
 		if responseEvent == nil {
 			t.Fatalf("PolicyAgent returned nil response")
 		}
-		
+
 		t.Logf("✅ INFRASTRUCTURE TEST PASSED (Mock AI)")
 		t.Logf("   ✅ Agent registration and discovery work")
 		t.Logf("   ✅ Event-driven communication works")

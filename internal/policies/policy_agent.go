@@ -15,10 +15,11 @@ import (
 type PolicyAgent struct {
 	*agents.BaseAgent
 	policyService *Service
+	eventBus      EventBus // Store EventBus for subscription
 }
 
-// NewPolicyAgent creates a new PolicyAgent that implements AgentInterface
-func NewPolicyAgent(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph, policyStore PolicyStore, env string, eventBus EventBus) agents.AgentInterface {
+// NewPolicyAgent creates a new PolicyAgent that auto-registers with the agent registry
+func NewPolicyAgent(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph, policyStore PolicyStore, env string, eventBus EventBus, agentRegistry agents.AgentRegistry) (agents.AgentInterface, error) {
 	// Create underlying policy service
 	policyService := NewServiceWithPolicyStore(graphStore, globalGraph, policyStore, env, eventBus)
 
@@ -34,6 +35,7 @@ func NewPolicyAgent(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph
 			},
 			InputTypes:  []string{"node", "edge", "graph", "deployment", "configuration"},
 			OutputTypes: []string{"policy_result", "compliance_status", "violation_report"},
+			RoutingKeys: []string{"policy.request", "compliance.check", "policy.evaluation"},
 			Version:     "1.0.0",
 		},
 	}
@@ -45,9 +47,24 @@ func NewPolicyAgent(graphStore *graph.GraphStore, globalGraph *graph.GlobalGraph
 	policyAgent := &PolicyAgent{
 		BaseAgent:     baseAgent,
 		policyService: policyService,
+		eventBus:      eventBus,
 	}
 
-	return policyAgent
+	// Subscribe to events for processing requests
+	// Note: We can't subscribe here because EventBus interface doesn't have Subscribe method
+	// The real event subscription needs to happen in the global initialization
+	// TODO: Add Subscribe method to EventBus interface or handle subscription differently
+
+	// Auto-register with the agent registry
+	if agentRegistry != nil {
+		ctx := context.Background()
+		if err := agentRegistry.RegisterAgent(ctx, policyAgent); err != nil {
+			return nil, fmt.Errorf("failed to auto-register policy agent: %w", err)
+		}
+		// Note: No logging here as PolicyAgent doesn't have a logger field
+	}
+
+	return policyAgent, nil
 }
 
 // ProcessEvent implements AgentInterface for event-based policy evaluation
@@ -91,19 +108,29 @@ func (pa *PolicyAgent) ProcessEvent(ctx context.Context, event *events.Event) (*
 	}
 
 	if err != nil {
+		errorPayload := map[string]interface{}{
+			"error":   err.Error(),
+			"handled": false,
+		}
+		
+		// Preserve correlation_id for error responses too
+		if correlationID, ok := event.Payload["correlation_id"]; ok {
+			errorPayload["correlation_id"] = correlationID
+		}
+		if requestID, ok := event.Payload["request_id"]; ok {
+			errorPayload["request_id"] = requestID
+		}
+		
 		return &events.Event{
 			Type:    events.EventTypeResponse,
 			Source:  pa.ID,
 			Subject: "policy_error",
-			Payload: map[string]interface{}{
-				"error":   err.Error(),
-				"handled": false,
-			},
+			Payload: errorPayload,
 		}, nil
 	}
 
 	// Convert PolicyResult to event response
-	return pa.convertPolicyResultToEvent(result), nil
+	return pa.convertPolicyResultToEvent(result, event.Payload), nil
 }
 
 // handleNodePolicyEvaluation handles node-specific policy evaluation
@@ -189,7 +216,7 @@ func (pa *PolicyAgent) handleGenericPolicyQuestion(ctx context.Context, intent s
 }
 
 // convertPolicyResultToEvent converts PolicyResult to an event response
-func (pa *PolicyAgent) convertPolicyResultToEvent(result *PolicyResult) *events.Event {
+func (pa *PolicyAgent) convertPolicyResultToEvent(result *PolicyResult, originalPayload map[string]interface{}) *events.Event {
 	// Normalize decision types to what the tests expect: [allowed, blocked, conditional, warning]
 	var decision string
 	switch result.Status {
@@ -239,6 +266,16 @@ func (pa *PolicyAgent) convertPolicyResultToEvent(result *PolicyResult) *events.
 	// Include evaluations for detailed analysis
 	if len(result.Evaluations) > 0 {
 		payload["evaluations"] = result.Evaluations
+	}
+
+	// Preserve correlation_id from original request for response correlation
+	if correlationID, ok := originalPayload["correlation_id"]; ok {
+		payload["correlation_id"] = correlationID
+	}
+
+	// Preserve request_id from original request
+	if requestID, ok := originalPayload["request_id"]; ok {
+		payload["request_id"] = requestID
 	}
 
 	return &events.Event{

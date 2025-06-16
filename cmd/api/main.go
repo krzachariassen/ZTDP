@@ -9,14 +9,9 @@ import (
 	"github.com/krzachariassen/ZTDP/api/handlers"
 	"github.com/krzachariassen/ZTDP/api/server"
 	"github.com/krzachariassen/ZTDP/internal/ai"
-	"github.com/krzachariassen/ZTDP/internal/application"
-	"github.com/krzachariassen/ZTDP/internal/deployments"
-	"github.com/krzachariassen/ZTDP/internal/environment"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/logging"
-	"github.com/krzachariassen/ZTDP/internal/resources"
-	"github.com/krzachariassen/ZTDP/internal/service"
 )
 
 func main() {
@@ -79,35 +74,14 @@ func main() {
 		logger.Info("No existing global graph found, starting fresh")
 	}
 
-	// Initialize AI infrastructure with domain services
-	logger.Info("🤖 Initializing AI platform with domain services...")
+	// Initialize AI infrastructure
+	logger.Info("🤖 Initializing AI platform...")
 
-	// Create AI provider for services
-	aiProvider, err := createAIProvider()
-	if err != nil {
-		logger.Warn("⚠️  Failed to create AI provider: %v. AI features will be limited.", err)
-		aiProvider = nil
-	}
-
-	// Initialize domain services with proper dependencies
-	deploymentService := createDeploymentService(handlers.GlobalGraph, aiProvider)
-	// Note: PolicyService now operates as PolicyAgent via event-driven architecture
-	applicationService := createApplicationService(handlers.GlobalGraph)
-	serviceService := createServiceService(handlers.GlobalGraph)
-	resourceService := createResourceService(handlers.GlobalGraph)
-	environmentService := createEnvironmentService(handlers.GlobalGraph)
-
-	// Initialize global V3 AI agent with event-driven architecture (PolicyAgent via events)
-	if err := handlers.InitializeGlobalV3Agent(
-		deploymentService,
-		applicationService,
-		serviceService,
-		resourceService,
-		environmentService,
-	); err != nil {
+	// Initialize global V3 AI agent as pure orchestrator (no domain service dependencies)
+	if err := handlers.InitializeGlobalV3Agent(); err != nil {
 		logger.Warn("⚠️  Failed to initialize V3 AI agent: %v. AI features will be limited.", err)
 	} else {
-		logger.Info("🤖 AI platform agent initialized successfully with event-driven PolicyAgent")
+		logger.Info("🤖 AI platform agent initialized successfully as pure orchestrator")
 	}
 
 	r := server.NewRouter()
@@ -140,29 +114,4 @@ func createAIProvider() (ai.AIProvider, error) {
 	}
 
 	return ai.NewOpenAIProvider(config, apiKey)
-}
-
-// createDeploymentService initializes the deployment service
-func createDeploymentService(globalGraph *graph.GlobalGraph, aiProvider ai.AIProvider) ai.DeploymentService {
-	return deployments.NewDeploymentService(globalGraph, aiProvider)
-}
-
-// createApplicationService initializes the application service
-func createApplicationService(globalGraph *graph.GlobalGraph) ai.ApplicationService {
-	return application.NewService(globalGraph)
-}
-
-// createServiceService initializes the service service
-func createServiceService(globalGraph *graph.GlobalGraph) ai.ServiceService {
-	return service.NewServiceService(globalGraph)
-}
-
-// createResourceService initializes the resource service
-func createResourceService(globalGraph *graph.GlobalGraph) ai.ResourceService {
-	return resources.NewService(globalGraph)
-}
-
-// createEnvironmentService initializes the environment service
-func createEnvironmentService(globalGraph *graph.GlobalGraph) ai.EnvironmentService {
-	return environment.NewService(globalGraph)
 }

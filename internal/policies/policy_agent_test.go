@@ -6,6 +6,7 @@ import (
 
 	"github.com/krzachariassen/ZTDP/internal/agents"
 	"github.com/krzachariassen/ZTDP/internal/events"
+	"github.com/krzachariassen/ZTDP/internal/graph"
 )
 
 // Test PolicyAgent implementation of AgentInterface
@@ -258,10 +259,31 @@ func TestPolicyAgent_Lifecycle(t *testing.T) {
 
 // createTestPolicyAgent creates a policy agent for testing
 func createTestPolicyAgent(t *testing.T) agents.AgentInterface {
-	// Use nil for non-essential dependencies during initial testing
-	// Real dependencies can be added as implementation progresses
+	// Use real components for testing
 	mockPolicyStore := &MockPolicyStore{}
-	mockEventBus := &MockEventBus{}
+	realEventBus := events.NewEventBus(nil, false) // Use real EventBus
 
-	return NewPolicyAgent(nil, nil, mockPolicyStore, "test", mockEventBus)
+	// Create an adapter to match the EventBus interface expected by PolicyAgent
+	eventBusAdapter := &EventBusAdapter{realEventBus}
+
+	// Create mock components that the PolicyAgent needs
+	backend := graph.NewMemoryGraph()
+	globalGraph := graph.NewGlobalGraph(backend)
+
+	policyAgent, err := NewPolicyAgent(nil, globalGraph, mockPolicyStore, "test", eventBusAdapter, nil)
+	if err != nil {
+		t.Fatalf("Failed to create policy agent: %v", err)
+	}
+
+	return policyAgent
+}
+
+// EventBusAdapter adapts the real EventBus to match the interface expected by PolicyAgent
+type EventBusAdapter struct {
+	bus *events.EventBus
+}
+
+func (a *EventBusAdapter) Emit(eventType string, data map[string]interface{}) error {
+	// Convert to the format expected by the real EventBus
+	return a.bus.Emit(events.EventType(eventType), "policy-agent", "policy.event", data)
 }
