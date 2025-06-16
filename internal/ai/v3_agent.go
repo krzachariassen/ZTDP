@@ -15,7 +15,7 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/logging"
 )
 
-// V3Agent - PURE AI-NATIVE ORCHESTRATOR
+// V3Agent - PURE AI-NATIVE ORCHESTRATOR with Agent Interface
 // Philosophy: AI drives everything naturally, zero hardcoded domain logic
 // This agent is completely domain-agnostic and routes by intent only
 type V3Agent struct {
@@ -26,6 +26,10 @@ type V3Agent struct {
 	// Event-Driven Communication - ONLY dependencies for pure orchestration
 	eventBus      *events.EventBus
 	agentRegistry agents.AgentRegistry
+
+	// Agent Interface Properties
+	agentID   string
+	startTime time.Time
 }
 
 // NewV3Agent creates the pure orchestrator agent with event-driven communication only
@@ -124,14 +128,20 @@ User: "Create an API service" -> RESOURCE_CREATION`
 		// Convert result to conversational response
 		var responseMessage string
 		if result != nil {
-			// Check if this is a timeout result
+			// Check if this is an error result
 			if resultMap, ok := result.(map[string]interface{}); ok {
-				if status, exists := resultMap["status"].(string); exists && status == "timeout" {
+				if status, exists := resultMap["status"].(string); exists && status == "error" {
+					if responseContent, ok := resultMap["response_content"].(string); ok {
+						responseMessage = responseContent
+					} else {
+						responseMessage = fmt.Sprintf("❌ %s request failed", intent)
+					}
+				} else if status, exists := resultMap["status"].(string); exists && status == "timeout" {
 					intent := resultMap["intent"].(string)
 					agentID := resultMap["selected_agent"].(string)
 					responseMessage = fmt.Sprintf("I tried to %s but didn't get a response from the %s. This might be because the operation is taking longer than expected or the agent is busy. Please try again in a moment.", intent, agentID)
 				} else if responseContent, ok := resultMap["response_content"].(string); ok {
-					responseMessage = fmt.Sprintf("✅ %s\n\n%s", intent, responseContent)
+					responseMessage = responseContent
 				} else {
 					responseMessage = fmt.Sprintf("✅ Successfully handled %s request", intent)
 				}
@@ -141,7 +151,7 @@ User: "Create an API service" -> RESOURCE_CREATION`
 		} else {
 			responseMessage = fmt.Sprintf("✅ Successfully handled %s request", intent)
 		}
-		
+
 		return &ConversationalResponse{
 			Message: responseMessage,
 			Answer:  responseMessage,
@@ -236,20 +246,39 @@ func (agent *V3Agent) handleResponse(ctx context.Context, aiResponse string, use
 				agent.logger.Info("🔍 Extracted JSON: %q", cleanJSON)
 
 				// Try to execute the contract with user context
-				if result, err := agent.executeContract(ctx, cleanJSON, userMessage); err == nil {
-					// Remove the FINAL_CONTRACT part from the message
-					cleanMessage := strings.TrimSpace(aiResponse[:contractStart])
-					return &ConversationalResponse{
-						Message: cleanMessage + "\n\n✅ Resource created successfully!",
-						Actions: []Action{{Type: "resource_created", Result: result}},
-					}, nil
-				} else {
+				result, err := agent.executeContract(ctx, cleanJSON, userMessage)
+				if err != nil {
 					agent.logger.Error("❌ Contract execution failed: %v", err)
 					return &ConversationalResponse{
-						Message: fmt.Sprintf("I created the contract but couldn't execute it: %v", err),
+						Message: fmt.Sprintf("❌ %v", err),
 						Actions: []Action{{Type: "error", Result: err.Error()}},
 					}, nil
 				}
+
+				// Check if the result indicates an error from the underlying agent
+				if resultMap, ok := result.(map[string]interface{}); ok {
+					if status, ok := resultMap["status"].(string); ok && status == "error" {
+						// Agent returned an error - use the error message directly
+						if responseContent, ok := resultMap["response_content"].(string); ok {
+							return &ConversationalResponse{
+								Message: responseContent,
+								Actions: []Action{{Type: "error", Result: resultMap}},
+							}, nil
+						}
+						// Fallback error message
+						return &ConversationalResponse{
+							Message: "❌ The operation failed. Please check the application exists and try again.",
+							Actions: []Action{{Type: "error", Result: resultMap}},
+						}, nil
+					}
+				}
+
+				// Success case - remove the FINAL_CONTRACT part from the message
+				cleanMessage := strings.TrimSpace(aiResponse[:contractStart])
+				return &ConversationalResponse{
+					Message: cleanMessage + "\n\n✅ Resource created successfully!",
+					Actions: []Action{{Type: "resource_created", Result: result}},
+				}, nil
 			}
 		}
 
@@ -480,22 +509,22 @@ func (agent *V3Agent) orchestrateViaIntentBasedAgents(ctx context.Context, inten
 
 	// STEP 2: Route to the best agent and get routing key
 	selectedAgent := availableAgents[0] // Simple: use first available agent
-	
+
 	// STEP 2.5: Discover the appropriate routing key for this intent
 	routingKey, err := agent.discoverRoutingKeyForIntent(ctx, intent, selectedAgent.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover routing key for intent '%s' and agent '%s': %w", intent, selectedAgent.ID, err)
 	}
-	
+
 	agent.logger.Info("🔑 Using routing key '%s' for agent: %s", routingKey, selectedAgent.ID)
 
 	// STEP 3: Create request-response correlation
 	correlationID := fmt.Sprintf("orchestration-%d", time.Now().UnixNano())
 	requestID := fmt.Sprintf("req-%d", time.Now().UnixNano())
-	
+
 	// Create a channel to receive the response
 	responseChan := make(chan *events.Event, 1)
-	
+
 	// Subscribe to response events for this correlation ID
 	agent.eventBus.Subscribe(events.EventTypeResponse, func(event events.Event) error {
 		// Check if this response is for our request
@@ -533,10 +562,20 @@ func (agent *V3Agent) orchestrateViaIntentBasedAgents(ctx context.Context, inten
 	select {
 	case response := <-responseChan:
 		agent.logger.Info("✅ Received response from agent for intent: %s", intent)
-		
-		// Extract meaningful content from the agent response
+
+		// Extract meaningful content from the agent response and check for errors
 		var responseContent string
-		if decision, ok := response.Payload["decision"].(string); ok {
+		var responseStatus string = "completed"
+
+		// First, check if this is an error response
+		if status, ok := response.Payload["status"].(string); ok && status == "error" {
+			responseStatus = "error"
+			if errorMsg, ok := response.Payload["error"].(string); ok {
+				responseContent = fmt.Sprintf("❌ %s", errorMsg)
+			} else {
+				responseContent = fmt.Sprintf("❌ Agent reported an error for %s request", intent)
+			}
+		} else if decision, ok := response.Payload["decision"].(string); ok {
 			if reasoning, ok := response.Payload["reasoning"].(string); ok {
 				responseContent = fmt.Sprintf("Decision: %s. Reasoning: %s", decision, reasoning)
 			} else {
@@ -545,17 +584,17 @@ func (agent *V3Agent) orchestrateViaIntentBasedAgents(ctx context.Context, inten
 		} else if message, ok := response.Payload["message"].(string); ok {
 			responseContent = message
 		} else {
-			responseContent = fmt.Sprintf("Agent completed the %s request successfully", intent)
+			responseContent = fmt.Sprintf("✅ Agent completed the %s request successfully", intent)
 		}
-		
+
 		return map[string]interface{}{
-			"status":           "completed",
+			"status":           responseStatus,
 			"intent":           intent,
 			"selected_agent":   response.Source,
 			"response_content": responseContent,
 			"agent_response":   response.Payload,
 		}, nil
-	case <-time.After(10 * time.Second): // 10 second timeout
+	case <-time.After(30 * time.Second): // 30 second timeout for AI operations
 		agent.logger.Warn("⏰ Timeout waiting for response from agent for intent: %s", intent)
 		return map[string]interface{}{
 			"status":         "timeout",
@@ -569,16 +608,17 @@ func (agent *V3Agent) orchestrateViaIntentBasedAgents(ctx context.Context, inten
 
 // discoverAgentsByIntent - Generic agent discovery by matching intent to capabilities
 func (agent *V3Agent) discoverAgentsByIntent(ctx context.Context, intent string) ([]agents.AgentStatus, error) {
-	// Get all available capabilities
+	var matchingAgents []agents.AgentStatus
+
+	// Get all available capabilities to find routing keys
 	capabilities, err := agent.agentRegistry.GetAvailableCapabilities(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get available capabilities: %w", err)
 	}
 
-	var matchingAgents []agents.AgentStatus
-
-	// Find agents whose capabilities match the intent
+	// Find capabilities that match the intent
 	for _, capability := range capabilities {
+		// Check if this capability matches the intent
 		for _, supportedIntent := range capability.Intents {
 			if agent.intentMatches(intent, supportedIntent) {
 				// Find agents with this capability
@@ -593,8 +633,9 @@ func (agent *V3Agent) discoverAgentsByIntent(ctx context.Context, intent string)
 		}
 	}
 
-	// Remove duplicates (an agent might match multiple intents)
-	return agent.deduplicate(matchingAgents), nil
+	// Remove duplicates and exclude self (V3Agent should not route to itself during orchestration)
+	deduplicated := agent.deduplicate(matchingAgents)
+	return agent.excludeSelf(deduplicated), nil
 }
 
 // intentMatches - Simple intent matching (can be enhanced with AI/NLP)
@@ -629,6 +670,19 @@ func (agent *V3Agent) deduplicate(agentsList []agents.AgentStatus) []agents.Agen
 	return result
 }
 
+// excludeSelf - Remove the V3Agent itself from agent selection during orchestration
+func (agent *V3Agent) excludeSelf(agentsList []agents.AgentStatus) []agents.AgentStatus {
+	var result []agents.AgentStatus
+
+	for _, a := range agentsList {
+		if a.ID != "v3-agent" { // V3Agent should not route to itself during orchestration
+			result = append(result, a)
+		}
+	}
+
+	return result
+}
+
 // discoverRoutingKeyForIntent finds the appropriate routing key for an intent and agent
 func (agent *V3Agent) discoverRoutingKeyForIntent(ctx context.Context, intent string, agentID string) (string, error) {
 	// Get all available capabilities to find routing keys
@@ -647,7 +701,7 @@ func (agent *V3Agent) discoverRoutingKeyForIntent(ctx context.Context, intent st
 				if err != nil {
 					continue
 				}
-				
+
 				for _, agentStatus := range agentsWithCapability {
 					if agentStatus.ID == agentID {
 						// Found the right capability for this agent and intent
@@ -667,7 +721,7 @@ func (agent *V3Agent) discoverRoutingKeyForIntent(ctx context.Context, intent st
 	} else if strings.Contains(strings.ToLower(intent), "deploy") {
 		return "deployment.request", nil
 	}
-	
+
 	// Ultimate fallback
 	return "agent.request", nil
 }
@@ -736,4 +790,239 @@ func (agent *V3Agent) detectDirectContract(ctx context.Context, userMessage stri
 		Message: fmt.Sprintf("✅ Contract executed successfully via intent-based orchestration: %v", result),
 		Actions: []Action{{Type: "contract_executed", Result: result}},
 	}
+}
+
+// ============================================================================
+// AgentInterface Implementation - Making V3Agent a first-class agent
+// ============================================================================
+
+// GetID returns the agent identifier
+func (agent *V3Agent) GetID() string {
+	if agent.agentID == "" {
+		agent.agentID = "v3-agent"
+	}
+	return agent.agentID
+}
+
+// GetStatus returns the current agent status
+func (agent *V3Agent) GetStatus() agents.AgentStatus {
+	return agents.AgentStatus{
+		ID:           agent.GetID(),
+		Type:         "orchestrator",
+		Status:       "running",
+		LastActivity: time.Now(),
+		LoadFactor:   0.5,
+		Version:      "3.0.0",
+		Metadata: map[string]interface{}{
+			"ai_provider":  "openai",
+			"role":         "orchestrator",
+			"capabilities": "intent-based routing, resource creation, operational coordination",
+		},
+	}
+}
+
+// GetCapabilities returns the agent's capabilities for discovery
+func (agent *V3Agent) GetCapabilities() []agents.AgentCapability {
+	return []agents.AgentCapability{
+		{
+			Name:        "chat_orchestration",
+			Description: "Natural language chat interface for orchestrating platform operations",
+			Intents: []string{
+				"chat", "conversation", "help", "ask question",
+				"orchestrate", "coordinate", "general query",
+			},
+			InputTypes:  []string{"natural_language", "user_message", "question"},
+			OutputTypes: []string{"conversational_response", "orchestration_result"},
+			RoutingKeys: []string{"v3.chat", "v3.orchestrate", "v3.general"},
+			Version:     "3.0.0",
+		},
+		{
+			Name:        "resource_creation",
+			Description: "AI-driven creation of platform resources via natural language",
+			Intents: []string{
+				"create resource", "build application", "setup environment",
+				"make service", "configure deployment", "resource creation",
+			},
+			InputTypes:  []string{"creation_request", "resource_specification", "natural_language"},
+			OutputTypes: []string{"resource_created", "creation_result", "resource_contract"},
+			RoutingKeys: []string{"v3.create", "v3.resource", "v3.build"},
+			Version:     "3.0.0",
+		},
+		{
+			Name:        "intent_routing",
+			Description: "Smart routing of operational intents to appropriate specialist agents",
+			Intents: []string{
+				"route intent", "find agent", "orchestrate operation",
+				"delegate task", "agent coordination",
+			},
+			InputTypes:  []string{"operational_intent", "routing_request", "delegation_request"},
+			OutputTypes: []string{"routing_result", "agent_response", "coordination_result"},
+			RoutingKeys: []string{"v3.route", "v3.delegate", "v3.coordinate"},
+			Version:     "3.0.0",
+		},
+	}
+}
+
+// Start initializes the V3Agent as a registered agent
+func (agent *V3Agent) Start(ctx context.Context) error {
+	agent.startTime = time.Now()
+	agent.agentID = "v3-agent"
+
+	// Auto-register with the agent registry
+	if agent.agentRegistry != nil {
+		if err := agent.agentRegistry.RegisterAgent(ctx, agent); err != nil {
+			agent.logger.Error("❌ Failed to auto-register V3Agent: %v", err)
+			return fmt.Errorf("failed to auto-register V3Agent: %w", err)
+		}
+		agent.logger.Info("✅ V3Agent auto-registered successfully")
+	}
+
+	// Subscribe to V3Agent routing keys
+	if agent.eventBus != nil {
+		agent.subscribeToOwnRoutingKeys()
+	}
+
+	agent.logger.Info("🚀 V3Agent started as first-class agent")
+	return nil
+}
+
+// Stop shuts down the V3Agent
+func (agent *V3Agent) Stop(ctx context.Context) error {
+	agent.logger.Info("🛑 V3Agent stopping")
+	return nil
+}
+
+// Health returns the health status of the agent
+func (agent *V3Agent) Health() agents.HealthStatus {
+	return agents.HealthStatus{
+		Healthy: true,
+		Status:  "healthy",
+		Message: "V3Agent operating normally",
+		Checks: map[string]interface{}{
+			"ai_provider_available": agent.provider != nil,
+			"event_bus_connected":   agent.eventBus != nil,
+			"registry_connected":    agent.agentRegistry != nil,
+		},
+		CheckedAt: time.Now(),
+	}
+}
+
+// ProcessEvent handles events sent directly to V3Agent
+func (agent *V3Agent) ProcessEvent(ctx context.Context, event *events.Event) (*events.Event, error) {
+	agent.logger.Info("📨 V3Agent received event: %s from %s", event.Subject, event.Source)
+
+	// Extract user message from the event payload
+	userMessage := ""
+
+	// Try to get user_message from different places in the payload
+	if msg, ok := event.Payload["user_message"].(string); ok {
+		userMessage = msg
+	} else if context, ok := event.Payload["context"].(map[string]interface{}); ok {
+		if msg, ok := context["user_message"].(string); ok {
+			userMessage = msg
+		}
+	} else if msg, ok := event.Payload["message"].(string); ok {
+		userMessage = msg
+	}
+
+	if userMessage == "" {
+		return agent.createErrorResponse(event, "user_message required for V3Agent processing"), nil
+	}
+
+	// Process the message using the Chat method
+	response, err := agent.Chat(ctx, userMessage)
+	if err != nil {
+		return agent.createErrorResponse(event, fmt.Sprintf("V3Agent processing failed: %v", err)), nil
+	}
+
+	// Create success response
+	return agent.createSuccessResponse(event, response), nil
+}
+
+// subscribeToOwnRoutingKeys sets up event subscriptions for V3Agent's routing keys
+func (agent *V3Agent) subscribeToOwnRoutingKeys() {
+	routingKeys := []string{"v3.chat", "v3.orchestrate", "v3.general", "v3.create", "v3.resource", "v3.build", "v3.route", "v3.delegate", "v3.coordinate"}
+
+	for _, routingKey := range routingKeys {
+		agent.eventBus.SubscribeToRoutingKey(routingKey, func(event events.Event) error {
+			agent.logger.Info("📨 V3Agent received event via routing key %s: %s", routingKey, event.Subject)
+
+			// Process the event
+			ctx := context.Background()
+			response, err := agent.ProcessEvent(ctx, &event)
+			if err != nil {
+				agent.logger.Error("❌ Failed to process event: %v", err)
+				return err
+			}
+
+			// Send response back
+			if response != nil && agent.eventBus != nil {
+				agent.eventBus.EmitEvent(*response)
+			}
+
+			return nil
+		})
+	}
+
+	agent.logger.Info("✅ V3Agent subscribed to %d routing keys", len(routingKeys))
+}
+
+// createErrorResponse creates a standardized error response
+func (agent *V3Agent) createErrorResponse(originalEvent *events.Event, errorMessage string) *events.Event {
+	response := &events.Event{
+		Type:    events.EventTypeResponse,
+		Source:  agent.GetID(),
+		Subject: "V3Agent processing failed",
+		Payload: map[string]interface{}{
+			"status":  "error",
+			"error":   errorMessage,
+			"context": "v3-agent",
+		},
+		Timestamp: time.Now().Unix(),
+		ID:        fmt.Sprintf("v3-resp-%d", time.Now().UnixNano()),
+	}
+
+	// Copy correlation fields from original event
+	if originalEvent != nil && originalEvent.Payload != nil {
+		if correlationID, ok := originalEvent.Payload["correlation_id"]; ok {
+			response.Payload["correlation_id"] = correlationID
+		}
+		if requestID, ok := originalEvent.Payload["request_id"]; ok {
+			response.Payload["request_id"] = requestID
+		}
+	}
+
+	return response
+}
+
+// createSuccessResponse creates a standardized success response
+func (agent *V3Agent) createSuccessResponse(originalEvent *events.Event, chatResponse *ConversationalResponse) *events.Event {
+	response := &events.Event{
+		Type:    events.EventTypeResponse,
+		Source:  agent.GetID(),
+		Subject: "V3Agent processing completed",
+		Payload: map[string]interface{}{
+			"status":                  "success",
+			"message":                 chatResponse.Message,
+			"intent":                  chatResponse.Intent,
+			"actions":                 chatResponse.Actions,
+			"insights":                chatResponse.Insights,
+			"confidence":              chatResponse.Confidence,
+			"conversational_response": chatResponse,
+		},
+		Timestamp: time.Now().Unix(),
+		ID:        fmt.Sprintf("v3-resp-%d", time.Now().UnixNano()),
+	}
+
+	// Copy correlation fields from original event
+	if originalEvent != nil && originalEvent.Payload != nil {
+		if correlationID, ok := originalEvent.Payload["correlation_id"]; ok {
+			response.Payload["correlation_id"] = correlationID
+		}
+		if requestID, ok := originalEvent.Payload["request_id"]; ok {
+			response.Payload["request_id"] = requestID
+		}
+	}
+
+	return response
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/policies"
+	"github.com/krzachariassen/ZTDP/internal/release"
 )
 
 var (
@@ -54,7 +55,7 @@ func InitializeGlobalV3Agent() error {
 		log.Printf("⚠️ Failed to create and register PolicyAgent: %v", err)
 	} else {
 		log.Printf("✅ PolicyAgent auto-registered successfully")
-		
+
 		// Subscribe PolicyAgent to its specific routing keys
 		capabilities := policyAgent.GetCapabilities()
 		for _, capability := range capabilities {
@@ -82,6 +83,14 @@ func InitializeGlobalV3Agent() error {
 		log.Printf("✅ DeploymentAgent auto-registered successfully")
 	}
 
+	// 3. Register ReleaseAgent for release management
+	_, err = release.NewReleaseAgent(GlobalGraph, eventBus, agentRegistry)
+	if err != nil {
+		log.Printf("⚠️ Failed to create and register ReleaseAgent: %v", err)
+	} else {
+		log.Printf("✅ ReleaseAgent auto-registered successfully")
+	}
+
 	// Create the V3 Agent with pure orchestrator design (no domain service dependencies)
 	GlobalV3Agent = ai.NewV3Agent(
 		provider,
@@ -89,6 +98,15 @@ func InitializeGlobalV3Agent() error {
 		eventBus,
 		agentRegistry,
 	)
+
+	// Start and register V3Agent as a first-class agent
+	ctx := context.Background()
+	if err := GlobalV3Agent.Start(ctx); err != nil {
+		log.Printf("❌ Failed to start and register V3Agent: %v", err)
+		return fmt.Errorf("failed to start V3Agent: %w", err)
+	} else {
+		log.Printf("✅ V3Agent registered as first-class agent")
+	}
 
 	return nil
 }

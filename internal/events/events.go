@@ -71,7 +71,7 @@ func (b *EventBus) Subscribe(eventType EventType, handler EventHandler) {
 func (b *EventBus) SubscribeToRoutingKey(routingKey string, handler EventHandler) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	
+
 	// Create a wrapper handler that filters by routing key
 	routingHandler := func(event Event) error {
 		if event.Subject == routingKey {
@@ -79,7 +79,7 @@ func (b *EventBus) SubscribeToRoutingKey(routingKey string, handler EventHandler
 		}
 		return nil
 	}
-	
+
 	// Add directly to handlers without calling Subscribe (avoid deadlock)
 	b.handlers[EventTypeRequest] = append(b.handlers[EventTypeRequest], routingHandler)
 }
@@ -122,6 +122,38 @@ func (b *EventBus) Emit(eventType EventType, source, subject string, payload map
 	}
 
 	return b.processHandlers(event, handlers)
+}
+
+// EmitEvent publishes a complete event to the bus (preserves all event fields)
+func (b *EventBus) EmitEvent(event Event) error {
+	// Send to transport if available
+	if b.transport != nil {
+		data, err := json.Marshal(event)
+		if err != nil {
+			return fmt.Errorf("failed to marshal event: %w", err)
+		}
+
+		if err := b.transport.Publish(string(event.Type), data); err != nil {
+			return fmt.Errorf("failed to publish event: %w", err)
+		}
+	}
+
+	// Process local handlers
+	b.mu.RLock()
+	handlers, exists := b.handlers[event.Type]
+	b.mu.RUnlock()
+
+	if !exists {
+		return nil
+	}
+
+	if b.defaultAsync {
+		go b.processHandlers(event, handlers)
+	} else {
+		b.processHandlers(event, handlers)
+	}
+
+	return nil
 }
 
 // processHandlers runs all handlers for an event

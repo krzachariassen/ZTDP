@@ -30,6 +30,7 @@ const (
 	EdgeTypeAccesses   = "accesses"
 	EdgeTypeConnectsTo = "connects_to"
 	EdgeTypeDependsOn  = "depends_on"
+	EdgeTypeIncludes   = "includes"
 
 	// Policy types
 	PolicyTypeCheck    = common.PolicyTypeCheck
@@ -56,6 +57,7 @@ var AllowedEdgeTypes = map[string]struct{}{
 	EdgeTypeAccesses:   {},
 	EdgeTypeConnectsTo: {},
 	EdgeTypeDependsOn:  {},
+	EdgeTypeIncludes:   {},
 	"allowed_in":       {}, // Policy edge type for environment access
 	// Add more as needed
 }

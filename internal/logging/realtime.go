@@ -113,18 +113,23 @@ func (r *RealtimeLogSink) Write(entry LogEntry) error {
 	}
 
 	// Broadcast to all clients
-	r.mu.RLock()
+	r.mu.Lock() // Use write lock to prevent concurrent websocket writes
 	var failedClients []*websocket.Conn
 	for conn := range r.clients {
 		if err := conn.WriteJSON(frontendEntry); err != nil {
 			failedClients = append(failedClients, conn)
 		}
 	}
-	r.mu.RUnlock()
+	r.mu.Unlock()
 
-	// Remove failed clients
-	for _, conn := range failedClients {
-		r.UnregisterClient(conn)
+	// Remove failed clients (need to re-acquire lock)
+	if len(failedClients) > 0 {
+		r.mu.Lock()
+		for _, conn := range failedClients {
+			delete(r.clients, conn)
+			conn.Close()
+		}
+		r.mu.Unlock()
 	}
 
 	return nil
@@ -140,18 +145,23 @@ func (r *RealtimeLogSink) BroadcastEvent(event map[string]interface{}) error {
 	event["type"] = "event.structured"
 
 	// Broadcast to all clients
-	r.mu.RLock()
+	r.mu.Lock() // Use write lock to prevent concurrent websocket writes
 	var failedClients []*websocket.Conn
 	for conn := range r.clients {
 		if err := conn.WriteJSON(event); err != nil {
 			failedClients = append(failedClients, conn)
 		}
 	}
-	r.mu.RUnlock()
+	r.mu.Unlock()
 
-	// Remove failed clients
-	for _, conn := range failedClients {
-		r.UnregisterClient(conn)
+	// Remove failed clients (need to re-acquire lock)
+	if len(failedClients) > 0 {
+		r.mu.Lock()
+		for _, conn := range failedClients {
+			delete(r.clients, conn)
+			conn.Close()
+		}
+		r.mu.Unlock()
 	}
 
 	return nil
