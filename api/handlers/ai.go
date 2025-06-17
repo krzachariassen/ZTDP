@@ -32,7 +32,7 @@ type AIProviderInfo struct {
 // @Router       /v1/ai/provider/status [get]
 func AIProviderStatus(w http.ResponseWriter, r *http.Request) {
 	// Try to get global AI platform agent to check availability
-	agent := GetGlobalV3Agent()
+	agent := GetGlobalOrchestrator()
 
 	providerInfo := AIProviderInfo{
 		Available:    false,
@@ -157,7 +157,7 @@ func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use global AI platform agent with all domain services already injected
-	agent := GetGlobalV3Agent()
+	agent := GetGlobalOrchestrator()
 	if agent == nil {
 		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
 		return
@@ -205,10 +205,10 @@ func V3AIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use global V3 agent
-	v3Agent := GetGlobalV3Agent()
-	if v3Agent == nil {
-		WriteJSONError(w, "V3 Agent not available", http.StatusServiceUnavailable)
+	// Use global orchestrator
+	orchestrator := GetGlobalOrchestrator()
+	if orchestrator == nil {
+		WriteJSONError(w, "Orchestrator not available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -216,9 +216,9 @@ func V3AIChat(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Use the ultra simple Chat method!
-	response, err := v3Agent.Chat(ctx, req.Message)
+	response, err := orchestrator.Chat(ctx, req.Message)
 	if err != nil {
-		WriteJSONError(w, "V3 AI chat failed: "+err.Error(), http.StatusInternalServerError)
+		WriteJSONError(w, "Orchestrator chat failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

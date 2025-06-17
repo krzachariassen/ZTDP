@@ -29,15 +29,20 @@ func NewImpactPredictor(provider ai.AIProvider, graph *graph.GlobalGraph) *Impac
 
 // PredictImpact analyzes potential impact of deployment changes
 // This enables proactive risk assessment before deployment
-func (p *ImpactPredictor) PredictImpact(ctx context.Context, changes []ai.ProposedChange, environment string) (*ai.ImpactPrediction, error) {
+// TODO: Implement using orchestrator chat interface
+func (p *ImpactPredictor) PredictImpact(ctx context.Context, changes interface{}, environment string) (interface{}, error) {
 	if p.provider == nil {
 		return nil, fmt.Errorf("AI provider not available for impact prediction")
 	}
 
-	p.logger.Info("🔮 Predicting impact of %d changes in %s", len(changes), environment)
+	p.logger.Info("🔮 Predicting impact of changes in %s", environment)
 
-	// Extract environment context for impact analysis
-	envContext, err := p.extractEnvironmentContext(environment)
+	// TODO: Use orchestrator for impact prediction via chat interface
+	return map[string]interface{}{
+		"status": "not_implemented",
+		"message": "Impact prediction will be implemented via orchestrator chat interface",
+	}, nil
+}
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract environment context: %w", err)
 	}

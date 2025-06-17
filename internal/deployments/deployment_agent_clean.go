@@ -44,16 +44,11 @@ func NewDeploymentAgent(
 	}
 
 	// Build the agent using the framework
-	agent, err := agentFramework.NewAgent("deployment").
-		WithCapabilities([]agentRegistry.AgentCapability{
-			{
-				Name:        "deployment_orchestration",
-				Description: "Deploy applications and manage deployments",
-				Intents:     []string{"deploy application", "execute deployment", "start deployment", "run deployment"},
-			},
-		}).
-		WithEventHandler(wrapper.processEvent).
-		Build(deps)
+	agent, err := agentFramework.NewAgent(
+		"deployment",
+		wrapper.processEvent, // Only process deployment events
+		deps,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create deployment agent: %w", err)
 	}
@@ -67,9 +62,9 @@ func (a *FrameworkDeploymentAgent) processEvent(ctx context.Context, event *even
 	a.logger.Debug("🔄 Processing deployment event: %s", event.Type)
 
 	// Extract user message for intent detection
-	userMessage, ok := event.Payload["message"].(string)
+	userMessage, ok := event.Data["message"].(string)
 	if !ok {
-		return nil, fmt.Errorf("no message found in event payload")
+		return nil, fmt.Errorf("no message found in event data")
 	}
 
 	// Handle only deployment-specific intents
@@ -215,9 +210,9 @@ func (a *FrameworkDeploymentAgent) parseStatusRequest(message string) (string, s
 func (a *FrameworkDeploymentAgent) createSuccessResponse(originalEvent *events.Event, message string, data interface{}) (*events.Event, error) {
 	return &events.Event{
 		ID:     originalEvent.ID + "-response",
-		Type:   events.EventTypeResponse,
+		Type:   "deployment.response",
 		Source: "deployment-agent",
-		Payload: map[string]interface{}{
+		Data: map[string]interface{}{
 			"success": true,
 			"message": message,
 			"data":    data,
@@ -229,9 +224,9 @@ func (a *FrameworkDeploymentAgent) createSuccessResponse(originalEvent *events.E
 func (a *FrameworkDeploymentAgent) createErrorResponse(originalEvent *events.Event, message string) (*events.Event, error) {
 	return &events.Event{
 		ID:     originalEvent.ID + "-error",
-		Type:   events.EventTypeResponse,
+		Type:   "deployment.error",
 		Source: "deployment-agent",
-		Payload: map[string]interface{}{
+		Data: map[string]interface{}{
 			"success": false,
 			"error":   message,
 		},

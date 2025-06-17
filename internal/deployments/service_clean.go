@@ -100,16 +100,14 @@ func (s *Service) GetDeploymentStatus(appName, environment string) (map[string]i
 	}
 
 	// Check deployment status by looking for deploy edges to the environment
-	if edges, exists := currentGraph.Edges[appName]; exists {
-		for _, edge := range edges {
-			if edge.To == environment && edge.Type == "deploy" {
-				return map[string]interface{}{
-					"status":        "deployed",
-					"application":   appName,
-					"environment":   environment,
-					"deployment_id": edge.Metadata["deployment_id"],
-				}, nil
-			}
+	for _, edge := range currentGraph.Edges {
+		if edge.From == appName && edge.To == environment && edge.Type == "deploy" {
+			return map[string]interface{}{
+				"status":        "deployed",
+				"application":   appName,
+				"environment":   environment,
+				"deployment_id": edge.Metadata["deployment_id"],
+			}, nil
 		}
 	}
 

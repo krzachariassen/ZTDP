@@ -1,158 +1,32 @@
 package handlers
 
 import (
-	"context"
-	"fmt"
+	"log"
 	"os"
+	"sync"
 
-	"github.com/krzachariassen/ZTDP/internal/agents"
-	"github.com/krzachariassen/ZTDP/internal/ai"
-	"github.com/krzachariassen/ZTDP/internal/application"
-	"github.com/krzachariassen/ZTDP/internal/deployments"
-	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
-	"github.com/krzachariassen/ZTDP/internal/logging"
-	"github.com/krzachariassen/ZTDP/internal/policies"
-	"github.com/krzachariassen/ZTDP/internal/release"
 )
 
 var (
-	GlobalGraph   *graph.GlobalGraph
-	GlobalV3Agent *ai.V3Agent // Using V3 Agent - the ultra simple one!
+	GlobalGraph *graph.GlobalGraph
+	graphStore  *graph.GraphStore
+	initOnce    sync.Once
+	logger      *log.Logger
 )
 
-// InitializeGlobalV3Agent initializes the global V3 AI agent with pure orchestrator design
-// This should be called once during application startup in main.go
-func InitializeGlobalV3Agent() error {
-	logger := logging.GetLogger().ForComponent("agent-registry")
-
-	// Create AI provider the simple way!
-	config := ai.DefaultOpenAIConfig()
-	apiKey := os.Getenv("OPENAI_API_KEY")
-
-	provider, err := ai.NewOpenAIProvider(config, apiKey)
-	if err != nil {
-		return err
-	}
-
-	// Initialize event infrastructure for agent-to-agent communication
-	eventBus := events.NewEventBus(nil, false) // In-memory for now
-	agentRegistry := agents.NewInMemoryAgentRegistry()
-
-	// === AUTO-REGISTER DOMAIN AGENTS ===
-
-	// 1. Register PolicyAgent for policy evaluation
-	// Use the same backend as GlobalGraph to ensure data consistency
-	if GlobalGraph == nil {
-		return fmt.Errorf("GlobalGraph must be initialized before agents")
-	}
-
-	backend := GlobalGraph.Backend // Access the backend field directly
-	graphStore := graph.NewGraphStore(backend)
-
-	// Create EventBusAdapter for agent compatibility
-	eventBusAdapter := &EventBusAdapter{eventBus}
-
-	policyAgent, err := policies.NewPolicyAgent(graphStore, GlobalGraph, nil, "api", eventBusAdapter, agentRegistry)
-	if err != nil {
-		logger.Error("⚠️ Failed to create and register PolicyAgent: %v", err)
-	} else {
-		logger.Info("✅ PolicyAgent auto-registered successfully")
-
-		// Subscribe PolicyAgent to its specific routing keys
-		capabilities := policyAgent.GetCapabilities()
-		for _, capability := range capabilities {
-			for _, routingKey := range capability.RoutingKeys {
-				eventBus.SubscribeToRoutingKey(routingKey, func(event events.Event) error {
-					response, err := policyAgent.ProcessEvent(context.Background(), &event)
-					if err != nil {
-						logger.Error("⚠️ PolicyAgent failed to process event: %v", err)
-					} else if response != nil {
-						// Emit the response back to the event bus
-						eventBus.Emit(response.Type, response.Source, response.Subject, response.Payload)
-					}
-					return nil
-				})
-				logger.Info("✅ PolicyAgent subscribed to routing key: %s", routingKey)
-			}
-		}
-	}
-
-	// 2. Register ApplicationAgent for application lifecycle management
-	applicationAgent := application.NewApplicationAgent(GlobalGraph, "api", eventBusAdapter)
-	err = agentRegistry.RegisterAgent(context.Background(), applicationAgent)
-	if err != nil {
-		logger.Error("⚠️ Failed to register ApplicationAgent: %v", err)
-	} else {
-		logger.Info("✅ ApplicationAgent auto-registered successfully")
-
-		// Subscribe ApplicationAgent to its specific routing keys
-		capabilities := applicationAgent.GetCapabilities()
-		for _, capability := range capabilities {
-			for _, routingKey := range capability.RoutingKeys {
-				eventBus.SubscribeToRoutingKey(routingKey, func(event events.Event) error {
-					response, err := applicationAgent.ProcessEvent(context.Background(), &event)
-					if err != nil {
-						logger.Error("⚠️ ApplicationAgent failed to process event: %v", err)
-					} else if response != nil {
-						// Emit the response back to the event bus
-						eventBus.Emit(response.Type, response.Source, response.Subject, response.Payload)
-					}
-					return nil
-				})
-				logger.Info("✅ ApplicationAgent subscribed to routing key: %s", routingKey)
-			}
-		}
-	}
-
-	// 3. Register DeploymentAgent for deployment orchestration
-	_, err = deployments.NewDeploymentAgent(GlobalGraph, provider, "api", eventBus, agentRegistry)
-	if err != nil {
-		logger.Error("⚠️ Failed to create and register DeploymentAgent: %v", err)
-	} else {
-		logger.Info("✅ DeploymentAgent auto-registered successfully")
-	}
-
-	// 4. Register ReleaseAgent for release management
-	_, err = release.NewReleaseAgent(GlobalGraph, eventBus, agentRegistry)
-	if err != nil {
-		logger.Error("⚠️ Failed to create and register ReleaseAgent: %v", err)
-	} else {
-		logger.Info("✅ ReleaseAgent auto-registered successfully")
-	}
-
-	// Create the V3 Agent with pure orchestrator design (no domain service dependencies)
-	GlobalV3Agent = ai.NewV3Agent(
-		provider,
-		GlobalGraph,
-		eventBus,
-		agentRegistry,
-	)
-
-	// Start and register V3Agent as a first-class agent
-	ctx := context.Background()
-	if err := GlobalV3Agent.Start(ctx); err != nil {
-		logger.Error("❌ Failed to start and register V3Agent: %v", err)
-		return fmt.Errorf("failed to start V3Agent: %w", err)
-	} else {
-		logger.Info("✅ V3Agent registered as first-class agent")
-	}
-
-	return nil
+func init() {
+	// Initialize logger
+	logger = log.New(os.Stdout, "[ZTDP] ", log.LstdFlags)
 }
 
-// EventBusAdapter adapts events.EventBus to the agent EventBus interfaces
-type EventBusAdapter struct {
-	eventBus *events.EventBus
-}
-
-func (e *EventBusAdapter) Emit(eventType string, data map[string]interface{}) error {
-	// Convert to events.EventType and call the underlying event bus
-	return e.eventBus.Emit(events.EventTypeNotify, eventType, "api", data)
-}
-
-// GetGlobalV3Agent returns the initialized global V3 AI agent
-// Returns nil if the agent hasn't been initialized
-func GetGlobalV3Agent() *ai.V3Agent {
-	return GlobalV3Agent
+// getGraphStore returns the global graph store instance, initializing it if needed
+func getGraphStore() *graph.GraphStore {
+	initOnce.Do(func() {
+		// In a production environment, this would use a persistent backend
+		// like Redis or a database. For now, we use an in-memory backend.
+		backend := graph.NewMemoryGraph()
+		graphStore = graph.NewGraphStore(backend)
+	})
+	return graphStore
 }

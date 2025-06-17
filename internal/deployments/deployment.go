@@ -45,21 +45,20 @@ type Engine struct {
 	logger   *logging.Logger
 }
 
-// NewEngine creates a new event-driven deployment engine with a V3Agent (extracts AI provider)
-func NewEngine(g *graph.GlobalGraph, agent *ai.V3Agent) *Engine {
+// NewEngine creates a new event-driven deployment engine with an AI provider
+func NewEngine(g *graph.GlobalGraph, provider ai.AIProvider) *Engine {
 	logger := logging.GetLogger().ForComponent("deployment-engine")
 
-	// Extract AI provider from agent for clean architecture
-	if agent == nil {
-		logger.Error("❌ AI agent is required for deployment engine - this is an AI-native platform")
-		return nil
+	// AI provider is optional - deployment engine can work without AI
+	if provider == nil {
+		logger.Warn("⚠️ No AI provider available - using basic deployment planning")
 	}
 
-	planner := NewAIDeploymentPlanner(g, agent.Provider())
+	planner := NewAIDeploymentPlanner(g, provider)
 
 	return &Engine{
 		graph:    g,
-		provider: agent.Provider(),
+		provider: provider,
 		planner:  planner,
 		logger:   logger,
 	}

@@ -1,101 +1,30 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/krzachariassen/ZTDP/internal/policies"
 )
 
-// === AI-ENHANCED POLICY REQUEST TYPES ===
+// PolicyRequest represents a request to check or satisfy a policy
+type PolicyRequest struct {
+	Operation string `json:"operation"` // "check", "create_policy", "create_check", "update_check", "satisfy"
+	FromID    string `json:"from_id,omitempty"`
+	ToID      string `json:"to_id,omitempty"`
+	EdgeType  string `json:"edge_type,omitempty"`
+	PolicyID  string `json:"policy_id,omitempty"`
+	CheckID   string `json:"check_id,omitempty"`
 
-// AIEvaluatePolicyRequest represents the request for AI policy evaluation
-type AIEvaluatePolicyRequest struct {
-	ApplicationID string                 `json:"application_id"`
-	Environment   string                 `json:"environment"`
-	Action        string                 `json:"action"`
-	Context       map[string]interface{} `json:"context,omitempty"`
-	Timeout       int                    `json:"timeout,omitempty"`
-}
-
-// === AI-ENHANCED POLICY HANDLERS ===
-
-// AIEvaluatePolicy godoc
-// @Summary      Evaluate policies using AI
-// @Description  Evaluates policies for deployments using AI-enhanced analysis
-// @Tags         policies,ai
-// @Accept       json
-// @Produce      json
-// @Param        request  body  AIEvaluatePolicyRequest  true  "AI policy evaluation request"
-// @Success      200  {object}  ai.PolicyEvaluation
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /v1/ai/policies/evaluate [post]
-func AIEvaluatePolicy(w http.ResponseWriter, r *http.Request) {
-	var req AIEvaluatePolicyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if req.ApplicationID == "" {
-		WriteJSONError(w, "application_id is required", http.StatusBadRequest)
-		return
-	}
-
-	if req.Action == "" {
-		WriteJSONError(w, "action is required", http.StatusBadRequest)
-		return
-	}
-
-	// Default environment if not provided
-	if req.Environment == "" {
-		req.Environment = "default"
-	}
-
-	// Default timeout
-	timeout := 60 * time.Second
-	if req.Timeout > 0 {
-		timeout = time.Duration(req.Timeout) * time.Second
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	// Create AI platform agent for policy service (infrastructure layer)
-	agent := GetGlobalV3Agent()
-	if agent == nil {
-		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
-	// Use event-driven PolicyAgent for evaluation (NEW: agent-to-agent architecture)
-	response, err := agent.ChatWithPlatform(ctx,
-		fmt.Sprintf("Evaluate policy for application %s in environment %s for action %s",
-			req.ApplicationID, req.Environment, req.Action),
-		fmt.Sprintf("Context: %v", req.Context))
-
-	if err != nil {
-		WriteJSONError(w, "Policy evaluation failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Extract policy decision from agent response
-	evaluation := map[string]interface{}{
-		"application_id": req.ApplicationID,
-		"environment":    req.Environment,
-		"action":         req.Action,
-		"decision":       "allowed", // Default, will be enhanced by AI response parsing
-		"reasoning":      response.Message,
-		"confidence":     0.8,
-	}
-
-	// Return successful evaluation result
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(evaluation)
+	// For create operations
+	Name        string                 `json:"name,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	Type        string                 `json:"type,omitempty"`
+	Status      string                 `json:"status,omitempty"`
+	Parameters  map[string]interface{} `json:"parameters,omitempty"`
+	Results     map[string]interface{} `json:"results,omitempty"`
 }
 
 // PolicyHandler godoc
@@ -104,78 +33,137 @@ func AIEvaluatePolicy(w http.ResponseWriter, r *http.Request) {
 // @Tags         policies
 // @Accept       json
 // @Produce      json
-// @Param        body body policies.PolicyOperationRequest true "Policy request"
-// @Success      200  {object}  policies.PolicyOperationResponse
+// @Param        body body PolicyRequest true "Policy request"
+// @Success      200  {object}  map[string]interface{}
 // @Failure      400  {object}  map[string]string
 // @Router       /v1/policies [post]
 func PolicyHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	// Parse environment from query parameter or use default
 	env := r.URL.Query().Get("environment")
 	if env == "" {
 		env = "default"
 	}
 
-	// Parse and validate request body
-	var req map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid request format: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Get V3Agent for policy operations
-	agent := GetGlobalV3Agent()
-	if agent == nil {
-		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
-	// Execute policy operation through AI agent
-	query := fmt.Sprintf("Execute policy operation in environment %s: %v", env, req)
-	response, err := agent.ChatWithPlatform(ctx, query, "policy operation")
+	// Parse request body
+	var req PolicyRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		WriteJSONError(w, "Policy operation failed: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Invalid request format: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	// Return AI agent response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"environment": env,
-		"operation":   req,
-		"response":    response,
-		"timestamp":   time.Now(),
-	})
+	// Get the evaluator
+	evaluator := getPolicyEvaluator(env)
+
+	// Process based on operation
+	switch req.Operation {
+	case "check":
+		// Check if a transition is allowed
+		err = evaluator.ValidateTransition(req.FromID, req.ToID, req.EdgeType, getUserFromRequest(r))
+		if err != nil {
+			respondWithJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"allowed": false,
+				"error":   err.Error(),
+			})
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"allowed": true,
+		})
+
+	case "create_policy":
+		// Create a new policy node
+		policyNode, err := evaluator.CreatePolicyNode(
+			req.Name,
+			req.Description,
+			req.Type,
+			req.Parameters,
+		)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to create policy: %v", err), http.StatusInternalServerError)
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"policy_id": policyNode.ID,
+			"message":   "Policy created",
+		})
+
+	case "create_check":
+		// Create a check node
+		checkNode, err := evaluator.CreateCheckNode(
+			req.CheckID,
+			req.Name,
+			req.Type,
+			req.Parameters,
+		)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to create check: %v", err), http.StatusInternalServerError)
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"check_id": checkNode.ID,
+			"message":  "Check created",
+		})
+
+	case "update_check":
+		// Update check status
+		err = evaluator.UpdateCheckStatus(req.CheckID, req.Status, req.Results)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to update check: %v", err), http.StatusInternalServerError)
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"message": "Check updated",
+		})
+
+	case "satisfy":
+		// Mark a check as satisfying a policy
+		err = evaluator.SatisfyPolicy(req.CheckID, req.PolicyID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to satisfy policy: %v", err), http.StatusInternalServerError)
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"message": "Policy satisfied",
+		})
+
+	default:
+		http.Error(w, fmt.Sprintf("Unknown operation: %s", req.Operation), http.StatusBadRequest)
+	}
 }
 
-// ListPolicies returns all policies - simplified implementation using V3Agent
+// ListPolicies returns all policies
 func ListPolicies(w http.ResponseWriter, r *http.Request) {
-	// Since we're moving to event-driven architecture, use V3Agent for policy queries
-	agent := GetGlobalV3Agent()
-	if agent == nil {
-		WriteJSONError(w, "AI agent not initialized", http.StatusInternalServerError)
-		return
+	// Parse environment from query parameter or use default
+	env := r.URL.Query().Get("environment")
+	if env == "" {
+		env = "default"
 	}
 
-	// Use V3Agent to handle policy listing through chat interface
-	response, err := agent.Chat(r.Context(), "List all policies available in the system")
+	// Get the graph store that's used by policy creation
+	graphStore := getGraphStore()
+
+	// Get policies from the environment-specific graph
+	policies := []interface{}{}
+	graph, err := graphStore.GetGraph(env)
 	if err != nil {
-		WriteJSONError(w, "Failed to query policies: "+err.Error(), http.StatusInternalServerError)
+		// If environment graph doesn't exist, return empty array
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(policies)
 		return
 	}
 
-	// For now, return the AI response as a simple structure
-	result := map[string]interface{}{
-		"message": response.Message,
-		"note":    "Policy listing is now handled through the AI agent interface",
+	for _, node := range graph.Nodes {
+		if node.Kind == "policy" {
+			policies = append(policies, node)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(policies)
 }
 
-// GetPolicy returns a policy by ID - simplified implementation using V3Agent
+// GetPolicy returns a policy by ID
 func GetPolicy(w http.ResponseWriter, r *http.Request) {
 	policyID := r.URL.Query().Get("policy_id")
 	if policyID == "" {
@@ -183,34 +171,54 @@ func GetPolicy(w http.ResponseWriter, r *http.Request) {
 		policyID = chi.URLParam(r, "policy_id")
 	}
 	if policyID == "" {
-		WriteJSONError(w, "policy_id is required", http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "policy_id is required"})
 		return
 	}
 
-	// Since we're moving to event-driven architecture, use V3Agent for policy queries
-	agent := GetGlobalV3Agent()
-	if agent == nil {
-		WriteJSONError(w, "AI agent not initialized", http.StatusInternalServerError)
-		return
+	// Parse environment from query parameter or use default
+	env := r.URL.Query().Get("environment")
+	if env == "" {
+		env = "default"
 	}
 
-	// Use V3Agent to handle policy retrieval through chat interface
-	query := fmt.Sprintf("Get details for policy with ID: %s", policyID)
-	response, err := agent.Chat(r.Context(), query)
+	// Get the graph store that's used by policy creation
+	graphStore := getGraphStore()
+
+	// Get policy from the environment-specific graph
+	graph, err := graphStore.GetGraph(env)
 	if err != nil {
-		WriteJSONError(w, "Failed to query policy: "+err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "environment not found"})
 		return
 	}
 
-	// For now, return the AI response as a simple structure
-	result := map[string]interface{}{
-		"policy_id": policyID,
-		"message":   response.Message,
-		"note":      "Policy retrieval is now handled through the AI agent interface",
+	policy, ok := graph.Nodes[policyID]
+	if !ok || policy.Kind != "policy" {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "policy not found"})
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(policy)
+}
+
+// Helper function to get the evaluator for an environment
+func getPolicyEvaluator(env string) *policies.PolicyEvaluator {
+	// Get the graph store from the global registry
+	graphStore := getGraphStore()
+
+	// Create the evaluator with the simplified constructor (no policy registry)
+	evaluator := policies.NewPolicyEvaluator(graphStore, env)
+
+	// Set the event service if available
+	if PolicyEventService != nil {
+		evaluator.SetEventService(PolicyEventService)
+		logger.Printf("Using policy event service for environment %s", env)
+	}
+
+	return evaluator
 }
 
 // Helper function to get user from a request
@@ -221,4 +229,12 @@ func getUserFromRequest(r *http.Request) string {
 		return "system"
 	}
 	return user
+}
+
+// Helper function for JSON responses
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	response, _ := json.Marshal(payload)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(response)
 }

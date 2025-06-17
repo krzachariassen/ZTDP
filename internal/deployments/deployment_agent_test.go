@@ -2,387 +2,249 @@ package deployments
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"strings"
 	"testing"
 
+	"github.com/krzachariassen/ZTDP/internal/agentFramework"
+	"github.com/krzachariassen/ZTDP/internal/agentRegistry"
 	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 )
 
-// getOpenAIProvider creates a real OpenAI provider for testing
-func getOpenAIProvider(t *testing.T) ai.AIProvider {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		t.Skip("OPENAI_API_KEY not set - skipping real AI test. Set environment variable to test real AI integration.")
-	}
+// TestDeploymentAgentMigrationToFramework tests that the DeploymentAgent can be created using the new framework
+func TestDeploymentAgentMigrationToFramework(t *testing.T) {
+	// Arrange - Set up dependencies
+	registry := agentRegistry.NewInMemoryAgentRegistry()
+	eventBus := events.NewEventBus(nil, false)
+	mockGraph := graph.NewGlobalGraph(graph.NewMemoryGraph())
 
-	config := ai.DefaultOpenAIConfig()
-	provider, err := ai.NewOpenAIProvider(config, apiKey)
+	// Mock AI provider
+	mockAIProvider := &MockAIProvider{}
+
+	// Act - Create DeploymentAgent using framework
+	agent, err := NewDeploymentAgent(mockGraph, mockAIProvider, "test", eventBus, registry)
+
+	// Assert
 	if err != nil {
-		t.Fatalf("Failed to create OpenAI provider: %v", err)
+		t.Fatalf("Expected no error creating framework deployment agent, got: %v", err)
 	}
 
-	return provider
+	if agent.GetID() != "deployment" {
+		t.Errorf("Expected agent ID 'deployment', got: %s", agent.GetID())
+	}
+
+	// Verify auto-registration
+	registeredAgent, err := registry.FindAgentByID(context.Background(), "deployment")
+	if err != nil {
+		t.Errorf("Expected agent to be auto-registered, got error: %v", err)
+	}
+	if registeredAgent.GetID() != "deployment" {
+		t.Errorf("Expected registered agent ID 'deployment', got: %s", registeredAgent.GetID())
+	}
+
+	// Verify capabilities
+	capabilities := agent.GetCapabilities()
+	if len(capabilities) == 0 {
+		t.Error("Expected agent to have capabilities")
+	}
+
+	foundDeploymentCapability := false
+	for _, cap := range capabilities {
+		if cap.Name == "deployment_orchestration" {
+			foundDeploymentCapability = true
+			// Verify intents
+			expectedIntents := []string{"deploy application", "execute deployment", "start deployment", "run deployment"}
+			for _, expectedIntent := range expectedIntents {
+				found := false
+				for _, intent := range cap.Intents {
+					if intent == expectedIntent {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected capability to handle intent '%s'", expectedIntent)
+				}
+			}
+			break
+		}
+	}
+	if !foundDeploymentCapability {
+		t.Error("Expected agent to have deployment_orchestration capability")
+	}
 }
 
-// TestDeploymentAgent tests the basic functionality of the DeploymentAgent
-func TestDeploymentAgent(t *testing.T) {
-	t.Run("Agent implements AgentInterface correctly", func(t *testing.T) {
-		// Setup
-		backend := graph.NewMemoryGraph()
-		globalGraph := graph.NewGlobalGraph(backend)
-		eventBus := events.NewEventBus(nil, false) // Use real EventBus
+// TestFrameworkDeploymentAgentEventHandling tests that the framework agent can handle deployment events
+func TestFrameworkDeploymentAgentEventHandling(t *testing.T) {
+	// Arrange
+	registry := agentRegistry.NewInMemoryAgentRegistry()
+	eventBus := events.NewEventBus(nil, false)
+	mockGraph := graph.NewGlobalGraph(graph.NewMemoryGraph())
+	mockAIProvider := &MockAIProvider{}
 
-		// Create agent with real AI provider and no auto-registration for testing
-		aiProvider := getOpenAIProvider(t)
-		agentInterface, err := NewDeploymentAgent(globalGraph, aiProvider, "test", eventBus, nil)
-		if err != nil {
-			t.Fatalf("Failed to create deployment agent: %v", err)
-		}
+	// Create agent using framework
+	baseAgent, err := NewDeploymentAgent(mockGraph, mockAIProvider, "test", eventBus, registry)
+	if err != nil {
+		t.Fatalf("Failed to create agent: %v", err)
+	}
 
-		agent, ok := agentInterface.(*DeploymentAgent)
-		if !ok {
-			t.Fatalf("Expected DeploymentAgent type")
-		}
+	// Cast to framework agent to access ProcessEvent
+	agent, ok := baseAgent.(*agentFramework.BaseAgent)
+	if !ok {
+		t.Fatalf("Expected BaseAgent, got %T", baseAgent)
+	}
 
-		// Test basic interface methods
-		if agent.GetID() != "deployment-agent" {
-			t.Errorf("Expected agent ID 'deployment-agent', got %s", agent.GetID())
-		}
+	// Create test deployment event
+	deploymentEvent := &events.Event{
+		Type:    events.EventTypeRequest,
+		Source:  "test-source",
+		Subject: "deployment.request",
+		Payload: map[string]interface{}{
+			"intent":         "deploy application",
+			"user_message":   "Deploy test-app to production",
+			"correlation_id": "test-123",
+		},
+	}
 
-		status := agent.GetStatus()
-		if status.Type != "deployment" {
-			t.Errorf("Expected agent type 'deployment', got %s", status.Type)
-		}
+	// Act - Process the event
+	response, err := agent.ProcessEvent(context.Background(), deploymentEvent)
 
-		capabilities := agent.GetCapabilities()
-		if len(capabilities) == 0 {
-			t.Errorf("Expected agent to have capabilities")
-		}
+	// Assert
+	if err != nil {
+		t.Errorf("Expected no error processing deployment event, got: %v", err)
+	}
 
-		// Test capabilities include expected deployment operations
-		foundOrchestration := false
-		foundPlanning := false
-		for _, cap := range capabilities {
-			if cap.Name == "deployment_orchestration" {
-				foundOrchestration = true
-			}
-			if cap.Name == "deployment_planning" {
-				foundPlanning = true
-			}
-		}
+	if response == nil {
+		t.Fatal("Expected response, got nil")
+	}
 
-		if !foundOrchestration {
-			t.Errorf("Expected deployment_orchestration capability")
-		}
-		if !foundPlanning {
-			t.Errorf("Expected deployment_planning capability")
-		}
+	// Verify response structure
+	if response.Source != "deployment-agent" {
+		t.Errorf("Expected response source 'deployment-agent', got: %s", response.Source)
+	}
 
-		// Test lifecycle methods
-		err = agent.Start(context.Background())
-		if err != nil {
-			t.Errorf("Agent start failed: %v", err)
-		}
-
-		health := agent.Health()
-		if !health.Healthy {
-			t.Errorf("Expected agent to be healthy")
-		}
-
-		err = agent.Stop(context.Background())
-		if err != nil {
-			t.Errorf("Agent stop failed: %v", err)
-		}
-	})
-
-	t.Run("Agent processes deployment planning with REAL AI", func(t *testing.T) {
-		// Setup
-		backend := graph.NewMemoryGraph()
-		globalGraph := graph.NewGlobalGraph(backend)
-		eventBus := events.NewEventBus(nil, false) // Use real EventBus
-
-		// Add test application to graph
-		testApp := &graph.Node{
-			ID:   "test-app",
-			Kind: graph.KindApplication,
-			Metadata: map[string]interface{}{
-				"name":         "test-app",
-				"environment":  "staging",
-				"version":      "1.0.0",
-				"dependencies": []string{"redis", "postgres"},
-			},
-		}
-		globalGraph.AddNode(testApp)
-
-		// Create agent with REAL AI provider and no auto-registration for testing
-		aiProvider := getOpenAIProvider(t)
-		agentInterface, err := NewDeploymentAgent(globalGraph, aiProvider, "test", eventBus, nil)
-		if err != nil {
-			t.Fatalf("Failed to create deployment agent: %v", err)
-		}
-
-		agent := agentInterface.(*DeploymentAgent)
-
-		// Start the agent
-		err = agent.Start(context.Background())
-		if err != nil {
-			t.Fatalf("Failed to start agent: %v", err)
-		}
-		defer agent.Stop(context.Background())
-
-		// Create deployment planning event
-		event := &events.Event{
-			Type:    events.EventTypeRequest,
-			Source:  "test",
-			Subject: "plan deployment for test-app to staging environment",
-			Payload: map[string]interface{}{
-				"intent":             "deployment_planning",
-				"application_name":   "test-app",
-				"target_environment": "staging",
-				"requirements": []string{
-					"zero-downtime deployment",
-					"health checks required",
-					"rollback capability",
-				},
-			},
-		}
-
-		// Process event with real AI
-		response, err := agent.ProcessEvent(context.Background(), event)
-		if err != nil {
-			t.Fatalf("Event processing failed: %v", err)
-		}
-
-		// Validate response structure
-		if response == nil {
-			t.Fatalf("Expected response event")
-		}
-
-		if response.Type != events.EventTypeResponse {
-			t.Errorf("Expected response event type, got %s", response.Type)
-		}
-
-		if response.Source != "deployment-agent" {
-			t.Errorf("Expected response from deployment-agent, got %s", response.Source)
-		}
-
-		// Validate AI-generated content in response
-		status, ok := response.Payload["status"].(string)
-		if !ok {
-			t.Errorf("Expected status field in response")
-		}
-
-		operation, ok := response.Payload["operation"].(string)
-		if !ok {
-			t.Errorf("Expected operation field in response")
-		}
-
-		// Check that AI actually generated meaningful content
-		if aiResponse, exists := response.Payload["ai_response"]; exists {
-			aiResponseStr, ok := aiResponse.(string)
-			if ok && len(aiResponseStr) > 50 { // AI should provide substantial response
-				t.Logf("✅ AI generated substantial deployment plan: %d characters", len(aiResponseStr))
-			} else {
-				t.Errorf("AI response seems too short or empty: %v", aiResponse)
-			}
-		}
-
-		// Log response for manual inspection
-		t.Logf("🤖 Deployment Agent Response:")
-		t.Logf("   Status: %s", status)
-		t.Logf("   Operation: %s", operation)
-		if reasoning, exists := response.Payload["reasoning"]; exists {
-			t.Logf("   AI Reasoning: %v", reasoning)
-		}
-	})
-
-	t.Run("Agent handles invalid events gracefully", func(t *testing.T) {
-		// Setup
-		backend := graph.NewMemoryGraph()
-		globalGraph := graph.NewGlobalGraph(backend)
-		eventBus := events.NewEventBus(nil, false) // Use real EventBus
-
-		// Test without AI provider for invalid event handling
-		agentInterface, err := NewDeploymentAgent(globalGraph, nil, "test", eventBus, nil)
-		if err != nil {
-			t.Fatalf("Failed to create deployment agent: %v", err)
-		}
-
-		agent := agentInterface.(*DeploymentAgent)
-
-		// Create invalid event (missing intent)
-		event := &events.Event{
-			Type:    events.EventTypeRequest,
-			Source:  "test",
-			Subject: "invalid event",
-			Payload: map[string]interface{}{
-				"some_field": "some_value",
-			},
-		}
-
-		// Process event
-		_, err = agent.ProcessEvent(context.Background(), event)
-		if err == nil {
-			t.Fatalf("Expected error for invalid event")
-		}
-
-		if err.Error() != "deployment agent requires 'intent' field in payload" {
-			t.Errorf("Unexpected error message: %v", err)
-		}
-	})
+	// Verify correlation ID is preserved
+	if correlationID, ok := response.Payload["correlation_id"]; !ok || correlationID != "test-123" {
+		t.Errorf("Expected correlation_id 'test-123', got: %v", correlationID)
+	}
 }
 
-// TestDeploymentAgentEventHandling tests that the agent properly subscribes to and handles events
-func TestDeploymentAgentEventHandling(t *testing.T) {
-	t.Run("Agent subscribes to events and processes deployment requests", func(t *testing.T) {
-		// Setup real event infrastructure
-		backend := graph.NewMemoryGraph()
-		globalGraph := graph.NewGlobalGraph(backend)
-		eventBus := events.NewEventBus(nil, false) // Real EventBus for testing
+// TestDeploymentAgentBusinessLogicIntegration tests that business logic is preserved after migration
+func TestDeploymentAgentBusinessLogicIntegration(t *testing.T) {
+	// Arrange
+	registry := agentRegistry.NewInMemoryAgentRegistry()
+	eventBus := events.NewEventBus(nil, false)
 
-		// Create agent with real AI provider
-		aiProvider := getOpenAIProvider(t)
-		agentInterface, err := NewDeploymentAgent(globalGraph, aiProvider, "test", eventBus, nil)
-		if err != nil {
-			t.Fatalf("Failed to create deployment agent: %v", err)
+	// Initialize global event bus for the engine
+	events.InitializeEventBus(nil)
+
+	mockGraph := graph.NewGlobalGraph(graph.NewMemoryGraph())
+
+	// Add test application to graph
+	testApp := &graph.Node{
+		ID:   "test-app", // ID should match the application name
+		Kind: "application",
+		Metadata: map[string]interface{}{
+			"name": "test-app",
+		},
+	}
+	mockGraph.AddNode(testApp)
+
+	// Add test environment to graph
+	testEnv := &graph.Node{
+		ID:   "production", // ID should match the environment name
+		Kind: "environment",
+		Metadata: map[string]interface{}{
+			"name": "production",
+		},
+	}
+	mockGraph.AddNode(testEnv)
+
+	// Add allowed_in edge from application to environment
+	err := mockGraph.AddEdge("test-app", "production", "allowed_in")
+	if err != nil {
+		t.Fatalf("Failed to add edge: %v", err)
+	}
+
+	mockAIProvider := &MockAIProvider{
+		responses: map[string]string{
+			"parse_deployment": `{"application": "test-app", "environment": "production"}`,
+		},
+	}
+
+	// Create agent using framework
+	baseAgent, err := NewDeploymentAgent(mockGraph, mockAIProvider, "test", eventBus, registry)
+	if err != nil {
+		t.Fatalf("Failed to create agent: %v", err)
+	}
+
+	agent, ok := baseAgent.(*agentFramework.BaseAgent)
+	if !ok {
+		t.Fatalf("Expected BaseAgent, got %T", baseAgent)
+	}
+
+	// Create deployment event with valid application
+	deploymentEvent := &events.Event{
+		Type:    events.EventTypeRequest,
+		Source:  "test-source",
+		Subject: "deployment.request",
+		Payload: map[string]interface{}{
+			"intent":       "deploy application",
+			"user_message": "Deploy test-app to production",
+		},
+	}
+
+	// Act - Process the event
+	response, err := agent.ProcessEvent(context.Background(), deploymentEvent)
+
+	// Assert
+	if err != nil {
+		t.Errorf("Expected no error processing deployment event, got: %v", err)
+	}
+
+	if response == nil {
+		t.Fatal("Expected response, got nil")
+	}
+
+	// Should process the event without panic/errors (deployment failure is expected due to no services)
+	if status, ok := response.Payload["status"].(string); !ok || status != "error" {
+		t.Errorf("Expected error status due to no services configured, got status: %v, payload: %v", status, response.Payload)
+	}
+
+	// Verify the error message indicates the expected business logic was executed
+	if errorMsg, ok := response.Payload["error"].(string); ok {
+		if !strings.Contains(errorMsg, "deployment failed") {
+			t.Errorf("Expected deployment failure error message, got: %s", errorMsg)
 		}
+	} else {
+		t.Error("Expected error message in response payload")
+	}
+}
 
-		agent, ok := agentInterface.(*DeploymentAgent)
-		if !ok {
-			t.Fatalf("Expected DeploymentAgent type")
+// MockAIProvider for testing
+type MockAIProvider struct {
+	responses map[string]string
+}
+
+func (m *MockAIProvider) CallAI(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	// Return different responses based on prompt content
+	if strings.Contains(systemPrompt, "deployment request") || strings.Contains(userPrompt, "Deploy") {
+		if response, ok := m.responses["parse_deployment"]; ok {
+			return response, nil
 		}
+		return `{"application": "test-app", "environment": "production"}`, nil
+	}
+	return "Mock AI response", nil
+}
 
-		// Verify agent is created and subscribed
-		t.Logf("✅ DeploymentAgent created and subscribed to events")
+func (m *MockAIProvider) GetProviderInfo() *ai.ProviderInfo {
+	return &ai.ProviderInfo{
+		Name:    "mock",
+		Version: "1.0.0",
+	}
+}
 
-		// Create a deployment request event (similar to what V3Agent would send)
-		deploymentEvent := events.Event{
-			Type:    events.EventTypeRequest,
-			Source:  "v3-agent",
-			Subject: "agent.intent.requested",
-			Payload: map[string]interface{}{
-				"correlation_id": "test-correlation-123",
-				"intent":         "deploy application", // Intent as extracted by V3Agent
-				"application":    "test-app",
-				"environment":    "staging",
-				"strategy":       "rolling",
-				"request_id":     "test-request-123",
-				"source_agent":   "v3-agent",
-			},
-		}
-
-		// Track response events
-		responseReceived := false
-		responseEvent := events.Event{}
-
-		// Subscribe to response events to verify the agent responds
-		eventBus.Subscribe(events.EventTypeResponse, func(event events.Event) error {
-			if event.Source == "deployment-agent" {
-				responseReceived = true
-				responseEvent = event
-				t.Logf("📨 Received response from DeploymentAgent: %s", event.Subject)
-			}
-			return nil
-		})
-
-		// Send the event to trigger agent processing
-		t.Logf("📤 Sending deployment event to agent...")
-		err = agent.handleIncomingEvent(deploymentEvent)
-		if err != nil {
-			t.Fatalf("Agent failed to handle event: %v", err)
-		}
-
-		// Verify the agent processed the event
-		// Note: Since we don't have actual request-response correlation yet,
-		// we test that the agent can process the event without errors
-		t.Logf("✅ Agent successfully processed the event")
-
-		// Test direct ProcessEvent method with proper payload structure
-		processEvent := events.Event{
-			Type:    events.EventTypeRequest,
-			Source:  "v3-agent",
-			Subject: "deployment.request",
-			Payload: map[string]interface{}{
-				"intent":           "deploy application",
-				"application_name": "test-app",
-				"environment":      "staging",
-				"correlation_id":   "test-direct-123",
-			},
-		}
-
-		ctx := context.Background()
-		response, err := agent.ProcessEvent(ctx, &processEvent)
-
-		// The agent should handle the event, even if deployment fails due to missing app
-		if err != nil {
-			t.Logf("⚠️ ProcessEvent returned error (expected for non-existent app): %v", err)
-		}
-
-		if response != nil {
-			t.Logf("✅ Agent generated response event: %s", response.Subject)
-		}
-
-		// Verify the response tracking worked (for future async improvements)
-		_ = responseReceived // Will be used when async response handling is implemented
-		_ = responseEvent    // Will be used when async response handling is implemented
-
-		t.Logf("✅ Event subscription and handling test completed successfully")
-	})
-
-	t.Run("Agent handles intent matching correctly", func(t *testing.T) {
-		// Test that the agent can handle different intent formats
-		backend := graph.NewMemoryGraph()
-		globalGraph := graph.NewGlobalGraph(backend)
-		eventBus := events.NewEventBus(nil, false)
-
-		agentInterface, err := NewDeploymentAgent(globalGraph, nil, "test", eventBus, nil) // No AI for this test
-		if err != nil {
-			t.Fatalf("Failed to create deployment agent: %v", err)
-		}
-
-		agent, ok := agentInterface.(*DeploymentAgent)
-		if !ok {
-			t.Fatalf("Expected DeploymentAgent type")
-		}
-
-		// Test various intent formats that should all map to deployment
-		testIntents := []string{
-			"deploy application",
-			"deployment_orchestration",
-			"deploy_application",
-			"execute deployment",
-			"orchestrate deployment",
-		}
-
-		ctx := context.Background()
-		for _, intent := range testIntents {
-			t.Run(fmt.Sprintf("Intent: %s", intent), func(t *testing.T) {
-				event := events.Event{
-					Type:    events.EventTypeRequest,
-					Source:  "test",
-					Subject: "test.intent",
-					Payload: map[string]interface{}{
-						"intent":           intent,
-						"application_name": "test-app",
-						"environment":      "test",
-					},
-				}
-
-				response, err := agent.ProcessEvent(ctx, &event)
-
-				// Should not fail due to intent recognition (may fail for other reasons)
-				if err != nil && strings.Contains(err.Error(), "requires 'intent' field") {
-					t.Errorf("Agent failed to recognize intent '%s': %v", intent, err)
-				}
-
-				if response != nil {
-					t.Logf("✅ Intent '%s' processed successfully", intent)
-				}
-			})
-		}
-	})
+func (m *MockAIProvider) Close() error {
+	return nil
 }

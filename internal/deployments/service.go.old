@@ -1,0 +1,244 @@
+package deployments
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/krzachariassen/ZTDP/internal/ai"
+	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/logging"
+)
+
+// Service provides ALL deployment domain logic (Clean Architecture - business logic only here)
+type Service struct {
+	globalGraph *graph.GlobalGraph
+	aiProvider  ai.AIProvider
+	logger      *logging.Logger
+}
+
+// NewDeploymentService creates a new deployment service with AI capabilities
+func NewDeploymentService(globalGraph *graph.GlobalGraph, aiProvider ai.AIProvider) *Service {
+	return &Service{
+		globalGraph: globalGraph,
+		aiProvider:  aiProvider,
+		logger:      logging.GetLogger().ForComponent("deployment-service"),
+	}
+}
+
+// DeployApplication deploys an application to an environment (Core Business Logic)
+func (s *Service) DeployApplication(ctx context.Context, appName, environment string) (*DeploymentResult, error) {
+	s.logger.Info("🚀 Deploying application %s to %s", appName, environment)
+
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider required - this is an AI-native platform")
+	}
+
+	// 1. Validate application exists
+	if err := s.ValidateNodeExists("application", appName); err != nil {
+		return nil, fmt.Errorf("application validation failed: %w", err)
+	}
+
+	// 2. Generate deployment plan using AI
+	plan, err := s.generateDeploymentPlan(ctx, appName, environment)
+	if err != nil {
+		return nil, fmt.Errorf("deployment planning failed: %w", err)
+	}
+
+	// 3. Execute deployment plan
+	result, err := s.executeDeploymentPlan(ctx, appName, environment, plan)
+	if err != nil {
+		return nil, fmt.Errorf("deployment execution failed: %w", err)
+	}
+
+	s.logger.Info("✅ Deployment completed: %s", result.Status)
+	return result, nil
+}
+
+// GenerateDeploymentPlan creates a deployment plan for an application (Core Business Logic)
+func (s *Service) GenerateDeploymentPlan(ctx context.Context, appName string) ([]string, error) {
+	s.logger.Info("📋 Generating deployment plan for %s", appName)
+
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider required - this is an AI-native platform")
+	}
+
+	// Validate application exists
+	if err := s.ValidateNodeExists("application", appName); err != nil {
+		return nil, fmt.Errorf("application validation failed: %w", err)
+	}
+
+	// Generate plan using AI
+	plan, err := s.generateDeploymentPlan(ctx, appName, "")
+	if err != nil {
+		return nil, fmt.Errorf("plan generation failed: %w", err)
+	}
+
+	s.logger.Info("✅ Plan generated with %d steps", len(plan))
+	return plan, nil
+}
+
+// GetDeploymentStatus returns the deployment status for an application (Core Business Logic)
+func (s *Service) GetDeploymentStatus(appName, environment string) (map[string]interface{}, error) {
+	s.logger.Info("📊 Getting deployment status for %s in %s", appName, environment)
+
+	// Get current graph state
+	currentGraph, err := s.globalGraph.Graph()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get graph: %w", err)
+	}
+
+	// Check if application exists
+	if _, ok := currentGraph.Nodes[appName]; !ok {
+		return map[string]interface{}{
+			"status":      "not_found",
+			"application": appName,
+			"environment": environment,
+			"message":     "Application not found",
+		}, nil
+	}
+
+	// Check deployment status by looking for deploy edges to the environment
+	for _, edge := range currentGraph.Edges {
+		if edge.From == appName && edge.To == environment && edge.Type == "deploy" {
+			return map[string]interface{}{
+				"status":      "deployed",
+				"application": appName,
+				"environment": environment,
+				"deployment_id": edge.Metadata["deployment_id"],
+			}, nil
+		}
+	}
+
+	return map[string]interface{}{
+		"status":      "not_deployed",
+		"application": appName,
+		"environment": environment,
+		"message":     "Application not deployed to environment",
+	}, nil
+}
+	deployed := false
+	if edges, ok := currentGraph.Edges[appName]; ok {
+		for _, edge := range edges {
+			if edge.Type == "deploy" && edge.To == environment {
+				deployed = true
+				break
+			}
+		}
+	}
+
+	status := "not_deployed"
+	if deployed {
+		status = "deployed"
+	}
+
+	return map[string]interface{}{
+		"status":      status,
+		"application": appName,
+		"environment": environment,
+		"deployed":    deployed,
+	}, nil
+}
+
+// OptimizeDeploymentPlan uses AI to optimize deployment plans
+// TODO: Implement using orchestrator chat interface
+func (s *Service) OptimizeDeploymentPlan(ctx context.Context, applicationID string, currentPlan interface{}) (interface{}, error) {
+	s.logger.Info("🔧 Optimizing deployment plan for %s", applicationID)
+
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider not available for plan optimization")
+	}
+
+	// TODO: Use orchestrator for plan optimization via chat interface
+	return map[string]interface{}{
+		"status":      "not_implemented",
+		"message":     "Plan optimization will be implemented via orchestrator chat interface",
+		"application": applicationID,
+	}, nil
+}
+
+// PredictDeploymentImpact predicts the impact of deployment changes
+// TODO: Implement using orchestrator chat interface
+func (s *Service) PredictDeploymentImpact(ctx context.Context, changes interface{}, environment string) (interface{}, error) {
+	s.logger.Info("🔮 Predicting deployment impact in %s", environment)
+
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider not available for impact prediction")
+	}
+
+	// TODO: Use orchestrator for impact prediction via chat interface
+	return map[string]interface{}{
+		"status":      "not_implemented",
+		"message":     "Impact prediction will be implemented via orchestrator chat interface",
+		"environment": environment,
+	}, nil
+}
+
+// AnalyzeDeploymentPlan analyzes deployment plans for issues
+// TODO: Implement using orchestrator chat interface
+func (s *Service) AnalyzeDeploymentPlan(ctx context.Context, applicationID string, planData interface{}) (interface{}, error) {
+	s.logger.Info("📊 Analyzing deployment plan for %s", applicationID)
+
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider not available for plan analysis")
+	}
+
+	// TODO: Use orchestrator for plan analysis via chat interface
+	return map[string]interface{}{
+		"status":      "not_implemented",
+		"message":     "Plan analysis will be implemented via orchestrator chat interface",
+		"application": applicationID,
+	}, nil
+}
+
+// Helper methods for parsing and formatting (stubs for now)
+func (s *Service) parseOptimizationResponse(response string) (interface{}, error) {
+	return map[string]interface{}{"parsed": true}, nil
+}
+
+func (s *Service) parseAnalysisResponse(response string) (interface{}, error) {
+	return map[string]interface{}{"analyzed": true}, nil
+}
+
+func (s *Service) formatDeploymentPlan(plan interface{}) string {
+	return "Formatted plan" // TODO: Implement
+}
+
+func (s *Service) buildPlanningContext(applicationID string) (interface{}, error) {
+	return map[string]interface{}{
+		"application": applicationID,
+		"context":     "built",
+	}, nil
+}
+
+// Graph returns the global graph for direct access (needed by deployment agent)
+func (s *Service) Graph() *graph.GlobalGraph {
+	return s.globalGraph
+}
+
+// ValidateNodeExists checks if a node of a specific kind exists in the graph
+func (s *Service) ValidateNodeExists(kind, name string) error {
+	if name == "" {
+		return fmt.Errorf("%s name cannot be empty", kind)
+	}
+
+	nodes, err := s.globalGraph.Nodes()
+	if err != nil {
+		s.logger.Error("❌ Failed to query nodes from graph: %v", err)
+		return fmt.Errorf("failed to validate %s existence: %w", kind, err)
+	}
+
+	// Look for the node by name and optionally check kind
+	for nodeID, node := range nodes {
+		if nodeID == name {
+			// If kind is specified, verify it matches
+			if kind != "" && node.Kind != kind {
+				return fmt.Errorf("%s '%s' exists but is of kind '%s', expected '%s'", kind, name, node.Kind, kind)
+			}
+			return nil // Node found and valid
+		}
+	}
+
+	return fmt.Errorf("%s '%s' not found", kind, name)
+}

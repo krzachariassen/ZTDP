@@ -1,0 +1,209 @@
+package ai
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/krzachariassen/ZTDP/internal/agentFramework"
+	"github.com/krzachariassen/ZTDP/internal/agentRegistry"
+	"github.com/krzachariassen/ZTDP/internal/events"
+	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/logging"
+)
+
+// FrameworkV3Agent wraps the V3Agent business logic in the new agent framework
+type FrameworkV3Agent struct {
+	v3Agent      *V3Agent // Embed the existing V3Agent for business logic
+	logger       *logging.Logger
+	currentEvent *events.Event // Store current event context for correlation
+}
+
+// NewFrameworkV3Agent creates a V3Agent using the agent framework
+func NewFrameworkV3Agent(
+	provider AIProvider,
+	globalGraph *graph.GlobalGraph,
+	eventBus *events.EventBus,
+	registry agentRegistry.AgentRegistry,
+) (agentRegistry.AgentInterface, error) {
+	// Create the existing V3Agent for business logic
+	// Note: We need to pass the old agentRegistry interface for now
+	// TODO: Update V3Agent to not depend on old agent registry
+	v3Agent := &V3Agent{
+		provider:      provider,
+		logger:        logging.GetLogger().ForComponent("v3-agent-core"),
+		graph:         globalGraph,
+		eventBus:      eventBus,
+		agentRegistry: nil, // We'll handle routing through the framework instead
+		agentID:       "v3-agent",
+		startTime:     time.Now(),
+	}
+
+	// Create the wrapper that contains the business logic
+	wrapper := &FrameworkV3Agent{
+		v3Agent: v3Agent,
+		logger:  logging.GetLogger().ForComponent("v3-agent"),
+	}
+
+	// Create dependencies for the framework
+	deps := agentFramework.AgentDependencies{
+		Registry: registry,
+		EventBus: eventBus,
+	}
+
+	// Build the agent using the framework
+	agent, err := agentFramework.NewAgent("v3-agent").
+		WithType("orchestrator").
+		WithCapabilities(getV3Capabilities()).
+		WithEventHandler(wrapper.handleEvent).
+		Build(deps)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build framework v3 agent: %w", err)
+	}
+
+	wrapper.logger.Info("✅ FrameworkV3Agent created successfully")
+	return agent, nil
+}
+
+// getV3Capabilities returns the capabilities for the V3 agent using new types
+func getV3Capabilities() []agentRegistry.AgentCapability {
+	return []agentRegistry.AgentCapability{
+		{
+			Name:        "chat_orchestration",
+			Description: "Natural language chat interface for orchestrating platform operations",
+			Intents: []string{
+				"chat", "conversation", "help", "ask question",
+				"orchestrate", "coordinate", "general query",
+			},
+			InputTypes:  []string{"natural_language", "user_message", "question"},
+			OutputTypes: []string{"conversational_response", "orchestration_result"},
+			RoutingKeys: []string{"v3.chat", "v3.orchestrate", "v3.general"},
+			Version:     "3.0.0",
+		},
+		{
+			Name:        "resource_creation",
+			Description: "AI-driven creation of platform resources via natural language",
+			Intents: []string{
+				"create resource", "build application", "setup environment",
+				"make service", "configure deployment", "resource creation",
+			},
+			InputTypes:  []string{"creation_request", "resource_specification", "natural_language"},
+			OutputTypes: []string{"resource_created", "creation_result", "resource_contract"},
+			RoutingKeys: []string{"v3.create", "v3.resource", "v3.build"},
+			Version:     "3.0.0",
+		},
+		{
+			Name:        "intent_routing",
+			Description: "Smart routing of operational intents to appropriate specialist agents",
+			Intents: []string{
+				"route intent", "find agent", "orchestrate operation",
+				"delegate task", "agent coordination",
+			},
+			InputTypes:  []string{"user_intent", "operation_request", "task_specification"},
+			OutputTypes: []string{"routing_result", "agent_response", "coordination_outcome"},
+			RoutingKeys: []string{"v3.route", "v3.coordinate", "v3.orchestrate"},
+			Version:     "3.0.0",
+		},
+	}
+}
+
+// handleEvent is the main event handler that preserves the existing V3Agent logic
+func (a *FrameworkV3Agent) handleEvent(ctx context.Context, event *events.Event) (*events.Event, error) {
+	// Store current event for correlation context
+	a.currentEvent = event
+
+	a.logger.Info("🎯 Processing V3 event: %s", event.Subject)
+
+	// Extract intent or user message from event payload
+	var userMessage string
+	var found bool
+
+	// Try multiple ways to extract the user message
+	if msg, ok := event.Payload["user_message"].(string); ok && msg != "" {
+		userMessage = msg
+		found = true
+	} else if msg, ok := event.Payload["message"].(string); ok && msg != "" {
+		userMessage = msg
+		found = true
+	} else if query, ok := event.Payload["query"].(string); ok && query != "" {
+		userMessage = query
+		found = true
+	} else if intent, ok := event.Payload["intent"].(string); ok && intent != "" {
+		userMessage = intent
+		found = true
+	}
+
+	if !found {
+		return a.createErrorResponse(event, "user_message, message, query, or intent field required"), nil
+	}
+
+	a.logger.Info("🤖 V3Agent processing: %s", userMessage)
+
+	// Use the existing V3Agent Chat method for business logic
+	response, err := a.v3Agent.Chat(ctx, userMessage)
+	if err != nil {
+		return a.createErrorResponse(event, fmt.Sprintf("V3Agent chat failed: %v", err)), nil
+	}
+
+	// Convert the conversational response to an event response
+	return a.createSuccessResponse(event, map[string]interface{}{
+		"status":     "success",
+		"message":    response.Message,
+		"response":   response,
+		"agent_type": "orchestrator",
+		"timestamp":  time.Now(),
+	}), nil
+}
+
+// createErrorResponse creates a standardized error response
+func (a *FrameworkV3Agent) createErrorResponse(originalEvent *events.Event, errorMsg string) *events.Event {
+	payload := map[string]interface{}{
+		"status":      "error",
+		"error":       errorMsg,
+		"original_id": originalEvent.ID,
+		"timestamp":   time.Now().Unix(),
+		"agent_id":    "v3-agent",
+	}
+
+	// Preserve correlation_id if it exists
+	if correlationID, ok := originalEvent.Payload["correlation_id"]; ok {
+		payload["correlation_id"] = correlationID
+	}
+
+	return &events.Event{
+		ID:        fmt.Sprintf("response-%s", originalEvent.ID),
+		Type:      events.EventTypeResponse,
+		Subject:   "v3.response.error",
+		Source:    "v3-agent",
+		Timestamp: time.Now().Unix(),
+		Payload:   payload,
+	}
+}
+
+// createSuccessResponse creates a standardized success response
+func (a *FrameworkV3Agent) createSuccessResponse(originalEvent *events.Event, payload map[string]interface{}) *events.Event {
+	// Ensure required fields
+	payload["original_id"] = originalEvent.ID
+	payload["agent_id"] = "v3-agent"
+
+	// Preserve correlation_id if it exists
+	if correlationID, ok := originalEvent.Payload["correlation_id"]; ok {
+		payload["correlation_id"] = correlationID
+	}
+
+	return &events.Event{
+		ID:        fmt.Sprintf("response-%s", originalEvent.ID),
+		Type:      events.EventTypeResponse,
+		Subject:   "v3.response.success",
+		Source:    "v3-agent",
+		Timestamp: time.Now().Unix(),
+		Payload:   payload,
+	}
+}
+
+// GetV3Agent returns the underlying V3Agent for direct access if needed
+// This is a temporary method to maintain compatibility during migration
+func (a *FrameworkV3Agent) GetV3Agent() *V3Agent {
+	return a.v3Agent
+}

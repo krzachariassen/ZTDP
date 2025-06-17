@@ -3,8 +3,6 @@ package deployments
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/krzachariassen/ZTDP/internal/ai"
 )
 
 // buildPlanningSystemPrompt creates the system prompt for deployment planning
@@ -18,159 +16,102 @@ CONTEXT:
 
 CAPABILITIES:
 - Analyze complex deployment scenarios with deep reasoning
-- Generate ordered deployment steps that respect dependencies
-- Consider policy constraints and governance requirements
-- Provide clear reasoning for each decision
-- Suggest rollback strategies and validation steps
+- Generate ordered step-by-step deployment plans
+- Consider rollback strategies and failure scenarios
+- Optimize for safety, performance, and reliability
 
-RESPONSE FORMAT:
-You must respond with valid JSON only, following this exact structure:
+OUTPUT FORMAT:
+Your response must be valid JSON with this structure:
 {
-  "plan": {
-    "steps": [
-      {
-        "id": "step-1",
-        "action": "deploy|create|configure|validate",
-        "target": "node-id",
-        "dependencies": ["step-ids"],
-        "metadata": {},
-        "reasoning": "why this step is needed"
-      }
-    ],
-    "strategy": "rolling|blue-green|canary|all-at-once",
-    "validation": ["validation steps"],
-    "rollback": {
-      "steps": [],
-      "triggers": ["failure conditions"],
-      "metadata": {}
-    },
-    "metadata": {}
-  },
-  "reasoning": "overall reasoning for the plan",
-  "confidence": 0.95,
-  "metadata": {}
+  "steps": [
+    {
+      "action": "create|deploy|update|verify|rollback",
+      "resource": "resource_name",
+      "environment": "target_environment",
+      "description": "human readable description",
+      "dependencies": ["step1", "step2"],
+      "rollback_plan": "rollback instructions",
+      "verification": "how to verify success"
+    }
+  ],
+  "estimated_duration": "15m",
+  "risk_level": "low|medium|high",
+  "rollback_strategy": "detailed rollback approach"
+}`
 }
 
-PRINCIPLES:
-1. Always ensure dependencies are deployed first
-2. Consider rollback strategies for each step
-3. Include validation checkpoints
-4. Optimize for safety over speed
-5. Explain your reasoning clearly
-6. Handle edge cases gracefully`
-}
+// buildPlanningUserPrompt creates the user prompt for deployment planning
+func buildPlanningUserPrompt(context interface{}) string {
+	return fmt.Sprintf(`Please analyze this deployment request and generate an intelligent deployment plan:
 
-// buildPlanningUserPrompt creates the user prompt with deployment context
-func buildPlanningUserPrompt(context *ai.PlanningContext) (string, error) {
-	contextJSON, err := json.MarshalIndent(context, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to serialize planning context: %w", err)
-	}
-
-	prompt := fmt.Sprintf(`Please create a deployment plan for this context:
-
-DEPLOYMENT CONTEXT:
+REQUEST CONTEXT:
 %s
 
-PLANNING REQUIREMENTS:
-1. Analyze the deployment requirements and dependencies
-2. Generate an ordered sequence of deployment steps
-3. Consider policy constraints and governance requirements
-4. Include validation and rollback strategies
-5. Optimize for safety and reliability
-6. Provide clear reasoning for the plan structure
+Please provide a step-by-step deployment plan that:
+1. Respects all dependencies and ordering requirements
+2. Includes verification steps for each stage
+3. Provides clear rollback instructions
+4. Estimates timing and risk levels
+5. Follows ZTDP best practices
 
-Focus on creating a robust, executable deployment plan that minimizes risk while ensuring all dependencies are properly handled.`,
-		string(contextJSON))
-
-	return prompt, nil
+Return your response as valid JSON only.`, formatContext(context))
 }
 
-// buildOptimizationPrompt creates the prompt for plan optimization
-func buildOptimizationPrompt(plan interface{}, context *ai.PlanningContext) (string, error) {
-	planJSON, err := json.MarshalIndent(plan, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to serialize plan: %w", err)
-	}
-
-	contextJSON, err := json.MarshalIndent(context, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to serialize context: %w", err)
-	}
-
-	prompt := fmt.Sprintf(`Please optimize this deployment plan:
+// buildOptimizationPrompt creates prompts for plan optimization
+func buildOptimizationPrompt(response interface{}) string {
+	return fmt.Sprintf(`Analyze this deployment plan and suggest optimizations:
 
 CURRENT PLAN:
 %s
 
+Please suggest improvements for:
+1. Execution time reduction
+2. Risk mitigation
+3. Resource efficiency
+4. Parallel execution opportunities
+5. Better failure recovery
+
+Provide specific, actionable recommendations.`, formatPlanningResponse(response))
+}
+
+// buildAnalysisPrompt creates prompts for deployment analysis
+func buildAnalysisPrompt(context interface{}) string {
+	return fmt.Sprintf(`Analyze this deployment scenario for potential issues:
+
 DEPLOYMENT CONTEXT:
 %s
 
-OPTIMIZATION REQUIREMENTS:
-1. Analyze the current plan for inefficiencies
-2. Identify opportunities for parallelization
-3. Improve rollback and validation strategies
-4. Enhance safety and risk management
-5. Optimize for performance and reliability
-6. Maintain dependency relationships and constraints
+Please identify:
+1. Potential risks and failure points
+2. Missing dependencies or prerequisites
+3. Resource conflicts or constraints
+4. Best practice violations
+5. Optimization opportunities
 
-Focus on practical improvements that reduce deployment time and risk while maintaining safety and compliance.`,
-		string(planJSON),
-		string(contextJSON))
-
-	return prompt, nil
+Provide detailed analysis with recommendations.`, formatContext(context))
 }
 
-// parsePlanningResponse parses AI response into PlanningResponse
-func parsePlanningResponse(response string) (*ai.PlanningResponse, error) {
-	var planResponse ai.PlanningResponse
-
-	if err := json.Unmarshal([]byte(response), &planResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse planning response: %w", err)
-	}
-
-	// Validate the response structure
-	if planResponse.Plan == nil {
-		return nil, fmt.Errorf("response missing deployment plan")
-	}
-
-	if len(planResponse.Plan.Steps) == 0 {
-		return nil, fmt.Errorf("deployment plan has no steps")
-	}
-
-	// Set default confidence if not provided
-	if planResponse.Confidence == 0 {
-		planResponse.Confidence = 0.8
-	}
-
-	return &planResponse, nil
-}
-
-// Helper functions for safe data extraction
-func safeGetString(context *ai.PlanningContext, field string) string {
+// Helper functions for formatting
+func formatContext(context interface{}) string {
 	if context == nil {
-		return "unknown"
+		return "No context provided"
 	}
-
-	switch field {
-	case "environment_id":
-		return context.EnvironmentID
-	default:
-		return "unknown"
+	
+	data, err := json.MarshalIndent(context, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("Context: %+v", context)
 	}
+	return string(data)
 }
 
-func safeGetCount(context *ai.PlanningContext, field string) int {
-	if context == nil {
-		return 0
+func formatPlanningResponse(response interface{}) string {
+	if response == nil {
+		return "No response provided"
 	}
-
-	switch field {
-	case "target_nodes":
-		return len(context.TargetNodes)
-	case "edges":
-		return len(context.Edges)
-	default:
-		return 0
+	
+	data, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("Response: %+v", response)
 	}
+	return string(data)
 }
