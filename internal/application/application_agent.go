@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/agents"
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/logging"
 )
 
 // ApplicationAgent implements AgentInterface for application lifecycle management
@@ -19,6 +21,7 @@ type ApplicationAgent struct {
 	env       string
 	eventBus  EventBus
 	startTime time.Time
+	logger    *logging.Logger
 }
 
 // EventBus interface for the application agent
@@ -35,6 +38,7 @@ func NewApplicationAgent(graph *graph.GlobalGraph, env string, eventBus EventBus
 		env:       env,
 		eventBus:  eventBus,
 		startTime: time.Now(),
+		logger:    logging.GetLogger().ForComponent("application-agent"),
 	}
 }
 
@@ -69,6 +73,7 @@ func (a *ApplicationAgent) GetCapabilities() []agents.AgentCapability {
 			Intents:     []string{"create application", "update application", "delete application", "list applications"},
 			InputTypes:  []string{"ApplicationContract", "application_name"},
 			OutputTypes: []string{"application_status", "application_list", "application_details"},
+			RoutingKeys: []string{"application.create", "application.update", "application.delete", "application.list"},
 			Version:     "1.0.0",
 		},
 		{
@@ -77,6 +82,7 @@ func (a *ApplicationAgent) GetCapabilities() []agents.AgentCapability {
 			Intents:     []string{"validate application", "check application", "verify application"},
 			InputTypes:  []string{"ApplicationContract"},
 			OutputTypes: []string{"validation_result", "error_list"},
+			RoutingKeys: []string{"application.validate", "application.check", "application.verify"},
 			Version:     "1.0.0",
 		},
 		{
@@ -85,6 +91,7 @@ func (a *ApplicationAgent) GetCapabilities() []agents.AgentCapability {
 			Intents:     []string{"get application", "find application", "search applications"},
 			InputTypes:  []string{"application_name", "query_criteria"},
 			OutputTypes: []string{"application_details", "application_list"},
+			RoutingKeys: []string{"application.query", "application.find", "application.search"},
 			Version:     "1.0.0",
 		},
 	}
@@ -95,18 +102,21 @@ func (a *ApplicationAgent) ProcessEvent(ctx context.Context, event *events.Event
 	// Validate event has required intent field
 	intent, ok := event.Payload["intent"].(string)
 	if !ok {
+		a.logger.Error("❌ Application agent requires 'intent' field in payload")
 		return nil, fmt.Errorf("application agent requires 'intent' field in payload")
 	}
 
+	a.logger.Info("🎯 Processing event with intent: %s", intent)
+
 	// Route based on intent
 	switch intent {
-	case "application_create":
+	case "create application", "application_create":
 		return a.handleCreateApplication(ctx, event)
-	case "application_read":
+	case "get application", "read application", "application_read":
 		return a.handleReadApplication(ctx, event)
-	case "application_list":
+	case "list applications", "application_list":
 		return a.handleListApplications(ctx, event)
-	case "application_update":
+	case "update application", "application_update":
 		return a.handleUpdateApplication(ctx, event)
 	default:
 		return a.handleGenericQuestion(ctx, event, intent)
@@ -115,23 +125,43 @@ func (a *ApplicationAgent) ProcessEvent(ctx context.Context, event *events.Event
 
 // handleCreateApplication processes application creation requests
 func (a *ApplicationAgent) handleCreateApplication(ctx context.Context, event *events.Event) (*events.Event, error) {
-	// Extract application contract from payload
-	appData, ok := event.Payload["application"]
-	if !ok {
-		return a.createErrorResponse(event, "application data required for creation")
+	a.logger.Info("📝 Creating application from event")
+
+	// Check if we have application contract data or need to parse from user message
+	appData, hasAppData := event.Payload["application"]
+	userMessage, hasUserMessage := event.Payload["user_message"].(string)
+
+	var appContract contracts.ApplicationContract
+	var err error
+
+	if hasAppData {
+		// Direct contract provided
+		if err := a.convertToApplicationContract(appData, &appContract); err != nil {
+			a.logger.Error("❌ Invalid application contract: %v", err)
+			return a.createErrorResponse(event, fmt.Sprintf("invalid application contract: %v", err))
+		}
+	} else if hasUserMessage {
+		// Parse application details from user message (domain expert parsing)
+		appContract, err = a.parseApplicationFromUserMessage(ctx, userMessage)
+		if err != nil {
+			a.logger.Error("❌ Failed to parse application from user message: %v", err)
+			return a.createErrorResponse(event, fmt.Sprintf("failed to parse application details: %v", err))
+		}
+	} else {
+		a.logger.Error("❌ Either application data or user_message required for creation")
+		return a.createErrorResponse(event, "either application data or user_message required for creation")
 	}
 
-	// Convert to ApplicationContract
-	var appContract contracts.ApplicationContract
-	if err := a.convertToApplicationContract(appData, &appContract); err != nil {
-		return a.createErrorResponse(event, fmt.Sprintf("invalid application contract: %v", err))
-	}
+	a.logger.Info("🚀 Creating application: %s", appContract.Metadata.Name)
 
 	// Create application using service
-	err := a.service.CreateApplication(appContract)
+	err = a.service.CreateApplication(appContract)
 	if err != nil {
+		a.logger.Error("❌ Failed to create application '%s': %v", appContract.Metadata.Name, err)
 		return a.createErrorResponse(event, fmt.Sprintf("failed to create application: %v", err))
 	}
+
+	a.logger.Info("✅ Application '%s' created successfully", appContract.Metadata.Name)
 
 	// Emit success event
 	if a.eventBus != nil {
@@ -304,4 +334,51 @@ func (a *ApplicationAgent) convertToApplicationContract(data interface{}, contra
 	}
 
 	return nil
+}
+
+// parseApplicationFromUserMessage extracts application details from natural language
+// This implements domain-specific parsing in the ApplicationAgent (clean architecture)
+func (a *ApplicationAgent) parseApplicationFromUserMessage(ctx context.Context, userMessage string) (contracts.ApplicationContract, error) {
+	a.logger.Info("🔍 Parsing application details from user message: %s", userMessage)
+
+	// Use simple pattern matching for common cases first
+	// Pattern: "Create an application called X" or "Make application X"
+	name := ""
+
+	// Simple regex patterns for extracting application name
+	patterns := []string{
+		`(?i)create.*application.*called\s+([a-zA-Z0-9\-_]+)`,
+		`(?i)create.*application\s+([a-zA-Z0-9\-_]+)`,
+		`(?i)make.*application.*called\s+([a-zA-Z0-9\-_]+)`,
+		`(?i)make.*application\s+([a-zA-Z0-9\-_]+)`,
+		`(?i)build.*application.*called\s+([a-zA-Z0-9\-_]+)`,
+		`(?i)build.*application\s+([a-zA-Z0-9\-_]+)`,
+	}
+
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindStringSubmatch(userMessage)
+		if len(matches) > 1 {
+			name = matches[1]
+			break
+		}
+	}
+
+	if name == "" {
+		return contracts.ApplicationContract{}, fmt.Errorf("could not extract application name from message: %s", userMessage)
+	}
+
+	a.logger.Info("✅ Extracted application name: %s", name)
+
+	// Create basic application contract with extracted name
+	return contracts.ApplicationContract{
+		Metadata: contracts.Metadata{
+			Name: name,
+		},
+		Spec: contracts.ApplicationSpec{
+			Description: fmt.Sprintf("Application %s created via AI chat", name),
+			Tags:        []string{},
+			Lifecycle:   map[string]contracts.LifecycleDefinition{},
+		},
+	}, nil
 }

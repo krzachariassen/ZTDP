@@ -79,13 +79,14 @@ func (agent *V3Agent) checkForOperationalIntent(ctx context.Context, userMessage
 Analyze the user message and determine if it's an OPERATIONAL INTENT or RESOURCE CREATION.
 
 OPERATIONAL INTENTS (route to specialist agents):
+- Application management: respond with "create application", "update application", or "list applications"
 - Policy checking/evaluation: respond with "policy check" 
 - Deployment operations: respond with "deploy application"
 - Status monitoring: respond with "check status"
 
-RESOURCE CREATION (handle directly):
-- Creating applications, services, resources, environments
-- "create", "make", "build", "setup", "configure"
+RESOURCE_CREATION (handle directly - only for complex multi-resource scenarios):
+- Creating complex systems with multiple linked resources
+- Multi-step resource setup requiring coordination
 
 If OPERATIONAL INTENT detected, respond with:
 INTENT: [exact intent from list above]
@@ -94,11 +95,14 @@ If RESOURCE CREATION, respond with:
 RESOURCE_CREATION
 
 Examples:
+User: "Create an application called test-app" -> INTENT: create application
+User: "Make a new application for my project" -> INTENT: create application
+User: "List all applications" -> INTENT: list applications
 User: "Do a policy check for checkout" -> INTENT: policy check
 User: "Check compliance for my app" -> INTENT: policy check  
 User: "Evaluate policies for my deployment" -> INTENT: policy check
 User: "Deploy test-app to production" -> INTENT: deploy application
-User: "Create an API service" -> RESOURCE_CREATION`
+User: "Create a microservices architecture with API, database, and cache" -> RESOURCE_CREATION`
 
 	response, err := agent.provider.CallAI(ctx, intentDetectionPrompt, userMessage)
 	if err != nil {

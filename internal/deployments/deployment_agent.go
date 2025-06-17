@@ -837,11 +837,11 @@ func parseJSONResponse(response string, target interface{}) error {
 }
 
 // validateApplicationExists checks if an application exists in the graph
-// This is deployment domain business logic - the DeploymentAgent is responsible 
+// This is deployment domain business logic - the DeploymentAgent is responsible
 // for validating that applications exist before attempting deployment operations
 func (a *DeploymentAgent) validateApplicationExists(ctx context.Context, appName string) error {
 	if appName == "" {
-		return fmt.Errorf("application name cannot be empty")
+		return fmt.Errorf("applicationparseJSONResponse name cannot be empty")
 	}
 
 	// Get all nodes from the graph
