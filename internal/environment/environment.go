@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/krzachariassen/ZTDP/internal/contracts"
 	"github.com/krzachariassen/ZTDP/internal/graph"
@@ -31,6 +32,10 @@ func (s *Service) CreateEnvironment(env contracts.EnvironmentContract) error {
 // CreateEnvironmentFromContract creates environment from contract with context support
 // This method supports contract-driven AI operations while maintaining business logic
 func (s *Service) CreateEnvironmentFromContract(ctx context.Context, env *contracts.EnvironmentContract) (interface{}, error) {
+	if env == nil {
+		return nil, fmt.Errorf("environment contract cannot be nil")
+	}
+
 	node, err := graph.ResolveContract(*env)
 	if err != nil {
 		return nil, err

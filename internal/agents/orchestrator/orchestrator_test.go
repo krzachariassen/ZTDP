@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -211,7 +212,14 @@ func createTestOrchestrator(t *testing.T) *Orchestrator {
 }
 
 func createRealAIProvider() ai.AIProvider {
-	provider, err := ai.NewOpenAIProvider(ai.DefaultOpenAIConfig(), "")
+	// Get API key from environment, same as main.go does
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		// Return nil if no API key is available - test should handle this gracefully
+		return nil
+	}
+
+	provider, err := ai.NewOpenAIProvider(ai.DefaultOpenAIConfig(), apiKey)
 	if err != nil || provider == nil {
 		return nil
 	}

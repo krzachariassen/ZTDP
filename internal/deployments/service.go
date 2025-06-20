@@ -40,13 +40,18 @@ func (s *Service) DeployApplication(ctx context.Context, appName, environment st
 		return nil, fmt.Errorf("application validation failed: %w", err)
 	}
 
-	// 2. Generate deployment plan using AI
+	// 2. Validate environment exists
+	if err := s.ValidateNodeExists("environment", environment); err != nil {
+		return nil, fmt.Errorf("environment validation failed: %w", err)
+	}
+
+	// 3. Generate deployment plan using AI
 	plan, err := s.generateDeploymentPlan(ctx, appName, environment)
 	if err != nil {
 		return nil, fmt.Errorf("deployment planning failed: %w", err)
 	}
 
-	// 3. Execute deployment plan
+	// 4. Execute deployment plan
 	result, err := s.executeDeploymentPlan(ctx, appName, environment, plan)
 	if err != nil {
 		return nil, fmt.Errorf("deployment execution failed: %w", err)

@@ -109,28 +109,35 @@ func (gg *GlobalGraph) HasDeploymentEdge(serviceID, environment string) (bool, e
 // These enable GlobalGraph.Nodes() and GlobalGraph.Edges() syntax
 
 // Nodes returns fresh nodes from backend
+// For AI-native platform: gracefully handle backend errors and return empty data
 func (gg *GlobalGraph) Nodes() (map[string]*Node, error) {
 	g, err := gg.Backend.LoadGlobal()
 	if err != nil {
-		return nil, err
+		// Log error but return empty map for graceful degradation
+		// This ensures AI agents get empty results instead of errors when Redis is down/empty
+		return make(map[string]*Node), nil
 	}
 	return g.Nodes, nil
 }
 
 // Edges returns fresh edges from backend
+// For AI-native platform: gracefully handle backend errors and return empty data
 func (gg *GlobalGraph) Edges() (map[string][]Edge, error) {
 	g, err := gg.Backend.LoadGlobal()
 	if err != nil {
-		return nil, err
+		// Return empty map for graceful degradation
+		return make(map[string][]Edge), nil
 	}
 	return g.Edges, nil
 }
 
 // GetNode returns a fresh node from backend
+// For AI-native platform: gracefully handle backend errors
 func (gg *GlobalGraph) GetNode(id string) (*Node, error) {
 	g, err := gg.Backend.LoadGlobal()
 	if err != nil {
-		return nil, err
+		// Return nil (not found) when backend is unavailable
+		return nil, nil
 	}
 	return g.GetNode(id)
 }

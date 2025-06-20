@@ -61,6 +61,10 @@ func (r *redisGraph) SaveGlobal(g *Graph) error {
 func (r *redisGraph) LoadGlobal() (*Graph, error) {
 	data, err := r.client.Get(context.Background(), "ztgp:graph:global").Bytes()
 	if err != nil {
+		// Handle case where Redis is empty (key doesn't exist) - return empty graph
+		if err == redis.Nil {
+			return NewGraph(), nil
+		}
 		return nil, fmt.Errorf("get global graph: %w", err)
 	}
 	var graph Graph

@@ -79,6 +79,12 @@ func (o *Orchestrator) Chat(ctx context.Context, userMessage string) (*Conversat
 
 // routeUserRequest - Simplified routing using AI to determine intent and route accordingly
 func (o *Orchestrator) routeUserRequest(ctx context.Context, userMessage string) (*ConversationalResponse, error) {
+	// Check if AI provider is available
+	if o.aiProvider == nil {
+		o.logger.Warn("AI provider not available, falling back to general conversation")
+		return o.handleGeneralConversation(ctx, userMessage)
+	}
+
 	// Use AI to determine the intent based on available agent capabilities
 	intentDetectionPrompt, err := o.buildDynamicIntentDetectionPrompt(ctx)
 	if err != nil {

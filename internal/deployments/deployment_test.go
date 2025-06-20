@@ -68,7 +68,7 @@ func TestEngine_ExecuteApplicationDeployment(t *testing.T) {
 			t.Fatal("Expected error for non-existent environment")
 		}
 		// Updated to match clean architecture error handling
-		if !strings.Contains(err.Error(), "deployment") {
+		if !strings.Contains(err.Error(), "environment validation failed") {
 			t.Errorf("Unexpected error message: %s", err.Error())
 		}
 	})

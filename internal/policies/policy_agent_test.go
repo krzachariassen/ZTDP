@@ -238,7 +238,7 @@ func createTestFrameworkPolicyAgent(t *testing.T) agentRegistry.AgentInterface {
 	globalGraph := graph.NewGlobalGraph(backend)
 
 	// Create agent using new framework
-	policyAgent, err := NewPolicyAgent(nil, globalGraph, mockPolicyStore, "test", realEventBus, registry)
+	policyAgent, err := NewPolicyAgent(nil, globalGraph, mockPolicyStore, realEventBus, registry)
 	if err != nil {
 		t.Fatalf("Failed to create framework policy agent: %v", err)
 	}

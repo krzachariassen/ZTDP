@@ -21,5 +21,8 @@ func (a ApplicationContract) Validate() error {
 	if a.Metadata.Name == "" {
 		return fmt.Errorf("application name is required")
 	}
+	if a.Metadata.Owner == "" {
+		return fmt.Errorf("application owner is required")
+	}
 	return nil
 }

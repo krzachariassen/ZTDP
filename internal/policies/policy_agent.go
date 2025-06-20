@@ -35,17 +35,16 @@ func NewPolicyAgent(
 	graphStore *graph.GraphStore,
 	globalGraph *graph.GlobalGraph,
 	policyStore PolicyStore,
-	env string,
 	eventBus *events.EventBus,
 	registry agentRegistry.AgentRegistry,
 ) (agentRegistry.AgentInterface, error) {
 	// Create the policy service for business logic
-	service := NewServiceWithPolicyStore(graphStore, globalGraph, policyStore, env, &policyEventBusAdapter{eventBus})
+	service := NewServiceWithPolicyStore(graphStore, globalGraph, policyStore, "", &policyEventBusAdapter{eventBus})
 
 	// Create the wrapper that contains the business logic
 	wrapper := &FrameworkPolicyAgent{
 		service: service,
-		env:     env,
+		env:     "", // Agents are environment-agnostic
 		logger:  logging.GetLogger().ForComponent("policy-agent"),
 	}
 
@@ -365,16 +364,16 @@ func (a *FrameworkPolicyAgent) convertPolicyResultToEvent(result *PolicyResult, 
 	}
 
 	payload := map[string]interface{}{
-		"status":       "success", // High-level operation status
-		"decision":     decision,
-		"reasoning":    reasoning,
-		"confidence":   result.Confidence,
+		"status":        "success", // High-level operation status
+		"decision":      decision,
+		"reasoning":     reasoning,
+		"confidence":    result.Confidence,
 		"policy_status": string(result.Status), // Detailed policy status
-		"evaluated_at": result.EvaluatedAt,
-		"evaluated_by": result.EvaluatedBy,
-		"handled":      true,
-		"original_id":  originalEvent.ID,
-		"agent_id":     "policy-agent",
+		"evaluated_at":  result.EvaluatedAt,
+		"evaluated_by":  result.EvaluatedBy,
+		"handled":       true,
+		"original_id":   originalEvent.ID,
+		"agent_id":      "policy-agent",
 	}
 
 	// Include reason if available
