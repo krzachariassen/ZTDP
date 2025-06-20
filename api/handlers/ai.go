@@ -45,11 +45,9 @@ func AIProviderStatus(w http.ResponseWriter, r *http.Request) {
 			"error": "AI agent not initialized",
 		}
 	} else {
-		// Get provider info from AI platform agent
-		info := agent.GetProviderInfo()
-		providerInfo.Name = info.Name
-		providerInfo.Version = info.Version
-		providerInfo.Capabilities = append(providerInfo.Capabilities, info.Capabilities...)
+		// Get provider info from AI platform agent (simplified)
+		providerInfo.Name = "ZTDP AI Orchestrator"
+		providerInfo.Version = "1.0.0"
 		providerInfo.Available = true
 
 		// Get model from environment or config
@@ -167,7 +165,7 @@ func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Chat with platform using revolutionary AI
-	response, err := agent.ChatWithPlatform(ctx, req.Query, req.Context)
+	response, err := agent.Chat(ctx, req.Query)
 	if err != nil {
 		WriteJSONError(w, "Conversational AI failed: "+err.Error(), http.StatusInternalServerError)
 		return

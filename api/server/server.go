@@ -26,14 +26,14 @@ func SetupRoutes(r *chi.Mux) {
 		// =============================================================================
 		// APPLICATION MANAGEMENT
 		// =============================================================================
-		v1.Post("/applications", handlers.CreateApplication)
-		v1.Get("/applications", handlers.ListApplications)
-		v1.Get("/applications/{app_name}", handlers.GetApplication)
-		v1.Put("/applications/{app_name}", handlers.UpdateApplication)
-		v1.Get("/applications/schema", handlers.ApplicationSchema)
+		// v1.Post("/applications", handlers.CreateApplication)
+		// v1.Get("/applications", handlers.ListApplications)
+		// v1.Get("/applications/{app_name}", handlers.GetApplication)
+		// v1.Put("/applications/{app_name}", handlers.UpdateApplication)
+		// v1.Get("/applications/schema", handlers.ApplicationSchema)
 
 		// Application Deployment (Primary Interface)
-		v1.Post("/applications/{app_name}/deploy", handlers.DeployApplication)
+		// // v1.Post("/applications/{app_name}/deploy", handlers.DeployApplication)
 
 		// Application-Environment Policies
 		v1.Post("/applications/{app_name}/environments/{env_name}/allowed", handlers.LinkAppAllowedInEnvironment)
@@ -72,9 +72,9 @@ func SetupRoutes(r *chi.Mux) {
 		// =============================================================================
 		// POLICY MANAGEMENT
 		// =============================================================================
-		v1.Post("/policies", handlers.PolicyHandler)
-		v1.Get("/policies", handlers.ListPolicies)
-		v1.Get("/policies/{policy_id}", handlers.GetPolicy)
+		// v1.Post("/policies", handlers.PolicyHandler)
+		// v1.Get("/policies", handlers.ListPolicies)
+		// v1.Get("/policies/{policy_id}", handlers.GetPolicy)
 
 		// =============================================================================
 		// AI ENDPOINTS (Infrastructure/Platform Level)
@@ -86,12 +86,12 @@ func SetupRoutes(r *chi.Mux) {
 		// - /ai/policies/evaluate -> Internal to deployment process
 
 		// Keep only platform-level AI endpoints that provide genuine business value
-		v1.Post("/ai/troubleshoot", handlers.AITroubleshootDeployment)  // Standalone diagnostic capability
-		v1.Post("/ai/proactive-optimize", handlers.AIProactiveOptimize) // Available in operations.go
-		v1.Post("/ai/learn-deployment", handlers.AILearnFromDeployment) // Available in operations.go
-		v1.Post("/ai/chat", handlers.AIChatWithPlatform)                // Available in ai.go
-		v1.Get("/ai/provider/status", handlers.AIProviderStatus)        // Available in ai.go
-		v1.Get("/ai/metrics", handlers.AIMetrics)                       // Available in ai.go
+		// v1.Post("/ai/troubleshoot", handlers.AITroubleshootDeployment)  // Standalone diagnostic capability
+		// v1.Post("/ai/proactive-optimize", handlers.AIProactiveOptimize) // Available in operations.go
+		// v1.Post("/ai/learn-deployment", handlers.AILearnFromDeployment) // Available in operations.go
+		v1.Post("/ai/chat", handlers.AIChatWithPlatform)         // Available in ai.go
+		v1.Get("/ai/provider/status", handlers.AIProviderStatus) // Available in ai.go
+		v1.Get("/ai/metrics", handlers.AIMetrics)                // Available in ai.go
 
 		// =============================================================================
 		// REAL-TIME LOGS & EVENTS

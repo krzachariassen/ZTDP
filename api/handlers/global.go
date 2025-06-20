@@ -1,32 +1,21 @@
 package handlers
 
 import (
-	"log"
-	"os"
-	"sync"
-
+	"github.com/krzachariassen/ZTDP/internal/agents/orchestrator"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 )
 
 var (
-	GlobalGraph *graph.GlobalGraph
-	graphStore  *graph.GraphStore
-	initOnce    sync.Once
-	logger      *log.Logger
+	GlobalGraph        *graph.GlobalGraph
+	globalOrchestrator *orchestrator.Orchestrator
 )
 
-func init() {
-	// Initialize logger
-	logger = log.New(os.Stdout, "[ZTDP] ", log.LstdFlags)
+// SetupGlobalOrchestrator sets the global orchestrator instance (called from main.go)
+func SetupGlobalOrchestrator(o *orchestrator.Orchestrator) {
+	globalOrchestrator = o
 }
 
-// getGraphStore returns the global graph store instance, initializing it if needed
-func getGraphStore() *graph.GraphStore {
-	initOnce.Do(func() {
-		// In a production environment, this would use a persistent backend
-		// like Redis or a database. For now, we use an in-memory backend.
-		backend := graph.NewMemoryGraph()
-		graphStore = graph.NewGraphStore(backend)
-	})
-	return graphStore
+// GetGlobalOrchestrator returns the global orchestrator instance
+func GetGlobalOrchestrator() *orchestrator.Orchestrator {
+	return globalOrchestrator
 }
