@@ -218,3 +218,82 @@ func (s *Service) ValidateNodeExists(kind, name string) error {
 
 	return nil
 }
+
+// ExtractDeploymentParamsFromUserMessage uses AI to parse user messages and extract deployment parameters
+func (s *Service) ExtractDeploymentParamsFromUserMessage(ctx context.Context, userMessage string) (*DeploymentDomainParams, error) {
+	s.logger.Info("🤖 Extracting deployment parameters from user message using AI")
+
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider required for parameter extraction")
+	}
+
+	systemPrompt := `You are a deployment parameter extraction assistant. Extract deployment information from user messages.
+
+IMPORTANT: Response must be valid JSON only, no explanations or additional text.
+
+Response format:
+{
+  "action": "deploy|plan|status|execute",
+  "app_name": "extracted-app-name",
+  "environment": "extracted-environment-name", 
+  "version": "version-if-specified",
+  "force": false,
+  "confidence": 0.85,
+  "clarification": "explanation-if-low-confidence"
+}
+
+Rules:
+- Extract application name from deployment requests
+- Extract environment (production, staging, development, test, etc.) 
+- Set confidence 0.0-1.0 based on clarity
+- If confidence < 0.8, provide clarification request
+- Common environment aliases: prod=production, dev=development, stage=staging
+- Action should be: deploy, plan, status, or execute`
+
+	userPrompt := fmt.Sprintf("Extract deployment parameters from: %s", userMessage)
+
+	response, err := s.aiProvider.CallAI(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		s.logger.Error("AI parameter extraction failed: %v", err)
+		return nil, fmt.Errorf("failed to extract parameters using AI: %w", err)
+	}
+
+	s.logger.Info("🤖 AI response for parameter extraction: %s", response)
+
+	// Parse AI response
+	var params DeploymentDomainParams
+	if err := json.Unmarshal([]byte(response), &params); err != nil {
+		s.logger.Error("Failed to parse AI response as JSON: %v", err)
+		return nil, fmt.Errorf("failed to parse AI response: %w", err)
+	}
+
+	// Validate extraction confidence
+	if params.Confidence < 0.8 {
+		s.logger.Warn("Low confidence extraction (%.2f): %s", params.Confidence, params.Clarification)
+		return &params, fmt.Errorf("extraction confidence too low (%.2f): %s", params.Confidence, params.Clarification)
+	}
+
+	// Validate required fields
+	if params.AppName == "" {
+		return &params, fmt.Errorf("could not extract application name from message")
+	}
+	if params.Environment == "" {
+		return &params, fmt.Errorf("could not extract environment from message")
+	}
+
+	s.logger.Info("✅ AI extracted deployment params - app: %s, env: %s, action: %s (confidence: %.2f)",
+		params.AppName, params.Environment, params.Action, params.Confidence)
+
+	return &params, nil
+}
+
+// DeploymentDomainParams represents extracted parameters from AI parsing
+type DeploymentDomainParams struct {
+	Action        string  `json:"action"`
+	AppName       string  `json:"app_name"`
+	Environment   string  `json:"environment"`
+	Version       string  `json:"version"`
+	Force         bool    `json:"force"`
+	Confidence    float64 `json:"confidence"`
+	Clarification string  `json:"clarification"`
+}

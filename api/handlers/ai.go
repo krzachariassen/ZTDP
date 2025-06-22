@@ -3,13 +3,10 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
-
-	"github.com/krzachariassen/ZTDP/internal/ai"
 )
 
 // AIProviderInfo represents AI provider information
@@ -125,56 +122,6 @@ type AIChatRequest struct {
 	Timeout int      `json:"timeout,omitempty"`
 }
 
-// AIChatWithPlatform godoc
-// @Summary      Chat with Platform using AI
-// @Description  Revolutionary conversational AI that allows natural language interaction with platform graph for insights and actions
-// @Tags         ai,revolutionary
-// @Accept       json
-// @Produce      json
-// @Param        request  body  AIChatRequest  true  "Chat request"
-// @Success      200  {object}  ai.ConversationalResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /v1/ai/chat [post]
-func AIChatWithPlatform(w http.ResponseWriter, r *http.Request) {
-	var req AIChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if req.Query == "" {
-		WriteJSONError(w, "query is required", http.StatusBadRequest)
-		return
-	}
-
-	// Default timeout
-	timeout := 60 * time.Second
-	if req.Timeout > 0 {
-		timeout = time.Duration(req.Timeout) * time.Second
-	}
-
-	// Use global AI platform agent with all domain services already injected
-	agent := GetGlobalOrchestrator()
-	if agent == nil {
-		WriteJSONError(w, "AI service unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	// Chat with platform using revolutionary AI
-	response, err := agent.Chat(ctx, req.Query)
-	if err != nil {
-		WriteJSONError(w, "Conversational AI failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
 // V3ChatRequest represents a request to the V3 AI chat endpoint
 type V3ChatRequest struct {
 	Message string `json:"message" binding:"required"`
@@ -222,34 +169,6 @@ func V3AIChat(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
-}
-
-// createAIProvider creates an AI provider based on environment configuration
-func createAIProvider() (ai.AIProvider, error) {
-	providerName := os.Getenv("AI_PROVIDER")
-	if providerName == "" {
-		providerName = "openai"
-	}
-
-	switch providerName {
-	case "openai":
-		apiKey := os.Getenv("OPENAI_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("OPENAI_API_KEY environment variable is required")
-		}
-
-		config := ai.DefaultOpenAIConfig()
-		if model := os.Getenv("OPENAI_MODEL"); model != "" {
-			config.Model = model
-		}
-		if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
-			config.BaseURL = baseURL
-		}
-
-		return ai.NewOpenAIProvider(config, apiKey)
-	default:
-		return nil, fmt.Errorf("unsupported AI provider: %s", providerName)
-	}
 }
 
 // Helper function to get environment variable with fallback

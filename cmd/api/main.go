@@ -12,7 +12,7 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/agents/orchestrator"
 	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/application"
-	"github.com/krzachariassen/ZTDP/internal/deployments"
+	"github.com/krzachariassen/ZTDP/internal/environment"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/logging"
@@ -130,18 +130,18 @@ func main() {
 	}
 	logger.Info("✅ Application Agent created successfully")
 
-	// Initialize Deployment Agent
-	logger.Info("🚀 Creating Deployment Agent...")
-	deploymentAgent, err := deployments.NewDeploymentAgent(
+	// Initialize Environment Agent
+	logger.Info("🚀 Creating Environment Agent...")
+	deploymentAgent, err := environment.NewEnvironmentAgent(
 		handlers.GlobalGraph,
 		aiProvider,
 		eventBus,
 		agentRegistry,
 	)
 	if err != nil {
-		log.Fatalf("❌ Failed to create deployment agent: %v", err)
+		log.Fatalf("❌ Failed to create Environment agent: %v", err)
 	}
-	logger.Info("✅ Deployment Agent created successfully")
+	logger.Info("✅ Environment Agent created successfully")
 
 	// Initialize Policy Agent (with correct signature)
 	logger.Info("🛡️ Creating Policy Agent...")

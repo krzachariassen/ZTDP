@@ -3,7 +3,6 @@ package deployments
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/krzachariassen/ZTDP/internal/agentFramework"
@@ -105,237 +104,55 @@ func getDeploymentCapabilities() []agentRegistry.AgentCapability {
 	}
 }
 
-// handleEvent is the main event handler that preserves the existing business logic
+// handleEvent is the main event handler for AI-native deployment processing
 func (a *FrameworkDeploymentAgent) handleEvent(ctx context.Context, event *events.Event) (*events.Event, error) {
 	// Store current event for correlation context
 	a.currentEvent = event
 
 	a.logger.Info("🎯 Processing deployment event: %s", event.Subject)
 
-	// Extract intent from event payload using framework pattern
-	intent, ok := event.Payload["intent"].(string)
-	if !ok || intent == "" {
-		return a.createErrorResponse(event, "intent field required in payload"), nil
+	// AI-NATIVE ONLY: All requests must have user_message for AI processing
+	userMessage, exists := event.Payload["user_message"].(string)
+	if !exists || userMessage == "" {
+		return a.createErrorResponse(event, "AI-native deployment agent requires user_message field with natural language request"), nil
 	}
 
-	// Route based on intent - using a cleaner pattern
-	intentHandlers := map[string]func(context.Context, *events.Event) (*events.Event, error){
-		"deploy":  a.handleDeployment,
-		"plan":    a.handleDeploymentPlan,
-		"status":  a.handleDeploymentStatus,
-		"execute": a.handleDeployment,
-		"start":   a.handleDeployment,
-		"run":     a.handleDeployment,
-	}
-
-	// Try exact match first
-	if handler, exists := intentHandlers[intent]; exists {
-		return handler(ctx, event)
-	}
-
-	// Try pattern matching with strings.Contains
-	for pattern, handler := range intentHandlers {
-		if strings.Contains(intent, pattern) {
-			return handler(ctx, event)
-		}
-	}
-
-	// Default to generic handler
-	return a.handleGenericDeploymentQuestion(ctx, event, intent)
-}
-
-// handleDeployment processes deployment execution requests
-func (a *FrameworkDeploymentAgent) handleDeployment(ctx context.Context, event *events.Event) (*events.Event, error) {
-	a.logger.Info("🚀 Deployment execution payload keys: %v", agentFramework.GetPayloadKeys(event.Payload))
-
-	// Try to extract from user message first (AI-native approach)
-	if userMessage, exists := event.Payload["user_message"].(string); exists {
-		return a.handleAINativeDeploymentExecution(ctx, userMessage, event)
-	}
-
-	// Extract required parameters (fallback for explicit parameters)
-	appName, ok := event.Payload["application"].(string)
-	if !ok {
-		appName, ok = event.Payload["app"].(string)
-		if !ok {
-			return a.createErrorResponse(event, "deployment requires application field or user_message"), nil
-		}
-	}
-
-	environment, ok := event.Payload["environment"].(string)
-	if !ok {
-		environment, ok = event.Payload["env"].(string)
-		if !ok {
-			return a.createErrorResponse(event, "deployment requires environment field or user_message"), nil
-		}
-	}
-
-	// Execute deployment via service
-	result, err := a.service.DeployApplication(ctx, appName, environment)
-	if err != nil {
-		return a.createErrorResponse(event, fmt.Sprintf("deployment failed: %v", err)), nil
-	}
-
-	// Create success response
-	payload := map[string]interface{}{
-		"deployment_id":     result.DeploymentID,
-		"application":       result.Application,
-		"environment":       result.Environment,
-		"deployment_result": result,
-	}
-
-	return a.createSuccessResponse(event, payload), nil
-}
-
-// handleDeploymentPlan processes deployment planning requests
-func (a *FrameworkDeploymentAgent) handleDeploymentPlan(ctx context.Context, event *events.Event) (*events.Event, error) {
-	a.logger.Info("📋 Deployment planning payload keys: %v", agentFramework.GetPayloadKeys(event.Payload))
-
-	// Extract required parameters
-	appName, ok := event.Payload["application"].(string)
-	if !ok {
-		appName, ok = event.Payload["app"].(string)
-		if !ok {
-			return a.createErrorResponse(event, "deployment planning requires application field"), nil
-		}
-	}
-
-	// Generate deployment plan via service
-	plan, err := a.service.GenerateDeploymentPlan(ctx, appName)
-	if err != nil {
-		return a.createErrorResponse(event, fmt.Sprintf("deployment planning failed: %v", err)), nil
-	}
-
-	// Create success response
-	payload := map[string]interface{}{
-		"application":     appName,
-		"deployment_plan": plan,
-	}
-
-	return a.createSuccessResponse(event, payload), nil
-}
-
-// handleDeploymentStatus processes deployment status requests
-func (a *FrameworkDeploymentAgent) handleDeploymentStatus(ctx context.Context, event *events.Event) (*events.Event, error) {
-	a.logger.Info("📊 Deployment status payload keys: %v", agentFramework.GetPayloadKeys(event.Payload))
-
-	// Extract required parameters
-	appName, ok := event.Payload["application"].(string)
-	if !ok {
-		appName, ok = event.Payload["app"].(string)
-		if !ok {
-			return a.createErrorResponse(event, "deployment status requires application field"), nil
-		}
-	}
-
-	environment, ok := event.Payload["environment"].(string)
-	if !ok {
-		environment, ok = event.Payload["env"].(string)
-		if !ok {
-			return a.createErrorResponse(event, "deployment status requires environment field"), nil
-		}
-	}
-
-	// Get deployment status via service
-	status, err := a.service.GetDeploymentStatus(appName, environment)
-	if err != nil {
-		return a.createErrorResponse(event, fmt.Sprintf("deployment status failed: %v", err)), nil
-	}
-
-	// Create success response
-	payload := map[string]interface{}{
-		"application":       appName,
-		"environment":       environment,
-		"deployment_status": status,
-	}
-
-	return a.createSuccessResponse(event, payload), nil
-}
-
-// handleGenericDeploymentQuestion handles general deployment-related questions
-func (a *FrameworkDeploymentAgent) handleGenericDeploymentQuestion(ctx context.Context, event *events.Event, intent string) (*events.Event, error) {
-	a.logger.Info("❓ Generic deployment question with intent: %s", intent)
-
-	// For generic deployment questions, provide helpful guidance
-	payload := map[string]interface{}{
-		"intent":  intent,
-		"message": "I can help with deployment operations. Please specify 'deploy', 'plan', or 'status' with application and environment details.",
-		"capabilities": []string{
-			"deploy application to environment",
-			"generate deployment plan for application",
-			"check deployment status of application in environment",
-		},
-	}
-
-	return a.createSuccessResponse(event, payload), nil
-}
-
-// handleAINativeDeploymentExecution uses AI to parse user message and extract deployment intent
-func (a *FrameworkDeploymentAgent) handleAINativeDeploymentExecution(ctx context.Context, userMessage string, event *events.Event) (*events.Event, error) {
 	a.logger.Info("🤖 AI-native deployment execution: %s", userMessage)
 
-	// Use AI to parse the user message and extract application and environment
-	systemPrompt := `You are a deployment assistant. Extract the application name and environment from the user's deployment request.
-	
-Response format must be JSON:
-{
-  "application": "app-name",
-  "environment": "env-name",
-  "action": "deploy|plan|status",
-  "confidence": 0.0-1.0
-}
-
-If you cannot determine the application or environment with high confidence, set confidence < 0.8.`
-
-	userPrompt := fmt.Sprintf("Parse this deployment request: %s", userMessage)
-
-	// Call AI provider (assuming it exists in the agent)
-	if a.service.aiProvider == nil {
-		return a.createErrorResponse(event, "AI provider not available for parsing user message"), nil
-	}
-
-	response, err := a.service.aiProvider.CallAI(ctx, systemPrompt, userPrompt)
+	// Use deployment service's AI extraction method (proper AI-native approach)
+	params, err := a.service.ExtractDeploymentParamsFromUserMessage(ctx, userMessage)
 	if err != nil {
-		a.logger.Error("AI parsing failed: %v", err)
+		a.logger.Error("AI parameter extraction failed: %v", err)
 		return a.createErrorResponse(event, fmt.Sprintf("failed to parse deployment request: %v", err)), nil
 	}
 
-	// Parse AI response to extract application and environment
-	// For now, use a simple parsing approach (in real implementation, would use JSON parsing)
-	var appName, environment string
+	a.logger.Info("🤖 AI extracted - action: %s, app: %s, env: %s, confidence: %.2f",
+		params.Action, params.AppName, params.Environment, params.Confidence)
 
-	// Simple heuristic parsing for demo (should be replaced with proper JSON parsing)
-	if strings.Contains(strings.ToLower(userMessage), "to production") || strings.Contains(strings.ToLower(userMessage), "prod") {
-		environment = "production"
-	} else if strings.Contains(strings.ToLower(userMessage), "to staging") || strings.Contains(strings.ToLower(userMessage), "staging") {
-		environment = "staging"
-	} else if strings.Contains(strings.ToLower(userMessage), "to dev") || strings.Contains(strings.ToLower(userMessage), "development") {
-		environment = "development"
-	} else if strings.Contains(strings.ToLower(userMessage), "to test") || strings.Contains(strings.ToLower(userMessage), "testing") {
-		environment = "test"
-	}
-
-	// Simple app name extraction (look for "deploy <app-name>")
-	words := strings.Fields(strings.ToLower(userMessage))
-	for i, word := range words {
-		if (word == "deploy" || word == "deployment") && i+1 < len(words) {
-			appName = words[i+1]
-			break
+	// Check confidence level - request clarification if too low
+	if params.Confidence < 0.7 {
+		clarificationMsg := params.Clarification
+		if clarificationMsg == "" {
+			clarificationMsg = "I'm not sure about the deployment details. Please specify the application name and target environment clearly."
 		}
+		return a.createErrorResponse(event, clarificationMsg), nil
 	}
 
-	// Validate extracted values
-	if appName == "" {
-		return a.createErrorResponse(event, "could not determine application name from message"), nil
+	// Validate required parameters
+	if params.AppName == "" {
+		return a.createErrorResponse(event, "Application name is required for deployment"), nil
 	}
-	if environment == "" {
-		return a.createErrorResponse(event, "could not determine environment from message"), nil
+	if params.Environment == "" {
+		return a.createErrorResponse(event, "Target environment is required for deployment"), nil
 	}
 
-	a.logger.Info("🎯 AI extracted - app: %s, env: %s", appName, environment)
+	// Extract values from AI-parsed parameters
+	appName := params.AppName
+	environment := params.Environment
+
+	a.logger.Info("🎯 AI validated parameters - app: %s, env: %s", appName, environment)
 
 	// ✅ ORCHESTRATION WORKFLOW - Coordinate with other agents
-	// Step 1: Request release creation from Release Agent
 	result, err := a.orchestrateDeployment(ctx, appName, environment, userMessage)
 	if err != nil {
 		return a.createErrorResponse(event, fmt.Sprintf("deployment orchestration failed: %v", err)), nil
@@ -349,7 +166,12 @@ If you cannot determine the application or environment with high confidence, set
 		"environment":       result.Environment,
 		"deployment_result": result,
 		"parsed_from":       userMessage,
-		"ai_response":       response,
+		"ai_extracted_params": map[string]interface{}{
+			"action":      params.Action,
+			"app_name":    params.AppName,
+			"environment": params.Environment,
+			"confidence":  params.Confidence,
+		},
 	}
 
 	return a.createSuccessResponse(event, payload), nil

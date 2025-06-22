@@ -692,3 +692,391 @@ The Application Agent implementation provides concrete validation for framework 
 5. **Error Recovery**: 80+ lines of confidence checking and fallback logic
 
 These real-world metrics justify prioritizing correlation ID management and payload standardization as Phase 0 critical infrastructure improvements.
+
+## Critical Framework Issues Discovered During Agent Refactoring (June 2025)
+
+### Recent Refactoring Analysis
+
+During the comprehensive agent refactoring in June 2025, several critical framework gaps were identified that require immediate attention:
+
+#### 1. **Event Field Validation Framework (CRITICAL)**
+
+**Problem Discovered**: Environment Agent responses were missing required event fields (ID, Type, Source, Timestamp), causing silent failures and orchestrator issues.
+
+**Root Cause**: No framework validation for event response structure.
+
+**Current Manual Fix**: Had to manually add missing fields to all agent responses:
+```go
+// Manual fix required in every agent response
+response := &events.Event{
+    ID:        generateEventID(),           // Missing!
+    Type:      "environment.created",       // Missing!
+    Source:    "environment-agent",         // Missing!
+    Timestamp: time.Now(),                  // Missing!
+    Payload:   result,
+}
+```
+
+**Framework Solution Needed**: Automatic event field validation and completion:
+```go
+// Framework enhancement: automatic event field validation
+type EventValidator struct {
+    requiredFields []string
+    defaultSource  string
+}
+
+func (ev *EventValidator) ValidateResponse(event *events.Event) error
+func (ev *EventValidator) CompleteEvent(event *events.Event) *events.Event
+
+// Usage in framework
+func (f *AgentFramework) WithEventValidation(agentName string) *AgentBuilder
+```
+
+#### 2. **Agent Domain Boundary Enforcement (CRITICAL)**
+
+**Problem Discovered**: ApplicationAgent was incorrectly claiming capabilities for `service.*`, `environment.*`, and `release.*` domains, causing orchestrator routing failures.
+
+**Root Cause**: No framework enforcement of agent domain boundaries.
+
+**Current Manual Fix**: Had to manually audit and remove incorrect capabilities:
+```go
+// Before (WRONG) - ApplicationAgent claiming other domains
+func (a *ApplicationAgent) GetCapabilities() []string {
+    return []string{
+        "application.*",     // ✅ Correct
+        "service.*",         // ❌ Wrong domain!
+        "environment.*",     // ❌ Wrong domain!
+        "release.*",         // ❌ Wrong domain!
+    }
+}
+
+// After (CORRECT) - Fixed manually
+func (a *ApplicationAgent) GetCapabilities() []string {
+    return []string{
+        "application.*",     // ✅ Only application domain
+    }
+}
+```
+
+**Framework Solution Needed**: Domain boundary validation:
+```go
+// Framework enhancement: domain boundary enforcement
+type DomainConfig struct {
+    AllowedDomains []string
+    StrictMode     bool
+}
+
+func (f *AgentFramework) WithDomainBoundaries(config DomainConfig) *AgentBuilder
+
+// Framework validates capabilities match allowed domains
+func (f *AgentFramework) validateCapabilities(agentName string, capabilities []string) error
+```
+
+#### 3. **Event Handler Return Validation (CRITICAL)**
+
+**Problem Discovered**: Agents were returning events without proper validation, causing downstream failures.
+
+**Root Cause**: No framework validation of event handler return values.
+
+**Current Manual Testing**: Had to manually test every agent response:
+```go
+// Manual testing required for each agent
+response, err := agent.ProcessEvent(ctx, event)
+if response.ID == "" {           // Manual check
+    t.Error("Missing event ID")
+}
+if response.Timestamp.IsZero() { // Manual check
+    t.Error("Missing timestamp")
+}
+```
+
+**Framework Solution Needed**: Automatic return validation:
+```go
+// Framework enhancement: return validation
+func (f *AgentFramework) WithReturnValidation() *AgentBuilder
+
+// Framework automatically validates all agent responses
+func (f *AgentFramework) validateAgentResponse(response *events.Event) error
+```
+
+#### 4. **Orchestrator Routing Validation (HIGH PRIORITY)**
+
+**Problem Discovered**: Orchestrator was routing environment creation to ApplicationAgent instead of EnvironmentAgent due to capability overlaps.
+
+**Root Cause**: No framework validation of orchestrator routing logic.
+
+**Manual Debug Process**: Required manual testing of routing:
+```bash
+# Manual testing required
+curl -X POST /api/ai/chat -d '{"message": "create environment dev"}'
+# Check logs to see which agent handled the request
+```
+
+**Framework Solution Needed**: Routing validation utilities:
+```go
+// Framework enhancement: routing validation
+type RoutingValidator struct {
+    agents map[string]AgentInterface
+}
+
+func (rv *RoutingValidator) ValidateRouting(intent string) (string, error)
+func (rv *RoutingValidator) DetectRoutingConflicts() []RoutingConflict
+func (f *AgentFramework) WithRoutingValidation() *AgentBuilder
+```
+
+#### 5. **Standardized Agent Testing Pattern (HIGH PRIORITY)**
+
+**Problem Discovered**: Each agent had different testing patterns, making it hard to ensure consistency.
+
+**Solution Developed**: Created standardized testing pattern used across all agents:
+```go
+// Standardized pattern now used by all agents
+func TestAgentName_ProcessEvent_RealAI(t *testing.T) {
+    tests := []struct {
+        name        string
+        eventType   string
+        message     string
+        expectError bool
+        expectType  string
+    }{
+        // Standard test cases
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            agent := setupTestAgent(t) // Standard setup
+            
+            event := createTestEvent(tt.eventType, tt.message) // Standard event creation
+            response, err := agent.ProcessEvent(ctx, event)    // Standard execution
+            
+            // Standard validations
+            validateResponse(t, response, tt.expectType, tt.expectError)
+        })
+    }
+}
+```
+
+**Framework Solution Needed**: Built-in testing utilities:
+```go
+// Framework enhancement: standardized testing
+type AgentTestFramework struct {
+    framework *AgentFramework
+}
+
+func (atf *AgentTestFramework) SetupTestAgent(agentName string) AgentInterface
+func (atf *AgentTestFramework) CreateTestEvent(eventType, message string) *events.Event
+func (atf *AgentTestFramework) ValidateResponse(response *events.Event, expectedType string) error
+```
+
+#### 6. **Multi-Agent Clarification Framework (CRITICAL)**
+
+**Problem Discovered**: Clarification system is incomplete and doesn't handle end-to-end clarification flows properly. Agents lose context when asking for clarifications, and the orchestrator doesn't know how to route clarification responses between agents.
+
+**Root Cause**: No framework support for maintaining context across multi-step clarification flows.
+
+**Current Gap**: Clarification flows break down in complex scenarios:
+
+```go
+// Current problem scenario:
+// 1. User: "deploy myapp to production"
+// 2. Orchestrator routes to DeploymentAgent
+// 3. DeploymentAgent needs policy info, asks PolicyAgent
+// 4. PolicyAgent asks: "What environment policies apply?"
+// 5. BUT: PolicyAgent has lost the application name context!
+// 6. PolicyAgent asks DeploymentAgent for clarification
+// 7. BUT: Orchestrator doesn't know to route back to DeploymentAgent
+// 8. System breaks - clarification goes to user instead of DeploymentAgent
+```
+
+**Framework Solution Needed**: Multi-agent clarification with context preservation:
+
+```go
+// Framework enhancement: multi-agent clarification system
+type ClarificationContext struct {
+    OriginalIntent    string                 `json:"original_intent"`
+    InitiatingAgent   string                 `json:"initiating_agent"`
+    ConversationID    string                 `json:"conversation_id"`
+    ContextStack      []ClarificationStep    `json:"context_stack"`
+    PendingQuestions  []PendingClarification `json:"pending_questions"`
+}
+
+type ClarificationStep struct {
+    AgentName    string                 `json:"agent_name"`
+    Question     string                 `json:"question"`
+    Response     string                 `json:"response,omitempty"`
+    Context      map[string]interface{} `json:"context"`
+    Timestamp    time.Time              `json:"timestamp"`
+}
+
+type PendingClarification struct {
+    ID           string `json:"id"`
+    FromAgent    string `json:"from_agent"`
+    ToAgent      string `json:"to_agent"`     // Could be "user" or specific agent
+    Question     string `json:"question"`
+    RequiredFor  string `json:"required_for"` // What this clarification enables
+}
+
+// Framework enhancement methods
+func (f *AgentFramework) WithClarificationContext() *AgentBuilder
+func (cc *ClarificationContext) AskAgent(fromAgent, toAgent, question string) (*ClarificationRequest, error)
+func (cc *ClarificationContext) AskUser(fromAgent, question string) (*ClarificationRequest, error)
+func (cc *ClarificationContext) RespondToClarification(clarificationID, response string) error
+func (cc *ClarificationContext) GetConversationHistory() []ClarificationStep
+```
+
+**Usage in Orchestrator**:
+```go
+// Enhanced orchestrator with clarification routing
+func (o *Orchestrator) HandleClarification(ctx context.Context, request *ClarificationRequest) (*events.Event, error) {
+    clarificationCtx := o.getClarificationContext(request.ConversationID)
+    
+    // Route clarification to correct recipient
+    if request.ToAgent == "user" {
+        return o.askUser(clarificationCtx, request.Question)
+    }
+    
+    // Route to specific agent with full context
+    targetAgent := o.getAgent(request.ToAgent)
+    return targetAgent.AnswerClarification(ctx, clarificationCtx, request)
+}
+```
+
+**Usage in Agents**:
+```go
+// Enhanced agent with clarification capabilities
+func (a *DeploymentAgent) handleDeploy(ctx context.Context, event *events.Event, params *AIResponse) (*events.Event, error) {
+    // Need policy validation
+    policyQuestion := a.clarificationCtx.AskAgent(
+        "deployment-agent", 
+        "policy-agent", 
+        fmt.Sprintf("What deployment policies apply to application '%s' in environment '%s'?", 
+            params.ApplicationName, params.Environment),
+    )
+    
+    // Framework automatically includes context from original request
+    policyResponse, err := a.askAgentWithContext(ctx, policyQuestion)
+    if err != nil {
+        return a.createErrorResponse(event, err), nil
+    }
+    
+    // Continue with deployment using policy response
+    return a.executeDeploy(ctx, event, params, policyResponse)
+}
+
+func (a *PolicyAgent) AnswerClarification(ctx context.Context, clarificationCtx *ClarificationContext, request *ClarificationRequest) (*events.Event, error) {
+    // Policy agent has full context from original deployment request
+    originalIntent := clarificationCtx.OriginalIntent
+    appName := clarificationCtx.GetContextValue("application_name")
+    environment := clarificationCtx.GetContextValue("environment")
+    
+    // Can answer without losing context
+    policies, err := a.service.GetDeploymentPolicies(appName, environment)
+    if err != nil {
+        // Even if we need more info, we can ask the right agent
+        return a.clarificationCtx.AskAgent(
+            "policy-agent",
+            "deployment-agent", 
+            "What specific policy type do you need? (approval, resource, security)",
+        )
+    }
+    
+    return a.createSuccessResponse(request.OriginalEvent, policies), nil
+}
+```
+
+**Testing Requirements**:
+```go
+// Framework enhancement: clarification testing utilities
+func TestClarificationFlow_MultiAgent(t *testing.T) {
+    tests := []struct {
+        name              string
+        initialRequest    string
+        expectedClarifications []ClarificationStep
+        finalResponse     string
+    }{
+        {
+            name: "deployment_needs_policy_clarification",
+            initialRequest: "deploy myapp to production",
+            expectedClarifications: []ClarificationStep{
+                {
+                    AgentName: "deployment-agent",
+                    ToAgent:   "policy-agent",
+                    Question:  "What deployment policies apply to application 'myapp' in environment 'production'?",
+                },
+                {
+                    AgentName: "policy-agent", 
+                    ToAgent:   "user",
+                    Question:  "Do you want to override the production approval requirement for myapp?",
+                },
+            },
+            finalResponse: "Deployment completed with policy approval override",
+        },
+        {
+            name: "agent_to_agent_clarification_with_context",
+            initialRequest: "create service with database",
+            expectedClarifications: []ClarificationStep{
+                {
+                    AgentName: "service-agent",
+                    ToAgent:   "application-agent",
+                    Question:  "Which application should this service belong to?",
+                },
+                {
+                    AgentName: "service-agent",
+                    ToAgent:   "environment-agent", 
+                    Question:  "What database type do you recommend for application 'myapp'?",
+                },
+            },
+            finalResponse: "Service created with PostgreSQL database for myapp",
+        },
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            orchestrator := setupTestOrchestrator(t)
+            
+            // Start conversation
+            response, err := orchestrator.Chat(ctx, tt.initialRequest)
+            assert.NoError(t, err)
+            
+            // Verify clarification flow
+            clarificationCtx := orchestrator.GetClarificationContext(response.ConversationID)
+            assert.Equal(t, len(tt.expectedClarifications), len(clarificationCtx.PendingQuestions))
+            
+            // Simulate clarification responses
+            for i, expectedStep := range tt.expectedClarifications {
+                actualStep := clarificationCtx.ContextStack[i]
+                assert.Equal(t, expectedStep.AgentName, actualStep.AgentName)
+                assert.Equal(t, expectedStep.Question, actualStep.Question)
+                
+                // Provide response to continue flow
+                err := clarificationCtx.RespondToClarification(actualStep.ID, "yes")
+                assert.NoError(t, err)
+            }
+            
+            // Verify final response
+            finalResponse := orchestrator.GetFinalResponse(clarificationCtx.ConversationID)
+            assert.Contains(t, finalResponse.Message, tt.finalResponse)
+        })
+    }
+}
+```
+
+**Implementation Requirements**:
+
+1. **Context Preservation**: All clarification requests must include full context from original intent
+2. **Agent-to-Agent routing**: Orchestrator must route clarifications between specific agents, not just user
+3. **Conversation Memory**: System must maintain conversation state across multiple clarification rounds
+4. **Timeout Handling**: Clarification requests must have timeouts and fallback strategies
+5. **Nested Clarifications**: Support for clarifications that spawn additional clarifications
+6. **Context Validation**: Ensure agents don't lose critical context during clarification flows
+
+**Priority**: **P0 (CRITICAL)** - This breaks complex multi-agent workflows and makes the system unreliable for real-world use cases.
+
+### Priority Ranking Based on Real-World Impact
+
+1. **P0 (CRITICAL)**: Event Field Validation - Caused silent failures
+2. **P0 (CRITICAL)**: Domain Boundary Enforcement - Caused routing failures  
+3. **P0 (CRITICAL)**: Multi-Agent Clarification Framework - Breaks complex workflows
+4. **P0 (CRITICAL)**: Event Handler Return Validation - Caused downstream failures
+5. **P1 (HIGH)**: Orchestrator Routing Validation - Required manual debugging
+6. **P1 (HIGH)**: Standardized Testing Pattern - Slowed development velocity

@@ -7,17 +7,283 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/contracts"
+	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/krzachariassen/ZTDP/internal/logging"
 	"github.com/krzachariassen/ZTDP/internal/resources"
 )
 
+// ServiceService - ALL domain logic for services (business logic, AI extraction, persistence)
 type ServiceService struct {
-	Graph *graph.GlobalGraph
+	Graph      *graph.GlobalGraph
+	aiProvider ai.AIProvider
+	eventBus   *events.EventBus
+	logger     *logging.Logger
+}
+
+// ServiceParams represents extracted parameters from AI parsing
+type ServiceDomainParams struct {
+	Action          string  `json:"action"`
+	ServiceName     string  `json:"service_name"`
+	ApplicationName string  `json:"application_name"`
+	Port            int     `json:"port"`
+	Public          bool    `json:"public"`
+	Version         string  `json:"version"`
+	Details         string  `json:"details"`
+	Confidence      float64 `json:"confidence"`
+	Clarification   string  `json:"clarification"`
 }
 
 func NewServiceService(g *graph.GlobalGraph) *ServiceService {
-	return &ServiceService{Graph: g}
+	return &ServiceService{
+		Graph:      g,
+		aiProvider: nil, // Will be set when AI-native methods are used
+		eventBus:   nil, // Will be set when needed
+		logger:     logging.GetLogger().ForComponent("service-domain"),
+	}
+}
+
+// NewAIServiceService creates AI-native service with all dependencies
+func NewAIServiceService(g *graph.GlobalGraph, aiProvider ai.AIProvider, eventBus *events.EventBus) *ServiceService {
+	return &ServiceService{
+		Graph:      g,
+		aiProvider: aiProvider,
+		eventBus:   eventBus,
+		logger:     logging.GetLogger().ForComponent("service-domain"),
+	}
+}
+
+// HandleServiceEvent - AI-native event handler (ALL domain logic)
+func (s *ServiceService) HandleServiceEvent(ctx context.Context, event *events.Event, userMessage string) (*events.Event, error) {
+	s.logger.Info("🔧 Service domain processing: %s", userMessage)
+
+	// Extract intent and parameters using AI (domain owns this)
+	params, err := s.ExtractServiceParameters(ctx, userMessage)
+	if err != nil {
+		return s.createErrorResponse(event, fmt.Sprintf("Failed to extract parameters: %v", err)), nil
+	}
+
+	s.logger.Info("🤖 AI extracted - action: %s, service: %s, app: %s, confidence: %.2f",
+		params.Action, params.ServiceName, params.ApplicationName, params.Confidence)
+
+	// Check confidence level
+	if params.Confidence < 0.7 {
+		return s.createClarificationResponse(event, params.Clarification), nil
+	}
+
+	// Route to appropriate handler based on AI-extracted action
+	switch params.Action {
+	case "create":
+		return s.handleCreateService(ctx, event, params)
+	case "list":
+		return s.handleListServices(ctx, event, params)
+	case "get", "show":
+		return s.handleGetService(ctx, event, params)
+	case "version":
+		return s.handleVersionService(ctx, event, params)
+	default:
+		return s.createErrorResponse(event, fmt.Sprintf("Unknown action: %s", params.Action)), nil
+	}
+}
+
+// ExtractServiceParameters - Service domain owns AI extraction
+func (s *ServiceService) ExtractServiceParameters(ctx context.Context, userMessage string) (*ServiceDomainParams, error) {
+	if s.aiProvider == nil {
+		return nil, fmt.Errorf("AI provider not available")
+	}
+
+	systemPrompt := `You are a service management assistant. Parse the user's request and extract the action and parameters.
+
+Available actions: list, create, update, delete, show, get, version
+
+Response format must be valid JSON:
+{
+  "action": "list|create|update|delete|show|get|version",
+  "service_name": "service name if specified or null",
+  "application_name": "application name if specified or null",
+  "port": 8080,
+  "public": true,
+  "version": "version if specified or null",
+  "details": "any additional context",
+  "confidence": 0.0-1.0,
+  "clarification": "what to ask if confidence < 0.7"
+}
+
+IMPORTANT: port must be a number (integer), not a string. If no port specified, use 0.
+IMPORTANT: public must be a boolean (true/false), not a string.
+
+Examples:
+- "list services for myapp" -> {"action": "list", "application_name": "myapp", "port": 0, "public": false, "confidence": 0.9}
+- "create service api in myapp" -> {"action": "create", "application_name": "myapp", "service_name": "api", "port": 0, "public": false, "confidence": 0.9}
+- "create service checkout-api for checkout application on port 8080 that is public facing" -> {"action": "create", "service_name": "checkout-api", "application_name": "checkout", "port": 8080, "public": true, "confidence": 0.95}
+- "show me the payment service details" -> {"action": "show", "service_name": "payment", "port": 0, "public": false, "confidence": 0.9}`
+
+	response, err := s.aiProvider.CallAI(ctx, systemPrompt, userMessage)
+	if err != nil {
+		return nil, fmt.Errorf("AI extraction failed: %w", err)
+	}
+
+	var params ServiceDomainParams
+	if err := json.Unmarshal([]byte(response), &params); err != nil {
+		return nil, fmt.Errorf("failed to parse AI response: %w", err)
+	}
+
+	return &params, nil
+}
+
+// AI-native action handlers
+func (s *ServiceService) handleCreateService(ctx context.Context, event *events.Event, params *ServiceDomainParams) (*events.Event, error) {
+	// Validate required fields
+	if params.ServiceName == "" {
+		return s.createErrorResponse(event, "service name is required"), nil
+	}
+	if params.ApplicationName == "" {
+		return s.createErrorResponse(event, "application name is required"), nil
+	}
+
+	// Create service data from AI-extracted parameters
+	serviceData := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"name": params.ServiceName,
+		},
+		"spec": map[string]interface{}{
+			"application": params.ApplicationName,
+		},
+	}
+
+	if params.Port > 0 {
+		serviceData["spec"].(map[string]interface{})["port"] = params.Port
+	}
+	if params.Public {
+		serviceData["spec"].(map[string]interface{})["public"] = true
+	}
+
+	// Use existing domain logic
+	result, err := s.CreateService(params.ApplicationName, serviceData)
+	if err != nil {
+		return s.createErrorResponse(event, fmt.Sprintf("Failed to create service: %v", err)), nil
+	}
+
+	// Emit domain event
+	if s.eventBus != nil {
+		s.eventBus.Emit("service", "service.created", params.ServiceName, map[string]interface{}{
+			"service_name":     params.ServiceName,
+			"application_name": params.ApplicationName,
+			"correlation_id":   event.Payload["correlation_id"],
+		})
+	}
+
+	return &events.Event{
+		Source:  "service-agent",
+		Subject: "service.response",
+		Payload: map[string]interface{}{
+			"status":         "success",
+			"message":        fmt.Sprintf("Service '%s' created successfully", params.ServiceName),
+			"service":        result,
+			"correlation_id": event.Payload["correlation_id"],
+			"request_id":     event.Payload["request_id"],
+		},
+	}, nil
+}
+
+func (s *ServiceService) handleListServices(ctx context.Context, event *events.Event, params *ServiceDomainParams) (*events.Event, error) {
+	appName := params.ApplicationName
+	if appName == "" {
+		// List all services if no app specified
+		appName = ""
+	}
+
+	services, err := s.ListServices(appName)
+	if err != nil {
+		return s.createErrorResponse(event, fmt.Sprintf("Failed to list services: %v", err)), nil
+	}
+
+	return &events.Event{
+		Source:  "service-agent",
+		Subject: "service.response",
+		Payload: map[string]interface{}{
+			"status":         "success",
+			"services":       services,
+			"count":          len(services),
+			"correlation_id": event.Payload["correlation_id"],
+			"request_id":     event.Payload["request_id"],
+		},
+	}, nil
+}
+
+func (s *ServiceService) handleGetService(ctx context.Context, event *events.Event, params *ServiceDomainParams) (*events.Event, error) {
+	if params.ServiceName == "" {
+		return s.createErrorResponse(event, "service name is required"), nil
+	}
+
+	service, err := s.GetService(params.ApplicationName, params.ServiceName)
+	if err != nil {
+		return s.createErrorResponse(event, fmt.Sprintf("Failed to get service: %v", err)), nil
+	}
+
+	return &events.Event{
+		Source:  "service-agent",
+		Subject: "service.response",
+		Payload: map[string]interface{}{
+			"status":         "success",
+			"service":        service,
+			"correlation_id": event.Payload["correlation_id"],
+			"request_id":     event.Payload["request_id"],
+		},
+	}, nil
+}
+
+func (s *ServiceService) handleVersionService(ctx context.Context, event *events.Event, params *ServiceDomainParams) (*events.Event, error) {
+	if params.ServiceName == "" {
+		return s.createErrorResponse(event, "service name is required"), nil
+	}
+
+	versions, err := s.ListServiceVersions(params.ServiceName)
+	if err != nil {
+		return s.createErrorResponse(event, fmt.Sprintf("Failed to get service versions: %v", err)), nil
+	}
+
+	return &events.Event{
+		Source:  "service-agent",
+		Subject: "service.response",
+		Payload: map[string]interface{}{
+			"status":         "success",
+			"service":        params.ServiceName,
+			"versions":       versions,
+			"count":          len(versions),
+			"correlation_id": event.Payload["correlation_id"],
+			"request_id":     event.Payload["request_id"],
+		},
+	}, nil
+}
+
+// Helper methods for responses
+func (s *ServiceService) createErrorResponse(originalEvent *events.Event, errorMsg string) *events.Event {
+	return &events.Event{
+		Source:  "service-agent",
+		Subject: "service.error",
+		Payload: map[string]interface{}{
+			"status":         "error",
+			"message":        errorMsg,
+			"correlation_id": originalEvent.Payload["correlation_id"],
+			"request_id":     originalEvent.Payload["request_id"],
+		},
+	}
+}
+
+func (s *ServiceService) createClarificationResponse(originalEvent *events.Event, clarification string) *events.Event {
+	return &events.Event{
+		Source:  "service-agent",
+		Subject: "service.clarification",
+		Payload: map[string]interface{}{
+			"status":         "clarification",
+			"message":        clarification,
+			"correlation_id": originalEvent.Payload["correlation_id"],
+			"request_id":     originalEvent.Payload["request_id"],
+		},
+	}
 }
 
 // CreateService creates a new service from raw data

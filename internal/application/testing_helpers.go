@@ -68,24 +68,6 @@ func (h *TestHelpers) CreateTestApplicationService(t *testing.T) *Service {
 	return NewService(h.Graph, h.AIProvider)
 }
 
-// CreateTestServiceService creates a service service for testing
-func (h *TestHelpers) CreateTestServiceService(t *testing.T) *ServiceService {
-	t.Helper()
-	return NewServiceService(h.Graph)
-}
-
-// CreateTestEnvironmentService creates an environment service for testing
-func (h *TestHelpers) CreateTestEnvironmentService(t *testing.T) *EnvironmentService {
-	t.Helper()
-	return NewEnvironmentService(h.Graph)
-}
-
-// CreateTestReleaseService creates a release service for testing
-func (h *TestHelpers) CreateTestReleaseService(t *testing.T) *ReleaseService {
-	t.Helper()
-	return NewReleaseService(h.Graph)
-}
-
 // CreateTestApplication creates a test application in the graph
 func (h *TestHelpers) CreateTestApplication(t *testing.T, name string) *contracts.ApplicationContract {
 	t.Helper()
@@ -107,76 +89,6 @@ func (h *TestHelpers) CreateTestApplication(t *testing.T, name string) *contract
 	h.Graph.AddNode(node)
 
 	return app
-}
-
-// CreateTestService creates a test service in the graph
-func (h *TestHelpers) CreateTestService(t *testing.T, appName, serviceName string) *contracts.ServiceContract {
-	t.Helper()
-
-	service := &contracts.ServiceContract{
-		Metadata: contracts.Metadata{
-			Name:  serviceName,
-			Owner: "test-team",
-		},
-		Spec: contracts.ServiceSpec{
-			Application: appName,
-			Port:        8080,
-			Public:      true,
-		},
-	}
-
-	// Use the graph's AddNode method with resolved contract
-	node, err := graph.ResolveContract(*service)
-	require.NoError(t, err)
-	h.Graph.AddNode(node)
-
-	return service
-}
-
-// CreateTestEnvironment creates a test environment in the graph
-func (h *TestHelpers) CreateTestEnvironment(t *testing.T, envName string) *contracts.EnvironmentContract {
-	t.Helper()
-
-	env := &contracts.EnvironmentContract{
-		Metadata: contracts.Metadata{
-			Name:  envName,
-			Owner: "test-team",
-		},
-		Spec: contracts.EnvironmentSpec{
-			Description: "Test environment",
-		},
-	}
-
-	// Use the graph's AddNode method with resolved contract
-	node, err := graph.ResolveContract(*env)
-	require.NoError(t, err)
-	h.Graph.AddNode(node)
-
-	return env
-}
-
-// CreateTestRelease creates a test release in the graph
-func (h *TestHelpers) CreateTestRelease(t *testing.T, appName, releaseName string) *contracts.ReleaseContract {
-	t.Helper()
-
-	release := &contracts.ReleaseContract{
-		Metadata: contracts.Metadata{
-			Name:  releaseName,
-			Owner: "test-team",
-		},
-		Spec: contracts.ReleaseSpec{
-			Version:         "1.0.0",
-			Application:     appName,
-			ServiceVersions: []string{appName + "-service:1.0.0"},
-		},
-	}
-
-	// Use the graph's AddNode method with resolved contract
-	node, err := graph.ResolveContract(*release)
-	require.NoError(t, err)
-	h.Graph.AddNode(node)
-
-	return release
 }
 
 // CleanupTestData removes all test data from the graph

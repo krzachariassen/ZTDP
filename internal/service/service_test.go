@@ -1,4 +1,4 @@
-package environment
+package service
 
 import (
 	"context"
@@ -31,42 +31,33 @@ func (m *MockAIProvider) Close() error {
 	return nil
 }
 
-func TestEnvironmentService_ExtractEnvironmentParameters(t *testing.T) {
+func TestServiceService_ExtractServiceParameters(t *testing.T) {
 	tests := []struct {
 		name        string
 		userMessage string
-		expected    EnvironmentDomainParams
+		expected    ServiceDomainParams
 		wantErr     bool
 	}{
 		{
-			name:        "create environment with full details",
-			userMessage: "Create an environment called production owned by devops team for the main application",
-			expected: EnvironmentDomainParams{
+			name:        "create service with full details",
+			userMessage: "Create a service called checkout-api for the checkout application on port 8080 that is public facing",
+			expected: ServiceDomainParams{
 				Action:          "create",
-				EnvironmentName: "production",
-				Owner:           "devops",
-				Description:     "main application",
-				EnvType:         "production",
+				ServiceName:     "checkout-api",
+				ApplicationName: "checkout",
+				Port:            8080,
+				Public:          true,
 				Confidence:      0.95,
 			},
 			wantErr: false,
 		},
 		{
-			name:        "list environments",
-			userMessage: "list all environments",
-			expected: EnvironmentDomainParams{
-				Action:     "list",
-				Confidence: 0.9,
-			},
-			wantErr: false,
-		},
-		{
-			name:        "show specific environment",
-			userMessage: "show the staging environment",
-			expected: EnvironmentDomainParams{
-				Action:          "show",
-				EnvironmentName: "staging",
-				Confidence:      0.85,
+			name:        "list services for application",
+			userMessage: "list services for myapp",
+			expected: ServiceDomainParams{
+				Action:          "list",
+				ApplicationName: "myapp",
+				Confidence:      0.9,
 			},
 			wantErr: false,
 		},
@@ -81,15 +72,15 @@ func TestEnvironmentService_ExtractEnvironmentParameters(t *testing.T) {
 			expectedResponse, _ := json.Marshal(tt.expected)
 			mockAI.expectedResponse = string(expectedResponse)
 
-			// Create environment service with AI provider
-			service := NewAIEnvironmentService(nil, mockAI, &events.EventBus{})
+			// Create service with AI provider
+			service := NewAIServiceService(nil, mockAI, &events.EventBus{})
 
 			// Debug: Print what we're testing
 			t.Logf("Testing with message: %s", tt.userMessage)
 			t.Logf("Expected response: %s", mockAI.expectedResponse)
 
 			// Test parameter extraction
-			params, err := service.ExtractEnvironmentParameters(context.Background(), tt.userMessage)
+			params, err := service.ExtractServiceParameters(context.Background(), tt.userMessage)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -98,14 +89,14 @@ func TestEnvironmentService_ExtractEnvironmentParameters(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected.Action, params.Action)
-			assert.Equal(t, tt.expected.EnvironmentName, params.EnvironmentName)
-			assert.Equal(t, tt.expected.Owner, params.Owner)
+			assert.Equal(t, tt.expected.ServiceName, params.ServiceName)
+			assert.Equal(t, tt.expected.ApplicationName, params.ApplicationName)
 
-			if tt.expected.Description != "" {
-				assert.Equal(t, tt.expected.Description, params.Description)
+			if tt.expected.Port > 0 {
+				assert.Equal(t, tt.expected.Port, params.Port)
 			}
-			if tt.expected.EnvType != "" {
-				assert.Equal(t, tt.expected.EnvType, params.EnvType)
+			if tt.expected.Public {
+				assert.Equal(t, tt.expected.Public, params.Public)
 			}
 		})
 	}

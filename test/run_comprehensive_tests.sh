@@ -104,12 +104,84 @@ function test_ai_chat() {
     body=$(echo "$response" | sed -e 's/HTTPSTATUS:.*//g')
     
     if [ "$http_code" = "200" ]; then
-        print_status "SUCCESS" "✓ AI Chat - $test_name"
-        PASSED_TESTS=$((PASSED_TESTS + 1))
+        # Check for error indicators in the AI response
+        ai_message=$(echo "$body" | jq -r '.message // .answer // ""' 2>/dev/null)
+        
+        if [[ "$ai_message" == *"❌"* ]] || [[ "$ai_message" == *"Failed to"* ]] || [[ "$ai_message" == *"requires"* ]] || [[ "$ai_message" == *"is required"* ]]; then
+            print_status "ERROR" "✗ AI Chat failed - $test_name"
+            echo "Error: $ai_message"
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+        else
+            print_status "SUCCESS" "✓ AI Chat - $test_name"
+            PASSED_TESTS=$((PASSED_TESTS + 1))
+            # Show AI response
+            echo "AI Response: $ai_message"
+        fi
+    else
+        print_status "ERROR" "✗ AI Chat failed - $test_name"
+        echo "Response: $body"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+    fi
+    
+    sleep $DELAY
+}
+
+# Function to test AI endpoint with persistence validation
+function test_ai_chat_with_validation() {
+    local message=$1
+    local test_name=$2
+    local validation_type=$3  # "create_app", "create_env", "list_apps", etc.
+    local expected_item=$4    # Item name to validate
+    
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    
+    print_status "INFO" "Test $TOTAL_TESTS: $test_name"
+    
+    # Make the AI request
+    response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "$BASE_URL/v3/ai/chat" \
+              -H "Content-Type: application/json" \
+              -d "{\"message\": \"$message\"}")
+    
+    http_code=$(echo "$response" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    body=$(echo "$response" | sed -e 's/HTTPSTATUS:.*//g')
+    
+    if [ "$http_code" = "200" ]; then
+        # Check AI response status and message for errors
+        ai_status=$(echo "$body" | jq -r '.actions[0].result.agent_response.status // "unknown"' 2>/dev/null)
+        ai_message=$(echo "$body" | jq -r '.message // .answer // ""' 2>/dev/null)
+        
+        # Check if the response contains error indicators
+        if [[ "$ai_message" == *"❌"* ]] || [[ "$ai_message" == *"Failed to"* ]] || [[ "$ai_message" == *"requires"* ]] || [[ "$ai_message" == *"is required"* ]]; then
+            print_status "ERROR" "✗ AI Chat agent failed - $test_name"
+            echo "Error message: $ai_message"
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+        elif [ "$ai_status" = "success" ]; then
+            # Validate persistence if needed
+            if [ "$validation_type" = "create_app" ] && [ -n "$expected_item" ]; then
+                sleep 2  # Allow time for persistence
+                graph_response=$(curl -s "$BASE_URL/v1/graph")
+                if echo "$graph_response" | jq -e ".nodes[\"$expected_item\"]" > /dev/null 2>&1; then
+                    print_status "SUCCESS" "✓ AI Chat + Persistence - $test_name"
+                    PASSED_TESTS=$((PASSED_TESTS + 1))
+                else
+                    print_status "ERROR" "✗ AI Chat succeeded but data not persisted - $test_name"
+                    echo "Expected item '$expected_item' not found in graph"
+                    FAILED_TESTS=$((FAILED_TESTS + 1))
+                    return
+                fi
+            else
+                print_status "SUCCESS" "✓ AI Chat - $test_name"
+                PASSED_TESTS=$((PASSED_TESTS + 1))
+            fi
+        else
+            print_status "ERROR" "✗ AI Chat agent failed - $test_name (agent status: $ai_status)"
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+        fi
+        
         # Show AI response
         echo "AI Response: $(echo "$body" | jq -r '.message // .answer // "No message field"' 2>/dev/null || echo "$body")"
     else
-        print_status "ERROR" "✗ AI Chat failed - $test_name"
+        print_status "ERROR" "✗ AI Chat HTTP failed - $test_name"
         echo "Response: $body"
         FAILED_TESTS=$((FAILED_TESTS + 1))
     fi
@@ -138,15 +210,15 @@ function main() {
     # Phase 2: AI-Native Application Creation
     print_status "HEADER" "Phase 2: AI-Native Application Creation"
     
-    # Create applications via AI
-    test_ai_chat "Create a new application called checkout owned by team-x. It is an e-commerce checkout application with tags payments and core." "Create checkout application"
+    # Create applications via AI with persistence validation
+    test_ai_chat_with_validation "Create a new application called checkout owned by team-x. It is an e-commerce checkout application with tags payments and core." "Create checkout application" "create_app" "checkout"
     
-    test_ai_chat "Create a payment processing application named payment for team-y with financial and payments tags." "Create payment application"
+    test_ai_chat_with_validation "Create a payment processing application named payment for team-y with financial and payments tags." "Create payment application" "create_app" "payment"
     
-    test_ai_chat "Create a monitoring application for the platform-team with observability and platform tags." "Create monitoring application"
+    test_ai_chat_with_validation "Create a monitoring application for the platform-team with observability and platform tags." "Create monitoring application" "create_app" "monitoring"
     
     # Verify applications created
-    test_ai_chat "List all applications" "show applications" "Verify applications created"
+    test_ai_chat "List all applications" "show applications"
     
     # Phase 3: AI-Native Environment Creation
     print_status "HEADER" "Phase 3: AI-Native Environment Creation"

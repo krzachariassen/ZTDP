@@ -16,3 +16,5 @@ I can also see that we have resource_type created without edge to resource_regis
 		AllowedTypes: []string{"owns"},
 	},
 
+
+Deployment agent is using MockAIProvider{} should use real AIProvider interface, not the mock one.

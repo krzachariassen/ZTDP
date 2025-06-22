@@ -2,13 +2,37 @@ package policies
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/krzachariassen/ZTDP/internal/agentFramework"
 	"github.com/krzachariassen/ZTDP/internal/agentRegistry"
+	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
+	"github.com/stretchr/testify/assert"
 )
+
+// getRealAIProvider creates a real AI provider for testing
+func getRealAIProvider(t *testing.T) ai.AIProvider {
+	// Check if we have OpenAI API key for testing
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		t.Skip("OPENAI_API_KEY not set - skipping AI integration tests")
+	}
+
+	// Use default config which includes proper BaseURL
+	config := ai.DefaultOpenAIConfig()
+	config.APIKey = apiKey
+	config.Model = "gpt-4" // Use a reliable model
+
+	provider, err := ai.NewOpenAIProvider(config, apiKey)
+	if err != nil {
+		t.Fatalf("Failed to create OpenAI provider: %v", err)
+	}
+
+	return provider
+}
 
 // Test framework-based PolicyAgent implementation
 func TestFrameworkPolicyAgent_AgentInterface(t *testing.T) {
@@ -226,6 +250,87 @@ func TestFrameworkPolicyAgent_BusinessLogicIntegration(t *testing.T) {
 	})
 }
 
+// TestPolicyAgentEndToEndScenario tests the policy agent with real AI scenarios
+func TestPolicyAgentEndToEndScenario(t *testing.T) {
+	// Arrange
+	registry := agentRegistry.NewInMemoryAgentRegistry()
+	eventBus := events.NewEventBus(nil, false)
+	backend := graph.NewMemoryGraph()
+	globalGraph := graph.NewGlobalGraph(backend)
+	graphStore := &graph.GraphStore{}
+	mockPolicyStore := &MockPolicyStore{policies: make(map[string]*Policy)}
+
+	// Create agent with real AI (created internally)
+	baseAgent, err := NewPolicyAgent(graphStore, globalGraph, mockPolicyStore, eventBus, registry)
+	assert.NoError(t, err, "Failed to create policy agent")
+
+	agent, ok := baseAgent.(*agentFramework.BaseAgent)
+	assert.True(t, ok, "Expected BaseAgent")
+
+	// Test cases that require real AI processing
+	testCases := []struct {
+		name        string
+		userMessage string
+		expectType  string
+	}{
+		{
+			name:        "Policy evaluation request",
+			userMessage: "Evaluate deployment policy for app test-app to environment production",
+			expectType:  "policy_evaluation",
+		},
+		{
+			name:        "Compliance check request",
+			userMessage: "Check if deployment of sensitive-app to production violates security policies",
+			expectType:  "compliance_check",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create event for policy evaluation
+			policyEvent := &events.Event{
+				Type:    events.EventTypeRequest,
+				Source:  "ai-chat",
+				Subject: "policy.evaluation",
+				Payload: map[string]interface{}{
+					"intent":         "policy evaluation",
+					"user_message":   tc.userMessage,
+					"correlation_id": "policy-test-123",
+					"request_id":     "req-policy-456",
+				},
+			}
+
+			// Act - Process the event (real AI will be used internally)
+			response, err := agent.ProcessEvent(context.Background(), policyEvent)
+
+			// Assert
+			t.Logf("🔍 User Message: %s", tc.userMessage)
+			t.Logf("🔍 Response Error: %v", err)
+			if response != nil {
+				t.Logf("🔍 Response Subject: %s", response.Subject)
+				t.Logf("🔍 Response Payload: %+v", response.Payload)
+
+				if status, ok := response.Payload["status"]; ok {
+					t.Logf("🔍 Status: %v", status)
+				}
+			}
+
+			// The policy agent should process the request (success, error, or clarification)
+			assert.NoError(t, err, "Expected no error processing policy event")
+			assert.NotNil(t, response, "Expected response")
+
+			// Verify response structure
+			if response != nil {
+				if status, ok := response.Payload["status"].(string); ok {
+					assert.Contains(t, []string{"success", "error", "clarification"}, status,
+						"Expected valid status from policy processing")
+					t.Logf("✅ Policy agent processed with status: %s", status)
+				}
+			}
+		})
+	}
+}
+
 // Helper function to create test policy agent using framework
 func createTestFrameworkPolicyAgent(t *testing.T) agentRegistry.AgentInterface {
 	// Create test components
@@ -233,12 +338,13 @@ func createTestFrameworkPolicyAgent(t *testing.T) agentRegistry.AgentInterface {
 	realEventBus := events.NewEventBus(nil, false)
 	registry := agentRegistry.NewInMemoryAgentRegistry()
 
-	// Create memory graph
+	// Create memory graph and graph store
 	backend := graph.NewMemoryGraph()
 	globalGraph := graph.NewGlobalGraph(backend)
+	graphStore := &graph.GraphStore{} // Create a graph store for the policy agent
 
-	// Create agent using new framework
-	policyAgent, err := NewPolicyAgent(nil, globalGraph, mockPolicyStore, realEventBus, registry)
+	// Create agent using new framework (AI provider will be created internally)
+	policyAgent, err := NewPolicyAgent(graphStore, globalGraph, mockPolicyStore, realEventBus, registry)
 	if err != nil {
 		t.Fatalf("Failed to create framework policy agent: %v", err)
 	}

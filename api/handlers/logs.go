@@ -238,13 +238,10 @@ func LogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Ping loop
-	for {
-		select {
-		case <-ticker.C:
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				logger.Debug("WebSocket ping failed: %v", err)
-				return
-			}
+	for range ticker.C {
+		if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			logger.Debug("WebSocket ping failed: %v", err)
+			return
 		}
 	}
 }

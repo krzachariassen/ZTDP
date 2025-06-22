@@ -36,10 +36,10 @@ func SetupRoutes(r *chi.Mux) {
 		// // v1.Post("/applications/{app_name}/deploy", handlers.DeployApplication)
 
 		// Application-Environment Policies
-		v1.Post("/applications/{app_name}/environments/{env_name}/allowed", handlers.LinkAppAllowedInEnvironment)
-		v1.Get("/applications/{app_name}/environments/allowed", handlers.ListAllowedEnvironments)
-		v1.Put("/applications/{app_name}/environments/allowed", handlers.UpdateAllowedEnvironments)
-		v1.Post("/applications/{app_name}/environments/allowed", handlers.AddAllowedEnvironments)
+		// v1.Post("/applications/{app_name}/environments/{env_name}/allowed", handlers.LinkAppAllowedInEnvironment)
+		// v1.Get("/applications/{app_name}/environments/allowed", handlers.ListAllowedEnvironments)
+		// v1.Put("/applications/{app_name}/environments/allowed", handlers.UpdateAllowedEnvironments)
+		// v1.Post("/applications/{app_name}/environments/allowed", handlers.AddAllowedEnvironments)
 
 		// =============================================================================
 		// SERVICE MANAGEMENT
@@ -56,8 +56,8 @@ func SetupRoutes(r *chi.Mux) {
 		// =============================================================================
 		// ENVIRONMENT MANAGEMENT
 		// =============================================================================
-		v1.Post("/environments", handlers.CreateEnvironment)
-		v1.Get("/environments", handlers.ListEnvironments)
+		// v1.Post("/environments", handlers.CreateEnvironment)
+		// v1.Get("/environments", handlers.ListEnvironments)
 
 		// =============================================================================
 		// RESOURCE MANAGEMENT
@@ -89,7 +89,6 @@ func SetupRoutes(r *chi.Mux) {
 		// v1.Post("/ai/troubleshoot", handlers.AITroubleshootDeployment)  // Standalone diagnostic capability
 		// v1.Post("/ai/proactive-optimize", handlers.AIProactiveOptimize) // Available in operations.go
 		// v1.Post("/ai/learn-deployment", handlers.AILearnFromDeployment) // Available in operations.go
-		v1.Post("/ai/chat", handlers.AIChatWithPlatform)         // Available in ai.go
 		v1.Get("/ai/provider/status", handlers.AIProviderStatus) // Available in ai.go
 		v1.Get("/ai/metrics", handlers.AIMetrics)                // Available in ai.go
 

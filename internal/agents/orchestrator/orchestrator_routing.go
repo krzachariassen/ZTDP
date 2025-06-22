@@ -75,6 +75,13 @@ func (o *Orchestrator) orchestrateViaIntentBasedAgents(ctx context.Context, inte
 		"source_agent":   "orchestrator",
 	}
 
+	// Extract user_message from context to top-level for agent compatibility
+	if userMessage, ok := context["user_message"].(string); ok {
+		eventPayload["user_message"] = userMessage
+		eventPayload["message"] = userMessage // Some agents expect "message" field
+		eventPayload["query"] = userMessage   // Some agents expect "query" field
+	}
+
 	// Targeted event emission using specific routing key for this agent
 	if err := o.eventBus.Emit(events.EventTypeRequest, "orchestrator", routingKey, eventPayload); err != nil {
 		return nil, fmt.Errorf("failed to emit intent request to routing key %s for agent %s: %w", routingKey, selectedAgent.ID, err)
