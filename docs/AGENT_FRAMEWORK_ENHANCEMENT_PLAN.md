@@ -1,5 +1,58 @@
 # Agent Framework Enhancement Plan
 
+## CRITICAL UPDATE (June 23, 2025): Current State Assessment
+
+### What Actually Exists in the Codebase
+
+**Real API Endpoints**:
+```bash
+# What actually works
+curl -X POST http://localhost:8080/v3/ai/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "create application ecommerce with a api service"}'
+
+# Other real endpoints
+GET  /v1/health
+GET  /v1/status  
+GET  /v1/graph
+GET  /v1/ai/provider/status
+GET  /v1/ai/metrics
+```
+
+**What Doesn't Exist**:
+- `/agents/orchestrator/process` - This endpoint doesn't exist
+- Most orchestration functionality is theoretical
+- Multi-step workflows are not implemented
+
+### Actual Framework Status
+
+**✅ What's Working**:
+- Basic agent framework in `/internal/agentFramework/`
+- Agent registration system
+- Event-driven architecture
+- Simple AI chat interface at `/v3/ai/chat`
+
+**❌ What's Missing**:
+- Multi-step orchestration (doesn't exist yet)
+- Complex workflow decomposition
+- Agent-to-agent communication
+- Most advanced features are planned but not implemented
+
+### Real Issues to Address
+
+#### 1. Framework Enhancement Priorities
+Based on what actually exists, focus on:
+- Improving the existing agent framework
+- Adding missing utilities to reduce boilerplate
+- Standardizing agent patterns that are actually used
+
+#### 2. Orchestration Development
+- Multi-step workflows need to be built from scratch
+- No existing orchestration engine to "fix"
+- Need to implement basic workflow planning first
+
+---
+
 ## Overview
 
 Based on the Application Agent refactoring and best practices analysis, this document outlines specific improvements needed for the agent framework to make AI-native agent development easier, more consistent, and less error-prone.
@@ -1072,11 +1125,628 @@ func TestClarificationFlow_MultiAgent(t *testing.T) {
 
 **Priority**: **P0 (CRITICAL)** - This breaks complex multi-agent workflows and makes the system unreliable for real-world use cases.
 
+### 0.7. Multi-Step Orchestration Framework (CRITICAL)
+
+**Problem Discovered**: Current orchestrator only handles single intents, but real AI-native interactions require complex multi-step workflows.
+
+**Real-World Example**: User says "create application ecommerce with a api service to handle payments" 
+- **Current Behavior**: Only creates application, ignores service requirement entirely
+- **Expected Behavior**: Intelligent orchestration of multiple agents in correct dependency order
+
+**Root Cause**: No framework support for:
+- Complex intent decomposition
+- Multi-step workflow planning  
+- Cross-agent dependency management
+- Sequential execution with state preservation
+
+**Framework Solution Needed**: Intelligent orchestration engine:
+
+```go
+// Framework enhancement: multi-step orchestration
+type OrchestrationPlan struct {
+    OriginalIntent string                 `json:"original_intent"`
+    Steps          []OrchestrationStep    `json:"steps"`
+    Dependencies   map[string][]string    `json:"dependencies"`
+    State          map[string]interface{} `json:"state"`
+    Status         string                 `json:"status"`
+}
+
+type OrchestrationStep struct {
+    ID           string                 `json:"id"`
+    Agent        string                 `json:"agent"`
+    Action       string                 `json:"action"`
+    Parameters   map[string]interface{} `json:"parameters"`
+    DependsOn    []string               `json:"depends_on"`
+    Status       string                 `json:"status"`
+    Result       interface{}            `json:"result,omitempty"`
+    Error        string                 `json:"error,omitempty"`
+}
+
+// Framework orchestration engine
+type OrchestrationEngine struct {
+    orchestrator *Orchestrator
+    agents       map[string]AgentInterface
+    planner      *WorkflowPlanner
+}
+
+func (oe *OrchestrationEngine) PlanWorkflow(intent string) (*OrchestrationPlan, error)
+func (oe *OrchestrationEngine) ExecutePlan(ctx context.Context, plan *OrchestrationPlan) (*OrchestrationResult, error)
+func (oe *OrchestrationEngine) HandleStepFailure(ctx context.Context, plan *OrchestrationPlan, failedStep string) error
+```
+
+**Usage in Orchestrator**:
+```go
+// Enhanced orchestrator with multi-step planning
+func (o *Orchestrator) HandleComplexIntent(ctx context.Context, userMessage string) (*events.Event, error) {
+    // 1. Detect if this requires orchestration
+    if o.isComplexIntent(userMessage) {
+        // 2. Create execution plan
+        plan, err := o.orchestrationEngine.PlanWorkflow(userMessage)
+        if err != nil {
+            return o.createErrorResponse(event, err), nil
+        }
+        
+        // 3. Execute plan with dependency management
+        result, err := o.orchestrationEngine.ExecutePlan(ctx, plan)
+        if err != nil {
+            return o.createErrorResponse(event, err), nil
+        }
+        
+        return o.createOrchestrationResponse(event, result), nil
+    }
+    
+    // Fallback to single-agent routing
+    return o.routeToSingleAgent(ctx, userMessage)
+}
+```
+
+**Intelligent Intent Decomposition**:
+```go
+// Enhanced AI-powered workflow planning
+type WorkflowPlanner struct {
+    aiProvider ai.AIProvider
+    agentRegistry AgentRegistry
+}
+
+func (wp *WorkflowPlanner) AnalyzeIntent(intent string) (*IntentAnalysis, error) {
+    systemPrompt := `Analyze this user intent and determine if it requires multiple steps:
+
+    User Intent: "{{.Intent}}"
+    
+    Available Agents:
+    - application-agent: Create, list, manage applications
+    - service-agent: Create, list, manage services (requires application)
+    - environment-agent: Create, list, manage environments
+    - deployment-agent: Deploy applications to environments
+    - policy-agent: Create and enforce policies
+    
+    Determine:
+    1. Is this a single-step or multi-step request?
+    2. What agents are needed and in what order?
+    3. What are the dependencies between steps?
+    4. What parameters are needed for each step?
+    
+    Response format:
+    {
+      "complexity": "single|multi",
+      "steps": [
+        {
+          "agent": "application-agent",
+          "action": "create",
+          "parameters": {"name": "ecommerce"},
+          "depends_on": []
+        },
+        {
+          "agent": "service-agent", 
+          "action": "create",
+          "parameters": {"name": "api", "application": "ecommerce", "purpose": "payments"},
+          "depends_on": ["step-1"]
+        }
+      ]
+    }`
+    
+    // AI analyzes intent and creates orchestration plan
+    response, err := wp.aiProvider.CallAI(ctx, systemPrompt, intent)
+    return wp.parseIntentAnalysis(response)
+}
+```
+
+**Real-World Test Cases**:
+```go
+// Framework test cases for complex orchestration
+func TestOrchestration_ComplexIntents(t *testing.T) {
+    tests := []struct {
+        name           string
+        userIntent     string
+        expectedSteps  int
+        expectedAgents []string
+        expectedOrder  []string
+    }{
+        {
+            name: "application_with_service",
+            userIntent: "create application ecommerce with a api service to handle payments",
+            expectedSteps: 2,
+            expectedAgents: []string{"application-agent", "service-agent"},
+            expectedOrder: []string{"create_application", "create_service"},
+        },
+        {
+            name: "full_deployment_workflow", 
+            userIntent: "create application myapp, add a web service, create production environment, and deploy it",
+            expectedSteps: 4,
+            expectedAgents: []string{"application-agent", "service-agent", "environment-agent", "deployment-agent"},
+            expectedOrder: []string{"create_application", "create_service", "create_environment", "deploy"},
+        },
+        {
+            name: "policy_aware_deployment",
+            userIntent: "deploy myapp to production but check policies first",
+            expectedSteps: 3,
+            expectedAgents: []string{"policy-agent", "deployment-agent"},
+            expectedOrder: []string{"check_policies", "create_deployment_plan", "execute_deployment"},
+        },
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            orchestrator := setupTestOrchestrator(t)
+            
+            // Analyze intent
+            plan, err := orchestrator.PlanWorkflow(tt.userIntent)
+            assert.NoError(t, err)
+            assert.Equal(t, tt.expectedSteps, len(plan.Steps))
+            
+            // Verify correct agents involved
+            actualAgents := extractAgentsFromPlan(plan)
+            assert.ElementsMatch(t, tt.expectedAgents, actualAgents)
+            
+            // Execute plan
+            result, err := orchestrator.ExecutePlan(ctx, plan)
+            assert.NoError(t, err)
+            assert.Equal(t, "completed", result.Status)
+            
+            // Verify all steps completed successfully
+            for _, step := range plan.Steps {
+                assert.Equal(t, "completed", step.Status)
+                assert.Empty(t, step.Error)
+            }
+        })
+    }
+}
+```
+
+**State Management Across Steps**:
+```go
+// Framework enhancement: cross-step state management
+type OrchestrationState struct {
+    workflow     *OrchestrationPlan
+    stepResults  map[string]interface{}
+    sharedState  map[string]interface{}
+}
+
+func (os *OrchestrationState) GetStepResult(stepID string) interface{}
+func (os *OrchestrationState) SetSharedValue(key string, value interface{})
+func (os *OrchestrationState) GetSharedValue(key string) interface{}
+func (os *OrchestrationState) GetParametersForStep(stepID string) map[string]interface{}
+
+// Usage in orchestration execution
+func (oe *OrchestrationEngine) executeStep(ctx context.Context, step *OrchestrationStep, state *OrchestrationState) error {
+    // Resolve parameters using state from previous steps
+    parameters := state.GetParametersForStep(step.ID)
+    
+    // Example: Service creation uses application name from previous step
+    if step.Agent == "service-agent" && step.Action == "create" {
+        if appResult := state.GetStepResult("create_application"); appResult != nil {
+            parameters["application_name"] = appResult.(*ApplicationResult).Name
+        }
+    }
+    
+    // Execute step with resolved parameters
+    result, err := oe.executeAgentStep(ctx, step.Agent, step.Action, parameters)
+    if err != nil {
+        return err
+    }
+    
+    // Store result for subsequent steps
+    state.stepResults[step.ID] = result
+    return nil
+}
+```
+
+**Error Recovery and Rollback**:
+```go
+// Framework enhancement: orchestration error recovery
+type RollbackHandler func(ctx context.Context, completedSteps []OrchestrationStep) error
+
+func (oe *OrchestrationEngine) WithRollback(handler RollbackHandler) *OrchestrationEngine
+func (oe *OrchestrationEngine) RollbackPlan(ctx context.Context, plan *OrchestrationPlan, failedStep string) error
+
+// Example: If service creation fails, remove the application
+func applicationServiceRollback(ctx context.Context, completedSteps []OrchestrationStep) error {
+    for _, step := range completedSteps {
+        if step.Agent == "application-agent" && step.Action == "create" {
+            // Rollback application creation
+            return deleteApplication(step.Parameters["name"].(string))
+        }
+    }
+    return nil
+}
+```
+
+**Implementation Requirements**:
+
+1. **AI-Powered Intent Analysis**: Orchestrator must understand complex, multi-step user intents
+2. **Dependency Resolution**: Automatic ordering of steps based on agent capabilities and dependencies  
+3. **State Preservation**: Results from earlier steps available to later steps
+4. **Partial Failure Handling**: Rollback mechanisms for failed orchestrations
+5. **Progress Tracking**: Real-time status updates for long-running orchestrations
+6. **Agent Communication**: Seamless parameter passing between different agents
+
+**Priority**: **P0 (CRITICAL)** - This is essential for true AI-native platform behavior and differentiates us from simple agent routing.
+
 ### Priority Ranking Based on Real-World Impact
 
-1. **P0 (CRITICAL)**: Event Field Validation - Caused silent failures
+1. **P0 (CRITICAL)**: Multi-Step Orchestration Framework - Core platform capability
+2. **P0 (CRITICAL)**: Event Field Validation - Caused silent failures
 2. **P0 (CRITICAL)**: Domain Boundary Enforcement - Caused routing failures  
 3. **P0 (CRITICAL)**: Multi-Agent Clarification Framework - Breaks complex workflows
 4. **P0 (CRITICAL)**: Event Handler Return Validation - Caused downstream failures
 5. **P1 (HIGH)**: Orchestrator Routing Validation - Required manual debugging
 6. **P1 (HIGH)**: Standardized Testing Pattern - Slowed development velocity
+
+## URGENT: Critical System Architecture Flaws Discovered
+
+### Test Results Summary (June 2025)
+
+**Enhanced Test Suite Results**: 39 passed, 10 failed - **Platform fundamentally broken**
+
+The comprehensive test suite revealed **CRITICAL ARCHITECTURAL FLAWS** that make the platform unusable:
+
+#### 1. **MULTI-STEP ORCHESTRATION COMPLETELY BROKEN** 🚨
+
+**Current State**: **CONFIRMED** - Orchestrator only processes single intents, ignoring complex multi-step workflows
+
+**Critical Evidence from Real Test**:
+- **User Request**: "create application blogplatform with a database service"
+- **Result**: Only `blogplatform` application created, **database service completely ignored**
+- **Graph State**: `blogplatform` exists with no associated services despite explicit request
+
+**Graph Analysis** (Current State):
+```json
+{
+  "nodes": {
+    "blogplatform": {"kind": "application"},  // ✅ Created
+    "ecommerce": {"kind": "application"},     // ✅ Created  
+    "payment-api": {"kind": "service"}        // ✅ Created for ecommerce
+  },
+  "edges": {
+    "ecommerce": [{"to": "payment-api", "type": "owns"}]  // ✅ Relationship exists
+  }
+}
+```
+
+**What's Working**: Single-step creation and relationship management
+**What's Broken**: Multi-step orchestration - only first intent processed
+
+**Root Cause**: Orchestrator lacks workflow decomposition and multi-agent coordination
+
+#### 2. **ENTITY TYPES AND RELATIONSHIPS ACTUALLY WORK** ✅
+
+**CORRECTION**: Previous analysis was incorrect - the system DOES create correct entity types and relationships:
+
+**Evidence**:
+- `payment-api` → `"kind": "service"` ✅ Correct type
+- `blogplatform` → `"kind": "application"` ✅ Correct type  
+- `ecommerce` → `payment-api` relationship exists ✅ Edge created properly
+
+**This means the core graph functionality is working - the issue is orchestration-level**
+
+#### 3. **MISSING DEPLOYMENT AGENT** 🚨
+
+**Error**: `"no agents found for intent 'deploy application'"`
+
+**Impact**: Cannot test policy enforcement, deployment workflows, or environment relationships
+
+**Required Fix**: Implement DeploymentAgent with proper registration
+
+#### 4. **POLICY ENFORCEMENT NON-FUNCTIONAL** 🚨
+
+**Current State**: Policies return generic "allowed" responses regardless of actual violations
+
+**Test Results**: 
+- Production deployment policy tests all pass when they should fail
+- No actual policy enforcement occurring
+
+**Required Fix**: Implement real policy evaluation with deny/allow decisions
+
+#### 5. **RESOURCE CATALOG COMPLETELY BROKEN** 🚨
+
+**Problems**:
+- Resources created as applications instead of resources
+- No resource-to-application linking
+- No proper resource catalog structure
+
+### CRITICAL ACTION REQUIRED
+
+**Priority P0 - Platform Breaking Issues**:
+
+1. **Fix Edge Creation** - Services MUST automatically link to applications
+2. **Fix Entity Types** - Enforce correct `kind` field based on entity type  
+3. **Implement DeploymentAgent** - Enable deployment and policy testing
+4. **Fix Policy Enforcement** - Implement real deny/allow decisions
+5. **Fix Resource Catalog** - Proper resource entities and linking
+
+**Without these fixes, the platform is not a "platform" - it's a collection of disconnected entities with no relationships, making it fundamentally unusable for any real-world scenarios.**
+
+## VI. Multi-Step Orchestration Framework
+
+### CRITICAL MISSING FEATURE: Cross-Agent Workflow Orchestration
+
+**Problem Identified**: The current orchestrator only processes single intents and cannot handle complex multi-step operations that require coordination between multiple agents.
+
+#### Real-World Evidence of Limitation
+
+**Test Case**: User request: "create application ecommerce with a api service to handle payments"
+
+**Current Behavior** (Log Evidence):
+```
+🎯 Detected operational intent: create application
+📤 Routing event to application-agent
+✅ Application created successfully: ecommerce
+```
+
+**What's Missing**: The orchestrator completely ignores the service creation requirement, even though the ApplicationAgent AI understood the full request:
+
+```json
+{
+  "action": "create",
+  "application_name": "ecommerce", 
+  "details": "with a api service to handle payments",
+  "confidence": 0.9
+}
+```
+
+**Result**: Only the application is created; the required service is never created, despite being explicitly requested.
+
+#### Current Architectural Limitation
+
+The orchestrator uses single-intent detection:
+
+```go
+// Current limitation - only detects ONE intent
+func (o *Orchestrator) detectIntent(userInput string) (string, error) {
+    // AI only identifies the first operational intent
+    // Complex multi-step workflows are ignored
+}
+```
+
+#### Required Multi-Step Orchestration Framework
+
+**1. Intent Decomposition Framework**
+
+```go
+type WorkflowStep struct {
+    StepID     string                 `json:"step_id"`
+    Agent      string                 `json:"agent"`
+    Action     string                 `json:"action"`
+    Parameters map[string]interface{} `json:"parameters"`
+    DependsOn  []string              `json:"depends_on"`
+    Optional   bool                  `json:"optional"`
+}
+
+type WorkflowPlan struct {
+    RequestID string         `json:"request_id"`
+    Steps     []WorkflowStep `json:"steps"`
+    Context   string         `json:"original_context"`
+}
+
+// Enhanced orchestrator capability
+func (o *Orchestrator) DecomposeRequest(ctx context.Context, userInput string) (*WorkflowPlan, error) {
+    systemPrompt := `You are a workflow decomposition expert. Analyze user requests and break them into sequential steps that require different agents.
+
+For each step, identify:
+- Which agent should handle it (application-agent, service-agent, deployment-agent, etc.)
+- What action is required (create, update, delete, etc.)
+- What parameters are needed
+- Dependencies on previous steps
+- Whether the step is optional
+
+Example:
+User: "create application ecommerce with a api service to handle payments"
+Steps:
+1. Create application "ecommerce" (application-agent) 
+2. Create service "payment-api" for application "ecommerce" (service-agent, depends on step 1)`
+
+    // Use AI to decompose complex requests into workflow steps
+    response, err := o.aiProvider.CallAI(ctx, systemPrompt, userInput)
+    if err != nil {
+        return nil, err
+    }
+    
+    return o.parseWorkflowPlan(response)
+}
+```
+
+**2. Sequential Execution Framework**
+
+```go
+type WorkflowExecutor struct {
+    orchestrator *Orchestrator
+    eventBus     events.Bus
+    context      map[string]interface{} // Shared context across steps
+}
+
+func (we *WorkflowExecutor) ExecuteWorkflow(ctx context.Context, plan *WorkflowPlan) error {
+    for _, step := range plan.Steps {
+        // Check dependencies
+        if !we.dependenciesSatisfied(step.DependsOn) {
+            if step.Optional {
+                continue // Skip optional steps with unmet dependencies
+            }
+            return fmt.Errorf("dependencies not satisfied for step %s", step.StepID)
+        }
+        
+        // Execute step
+        event := we.buildEventFromStep(step, we.context)
+        response, err := we.executeStep(ctx, step.Agent, event)
+        
+        if err != nil && !step.Optional {
+            return fmt.Errorf("required step %s failed: %w", step.StepID, err)
+        }
+        
+        // Update shared context with results
+        we.updateContext(step.StepID, response)
+        
+        // Emit progress event
+        we.eventBus.Emit("workflow.step.completed", map[string]interface{}{
+            "request_id": plan.RequestID,
+            "step_id":    step.StepID,
+            "agent":      step.Agent,
+            "success":    err == nil,
+        })
+    }
+    
+    return nil
+}
+```
+
+**3. Context Preservation Framework**
+
+```go
+type WorkflowContext struct {
+    RequestID    string                 `json:"request_id"`
+    OriginalUser string                 `json:"original_user"`
+    UserIntent   string                 `json:"user_intent"`
+    StepResults  map[string]interface{} `json:"step_results"`
+    SharedData   map[string]interface{} `json:"shared_data"`
+}
+
+// Enable agents to access cross-step context
+func (a *Agent) getWorkflowContext(requestID string) *WorkflowContext
+func (a *Agent) updateWorkflowContext(requestID string, data map[string]interface{})
+```
+
+**4. Dependency Management Framework**
+
+```go
+type DependencyValidator struct {
+    completedSteps map[string]bool
+    failedSteps    map[string]bool
+}
+
+func (dv *DependencyValidator) ValidateDependencies(step *WorkflowStep) error {
+    for _, depID := range step.DependsOn {
+        if dv.failedSteps[depID] {
+            return fmt.Errorf("dependency %s failed, cannot proceed", depID)
+        }
+        if !dv.completedSteps[depID] {
+            return fmt.Errorf("dependency %s not yet completed", depID)
+        }
+    }
+    return nil
+}
+```
+
+#### Test Cases for Multi-Step Orchestration
+
+**Test Case 1: Application + Service Creation**
+```
+Input: "create application ecommerce with a api service to handle payments"
+Expected Workflow:
+1. Create application "ecommerce" → ApplicationAgent
+2. Create service "payment-api" for "ecommerce" → ServiceAgent (depends on step 1)
+Result: Both application and service created with proper graph relationships
+```
+
+**Test Case 2: Full Stack Deployment**
+```
+Input: "deploy application myapp to production with monitoring enabled"
+Expected Workflow:
+1. Validate application exists → ApplicationAgent
+2. Create production deployment → DeploymentAgent (depends on step 1)  
+3. Enable monitoring → PolicyAgent (depends on step 2)
+Result: Complete deployment with monitoring policies
+```
+
+**Test Case 3: Complex Multi-Agent Operation**
+```
+Input: "create application blog with database service and deploy to staging with security policies"
+Expected Workflow:
+1. Create application "blog" → ApplicationAgent
+2. Create service "blog-db" → ServiceAgent (depends on step 1)
+3. Create staging deployment → DeploymentAgent (depends on steps 1,2)
+4. Apply security policies → PolicyAgent (depends on step 3)
+Result: Full application stack with security
+```
+
+#### Integration with Current Architecture
+
+**Enhanced Orchestrator Process**:
+1. Receive user request
+2. **NEW**: Detect if request requires multiple steps
+3. **NEW**: If multi-step, decompose into workflow plan
+4. **NEW**: Execute workflow with dependency management
+5. **EXISTING**: If single-step, route to appropriate agent
+6. **ENHANCED**: Return comprehensive workflow status
+
+#### Implementation Priority
+
+**Phase 1**: Intent decomposition and workflow planning
+**Phase 2**: Sequential execution with dependency validation  
+**Phase 3**: Context preservation and error recovery
+**Phase 4**: Advanced features (parallel execution, rollback)
+
+**Critical Success Metrics**:
+- Complex requests (like "create app X with service Y") result in both entities being created
+- Proper graph relationships are established across multi-step operations
+- Failed steps prevent dependent steps from executing
+- Workflow context is preserved across agent boundaries
+
+### Enhanced Framework Requirements
+
+Based on test failures, the framework MUST include:
+
+```go
+// CRITICAL: Automatic relationship management
+type RelationshipManager struct {
+    graph Graph
+}
+
+func (rm *RelationshipManager) CreateServiceForApplication(serviceName, appName string) error {
+    // Validate application exists
+    if !rm.graph.NodeExists(appName, "application") {
+        return errors.New("application does not exist")
+    }
+    
+    // Create service with correct type
+    service := &Node{
+        ID:   serviceName,
+        Kind: "service",  // CRITICAL: Correct type
+        Metadata: map[string]string{"application": appName},
+    }
+    
+    // Create service node
+    if err := rm.graph.CreateNode(service); err != nil {
+        return err
+    }
+    
+    // CRITICAL: Create relationship edge
+    edge := &Edge{
+        Source: serviceName,
+        Target: appName,
+        Type:   "belongs_to",
+    }
+    
+    return rm.graph.CreateEdge(edge)
+}
+
+// CRITICAL: Entity type validation
+func (f *AgentFramework) ValidateEntityType(entityName, expectedKind string) error {
+    node := f.graph.GetNode(entityName)
+    if node.Kind != expectedKind {
+        return fmt.Errorf("CRITICAL: Entity %s has kind %s, expected %s", 
+            entityName, node.Kind, expectedKind)
+    }
+    return nil
+}
+```
+
+**This is not a minor issue - it's a fundamental architectural failure that prevents the platform from functioning as intended.**

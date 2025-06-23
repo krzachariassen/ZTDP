@@ -161,6 +161,63 @@ func (a *BaseAgent) ProcessEvent(ctx context.Context, event *events.Event) (*eve
 	return response, nil
 }
 
+// HandleIncomingEvent handles events from the event bus and ensures responses are emitted
+func (a *BaseAgent) HandleIncomingEvent(ctx context.Context, event events.Event) error {
+	a.logger.Info("📨 Received event: %s from %s", event.Subject, event.Source)
+
+	// Process the event using the agent's main processing logic
+	responseEvent, err := a.ProcessEvent(ctx, &event)
+	if err != nil {
+		a.logger.Error("❌ Failed to process event: %v", err)
+		return err
+	}
+
+	// CRITICAL: If we have a response event, emit it back to the event bus
+	if responseEvent != nil && a.eventBus != nil {
+		// Preserve correlation information for agent-to-agent communication
+		if correlationID, ok := event.Payload["correlation_id"]; ok {
+			if responseEvent.Payload == nil {
+				responseEvent.Payload = make(map[string]interface{})
+			}
+			responseEvent.Payload["correlation_id"] = correlationID
+		}
+		if requestID, ok := event.Payload["request_id"]; ok {
+			if responseEvent.Payload == nil {
+				responseEvent.Payload = make(map[string]interface{})
+			}
+			responseEvent.Payload["request_id"] = requestID
+		}
+
+		// Add required event metadata
+		if responseEvent.ID == "" {
+			responseEvent.ID = fmt.Sprintf("%s-response-%d", a.id, time.Now().UnixNano())
+		}
+		if responseEvent.Type == "" {
+			responseEvent.Type = events.EventTypeResponse
+		}
+		if responseEvent.Source == "" {
+			responseEvent.Source = a.id
+		}
+		if responseEvent.Timestamp == 0 {
+			responseEvent.Timestamp = time.Now().UnixNano()
+		}
+
+		// Emit the response event to the orchestrator
+		err = a.eventBus.EmitEvent(*responseEvent)
+		if err != nil {
+			a.logger.Error("❌ Failed to emit response event: %v", err)
+			return err
+		}
+		a.logger.Info("✅ %s sent response: %s", a.id, responseEvent.Subject)
+	} else if responseEvent == nil {
+		a.logger.Warn("⚠️ No response event generated from ProcessEvent")
+	} else {
+		a.logger.Warn("⚠️ No event bus available to send response")
+	}
+
+	return nil
+}
+
 // ==================================================================================
 // FRAMEWORK HELPER METHODS FOR COMMON AGENT PATTERNS
 // ==================================================================================
@@ -348,14 +405,8 @@ func (a *BaseAgent) subscribeToCapabilities() error {
 	for _, capability := range a.capabilities {
 		for _, routingKey := range capability.RoutingKeys {
 			a.eventBus.SubscribeToRoutingKey(routingKey, func(event events.Event) error {
-				response, err := a.ProcessEvent(context.Background(), &event)
-				if err != nil {
-					a.logger.Error("⚠️ Failed to process event: %v", err)
-				} else if response != nil {
-					// Emit the response back to the event bus
-					a.eventBus.EmitEvent(*response)
-				}
-				return err
+				// Use the comprehensive event handler that includes response emission
+				return a.HandleIncomingEvent(context.Background(), event)
 			})
 			a.logger.Info("✅ Subscribed to routing key: %s", routingKey)
 		}

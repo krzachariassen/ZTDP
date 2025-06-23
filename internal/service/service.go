@@ -74,8 +74,10 @@ func (s *ServiceService) HandleServiceEvent(ctx context.Context, event *events.E
 	}
 
 	// Route to appropriate handler based on AI-extracted action
+	s.logger.Info("🎯 Routing to action handler: %s", params.Action)
 	switch params.Action {
 	case "create":
+		s.logger.Info("🏗️ Calling handleCreateService for service: %s", params.ServiceName)
 		return s.handleCreateService(ctx, event, params)
 	case "list":
 		return s.handleListServices(ctx, event, params)
@@ -84,6 +86,7 @@ func (s *ServiceService) HandleServiceEvent(ctx context.Context, event *events.E
 	case "version":
 		return s.handleVersionService(ctx, event, params)
 	default:
+		s.logger.Error("❌ Unknown action: %s", params.Action)
 		return s.createErrorResponse(event, fmt.Sprintf("Unknown action: %s", params.Action)), nil
 	}
 }
@@ -135,11 +138,15 @@ Examples:
 
 // AI-native action handlers
 func (s *ServiceService) handleCreateService(ctx context.Context, event *events.Event, params *ServiceDomainParams) (*events.Event, error) {
+	s.logger.Info("🏗️ Starting service creation: service=%s, app=%s", params.ServiceName, params.ApplicationName)
+
 	// Validate required fields
 	if params.ServiceName == "" {
+		s.logger.Error("❌ Service name is required")
 		return s.createErrorResponse(event, "service name is required"), nil
 	}
 	if params.ApplicationName == "" {
+		s.logger.Error("❌ Application name is required")
 		return s.createErrorResponse(event, "application name is required"), nil
 	}
 
@@ -161,10 +168,14 @@ func (s *ServiceService) handleCreateService(ctx context.Context, event *events.
 	}
 
 	// Use existing domain logic
+	s.logger.Info("🔧 Creating service in graph with data: %+v", serviceData)
 	result, err := s.CreateService(params.ApplicationName, serviceData)
 	if err != nil {
+		s.logger.Error("❌ Failed to create service in graph: %v", err)
 		return s.createErrorResponse(event, fmt.Sprintf("Failed to create service: %v", err)), nil
 	}
+
+	s.logger.Info("✅ Service created successfully in graph: %+v", result)
 
 	// Emit domain event
 	if s.eventBus != nil {
@@ -175,7 +186,7 @@ func (s *ServiceService) handleCreateService(ctx context.Context, event *events.
 		})
 	}
 
-	return &events.Event{
+	responseEvent := &events.Event{
 		Source:  "service-agent",
 		Subject: "service.response",
 		Payload: map[string]interface{}{
@@ -185,7 +196,10 @@ func (s *ServiceService) handleCreateService(ctx context.Context, event *events.
 			"correlation_id": event.Payload["correlation_id"],
 			"request_id":     event.Payload["request_id"],
 		},
-	}, nil
+	}
+
+	s.logger.Info("📤 Returning response event: %+v", responseEvent)
+	return responseEvent, nil
 }
 
 func (s *ServiceService) handleListServices(ctx context.Context, event *events.Event, params *ServiceDomainParams) (*events.Event, error) {
@@ -411,6 +425,19 @@ func (s *ServiceService) createServiceInternal(appName string, svc contracts.Ser
 	// Auto-populate application from URL parameter to eliminate redundant validation
 	svc.Spec.Application = appName
 
+	// CRITICAL: Validate that the application exists before creating service
+	appNode, err := s.Graph.GetNode(appName)
+	if err != nil || appNode == nil {
+		s.logger.Error("❌ Cannot create service '%s': application '%s' does not exist", svc.Metadata.Name, appName)
+		return fmt.Errorf("application '%s' does not exist - create the application first", appName)
+	}
+	if appNode.Kind != "application" {
+		s.logger.Error("❌ Cannot create service '%s': '%s' exists but is not an application (kind: %s)", svc.Metadata.Name, appName, appNode.Kind)
+		return fmt.Errorf("'%s' is not an application (kind: %s) - services can only belong to applications", appName, appNode.Kind)
+	}
+
+	s.logger.Info("✅ Application '%s' exists - proceeding with service creation", appName)
+
 	if err := svc.Validate(); err != nil {
 		return err
 	}
@@ -418,9 +445,18 @@ func (s *ServiceService) createServiceInternal(appName string, svc contracts.Ser
 	if err != nil {
 		return err
 	}
+
+	s.logger.Info("🔗 Adding service node and creating edge: %s -> %s (owns)", appName, svc.Metadata.Name)
 	s.Graph.AddNode(node)
 	s.Graph.AddEdge(appName, svc.Metadata.Name, "owns")
-	return s.Graph.Save()
+
+	if err := s.Graph.Save(); err != nil {
+		s.logger.Error("❌ Failed to save graph after service creation: %v", err)
+		return fmt.Errorf("failed to persist service creation: %w", err)
+	}
+
+	s.logger.Info("✅ Service '%s' created and linked to application '%s'", svc.Metadata.Name, appName)
+	return nil
 }
 
 func (s *ServiceService) listServicesInternal(appName string) ([]contracts.ServiceContract, error) {

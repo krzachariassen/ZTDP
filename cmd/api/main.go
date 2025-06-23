@@ -12,11 +12,13 @@ import (
 	"github.com/krzachariassen/ZTDP/internal/agents/orchestrator"
 	"github.com/krzachariassen/ZTDP/internal/ai"
 	"github.com/krzachariassen/ZTDP/internal/application"
+	"github.com/krzachariassen/ZTDP/internal/deployments"
 	"github.com/krzachariassen/ZTDP/internal/environment"
 	"github.com/krzachariassen/ZTDP/internal/events"
 	"github.com/krzachariassen/ZTDP/internal/graph"
 	"github.com/krzachariassen/ZTDP/internal/logging"
 	"github.com/krzachariassen/ZTDP/internal/policies"
+	"github.com/krzachariassen/ZTDP/internal/service"
 )
 
 func main() {
@@ -132,7 +134,7 @@ func main() {
 
 	// Initialize Environment Agent
 	logger.Info("🚀 Creating Environment Agent...")
-	deploymentAgent, err := environment.NewEnvironmentAgent(
+	environmentAgent, err := environment.NewEnvironmentAgent(
 		handlers.GlobalGraph,
 		aiProvider,
 		eventBus,
@@ -157,6 +159,32 @@ func main() {
 	}
 	logger.Info("✅ Policy Agent created successfully")
 
+	// Initialize Service Agent
+	logger.Info("🔧 Creating Service Agent...")
+	serviceAgent, err := service.NewServiceAgent(
+		handlers.GlobalGraph,
+		aiProvider,
+		eventBus,
+		agentRegistry,
+	)
+	if err != nil {
+		log.Fatalf("❌ Failed to create service agent: %v", err)
+	}
+	logger.Info("✅ Service Agent created successfully")
+
+	// Initialize Deployment Agent
+	logger.Info("🚀 Creating Deployment Agent...")
+	deploymentAgent, err := deployments.NewDeploymentAgent(
+		handlers.GlobalGraph,
+		aiProvider,
+		eventBus,
+		agentRegistry,
+	)
+	if err != nil {
+		log.Fatalf("❌ Failed to create deployment agent: %v", err)
+	}
+	logger.Info("✅ Deployment Agent created successfully")
+
 	// Start all agents
 	logger.Info("▶️ Starting domain agents...")
 	ctx := context.Background()
@@ -166,15 +194,25 @@ func main() {
 	}
 	logger.Info("✅ Application Agent started")
 
-	if err := deploymentAgent.Start(ctx); err != nil {
-		log.Fatalf("❌ Failed to start deployment agent: %v", err)
+	if err := environmentAgent.Start(ctx); err != nil {
+		log.Fatalf("❌ Failed to start environment agent: %v", err)
 	}
-	logger.Info("✅ Deployment Agent started")
+	logger.Info("✅ Environment Agent started")
 
 	if err := policyAgent.Start(ctx); err != nil {
 		log.Fatalf("❌ Failed to start policy agent: %v", err)
 	}
 	logger.Info("✅ Policy Agent started")
+
+	if err := serviceAgent.Start(ctx); err != nil {
+		log.Fatalf("❌ Failed to start service agent: %v", err)
+	}
+	logger.Info("✅ Service Agent started")
+
+	if err := deploymentAgent.Start(ctx); err != nil {
+		log.Fatalf("❌ Failed to start deployment agent: %v", err)
+	}
+	logger.Info("✅ Deployment Agent started")
 
 	logger.Info("🎯 All domain agents initialized and started successfully")
 
