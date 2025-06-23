@@ -18,3 +18,7 @@ I can also see that we have resource_type created without edge to resource_regis
 
 
 Deployment agent is using MockAIProvider{} should use real AIProvider interface, not the mock one.
+
+
+
+We need to add dry-run mode to the orchestrator, so we can test the workflow without actually executing it. This will help in validating the workflow logic and ensure that everything is set up correctly before running it in production.
