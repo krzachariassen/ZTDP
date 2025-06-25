@@ -1,0 +1,201 @@
+syntax = "proto3";
+
+package orchestration;
+
+option go_package = "github.com/ztdp/orchestrator/proto/orchestration";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+
+// OrchestrationService defines the gRPC interface for agent-orchestrator communication
+service OrchestrationService {
+  // Current work-based methods
+  rpc RegisterAgent(RegisterAgentRequest) returns (RegisterAgentResponse);
+  rpc PullWork(stream PullWorkRequest) returns (stream PullWorkResponse);
+  rpc ReportResult(ReportResultRequest) returns (ReportResultResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc UnregisterAgent(UnregisterAgentRequest) returns (UnregisterAgentResponse);
+  
+  // NEW: AI-native conversational methods
+  rpc OpenConversation(stream ConversationMessage) returns (stream ConversationMessage);
+  rpc RequestClarification(ClarificationRequest) returns (ClarificationResponse);
+  rpc SendMessage(AgentMessage) returns (MessageResponse);
+}
+
+// Agent registration
+message RegisterAgentRequest {
+  string agent_id = 1;
+  string name = 2;
+  string type = 3;
+  repeated string capabilities = 4;
+  string version = 5;
+  google.protobuf.Struct metadata = 6;
+  int32 max_concurrent_work = 7;
+}
+
+message RegisterAgentResponse {
+  bool success = 1;
+  string message = 2;
+  google.protobuf.Timestamp registered_at = 3;
+}
+
+// Work pulling (streaming)
+message PullWorkRequest {
+  string agent_id = 1;
+  repeated string available_capabilities = 2;
+  int32 max_concurrent = 3;
+  google.protobuf.Timestamp last_heartbeat = 4;
+}
+
+message PullWorkResponse {
+  oneof response {
+    WorkItem work_item = 1;
+    KeepAlive keep_alive = 2;
+    NoWorkAvailable no_work = 3;
+  }
+}
+
+message WorkItem {
+  string work_id = 1;
+  string workflow_id = 2;
+  string step_id = 3;
+  string action = 4;
+  repeated string required_capabilities = 5;
+  google.protobuf.Struct parameters = 6;
+  google.protobuf.Struct context = 7;
+  google.protobuf.Duration timeout = 8;
+  RetryPolicy retry_policy = 9;
+  google.protobuf.Timestamp created_at = 10;
+}
+
+message KeepAlive {
+  google.protobuf.Timestamp timestamp = 1;
+  string message = 2;
+}
+
+message NoWorkAvailable {
+  google.protobuf.Timestamp timestamp = 1;
+  int32 retry_after_seconds = 2;
+}
+
+// Result reporting
+message ReportResultRequest {
+  string agent_id = 1;
+  string work_id = 2;
+  WorkResult result = 3;
+}
+
+message ReportResultResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message WorkResult {
+  bool success = 1;
+  google.protobuf.Struct output = 2;
+  string error_message = 3;
+  google.protobuf.Duration execution_time = 4;
+  google.protobuf.Struct metadata = 5;
+  google.protobuf.Timestamp completed_at = 6;
+}
+
+// Heartbeat
+message HeartbeatRequest {
+  string agent_id = 1;
+  AgentStatus status = 2;
+  google.protobuf.Struct health_metrics = 3;
+}
+
+message HeartbeatResponse {
+  bool success = 1;
+  google.protobuf.Timestamp server_time = 2;
+}
+
+// Agent unregistration
+message UnregisterAgentRequest {
+  string agent_id = 1;
+  string reason = 2;
+}
+
+message UnregisterAgentResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Common types
+message RetryPolicy {
+  int32 max_retries = 1;
+  google.protobuf.Duration backoff_duration = 2;
+  google.protobuf.Duration timeout = 3;
+}
+
+enum AgentStatus {
+  AGENT_STATUS_UNKNOWN = 0;
+  AGENT_STATUS_HEALTHY = 1;
+  AGENT_STATUS_BUSY = 2;
+  AGENT_STATUS_ERROR = 3;
+  AGENT_STATUS_SHUTTING_DOWN = 4;
+}
+
+enum WorkItemStatus {
+  WORK_ITEM_STATUS_UNKNOWN = 0;
+  WORK_ITEM_STATUS_PENDING = 1;
+  WORK_ITEM_STATUS_ASSIGNED = 2;
+  WORK_ITEM_STATUS_RUNNING = 3;
+  WORK_ITEM_STATUS_COMPLETED = 4;
+  WORK_ITEM_STATUS_FAILED = 5;
+  WORK_ITEM_STATUS_CANCELLED = 6;
+}
+
+// AI-native conversational messages
+message ConversationMessage {
+  string message_id = 1;
+  string correlation_id = 2;
+  string from_agent_id = 3;
+  string to_agent_id = 4; // empty for AI
+  MessageType type = 5;
+  string content = 6;
+  google.protobuf.Struct context = 7;
+  google.protobuf.Timestamp timestamp = 8;
+}
+
+message ClarificationRequest {
+  string agent_id = 1;
+  string work_id = 2;
+  string correlation_id = 3;
+  string question = 4;
+  google.protobuf.Struct context = 5;
+  google.protobuf.Timestamp timestamp = 6;
+}
+
+message ClarificationResponse {
+  bool success = 1;
+  string response = 2;
+  string correlation_id = 3;
+  google.protobuf.Struct additional_context = 4;
+}
+
+message AgentMessage {
+  string from_agent_id = 1;
+  string to_agent_id = 2; // empty for AI
+  string correlation_id = 3;
+  string content = 4;
+  MessageType type = 5;
+  google.protobuf.Struct context = 6;
+}
+
+message MessageResponse {
+  bool success = 1;
+  string message = 2;
+  string correlation_id = 3;
+}
+
+enum MessageType {
+  MESSAGE_TYPE_UNKNOWN = 0;
+  MESSAGE_TYPE_CLARIFICATION = 1;
+  MESSAGE_TYPE_STATUS_UPDATE = 2;
+  MESSAGE_TYPE_AGENT_TO_AGENT = 3;
+  MESSAGE_TYPE_AI_INSTRUCTION = 4;
+  MESSAGE_TYPE_ERROR = 5;
+}
