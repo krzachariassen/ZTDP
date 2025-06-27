@@ -1,0 +1,474 @@
+package ai
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	agentapp "github.com/ztdp/orchestrator/internal/agent/application"
+	conversationapp "github.com/ztdp/orchestrator/internal/conversation/application"
+	"github.com/ztdp/orchestrator/internal/logging"
+	"github.com/ztdp/orchestrator/internal/messaging"
+	planningapp "github.com/ztdp/orchestrator/internal/planning/application"
+)
+
+// GraphPoweredAIOrchestrator uses domain services following Clean Architecture
+// This orchestrator works through proper domain services, not direct graph access
+type GraphPoweredAIOrchestrator struct {
+	aiProvider          AIProvider
+	agentService        agentapp.AgentService
+	planningService     planningapp.PlanningService
+	conversationService conversationapp.ConversationService
+	messageBus          messaging.AIMessageBus
+	logger              logging.Logger
+}
+
+// NewGraphPoweredAIOrchestrator creates a new orchestrator with domain services
+func NewGraphPoweredAIOrchestrator(
+	provider AIProvider,
+	agentService *agentapp.AgentService,
+	planningService planningapp.PlanningService,
+	conversationService conversationapp.ConversationService,
+	logger logging.Logger,
+) *GraphPoweredAIOrchestrator {
+	return &GraphPoweredAIOrchestrator{
+		aiProvider:          provider,
+		agentService:        *agentService,
+		planningService:     planningService,
+		conversationService: conversationService,
+		logger:              logger,
+	}
+}
+
+// NewGraphPoweredAIOrchestratorWithMessaging creates a new orchestrator with domain services and messaging
+func NewGraphPoweredAIOrchestratorWithMessaging(
+	provider AIProvider,
+	agentService *agentapp.AgentService,
+	planningService planningapp.PlanningService,
+	conversationService conversationapp.ConversationService,
+	messageBus messaging.AIMessageBus,
+	logger logging.Logger,
+) *GraphPoweredAIOrchestrator {
+	return &GraphPoweredAIOrchestrator{
+		aiProvider:          provider,
+		agentService:        *agentService,
+		planningService:     planningService,
+		conversationService: conversationService,
+		messageBus:          messageBus,
+		logger:              logger,
+	}
+}
+
+// ProcessRequest processes a user request with optimized graph exploration (reduced API calls)
+func (ai *GraphPoweredAIOrchestrator) ProcessRequest(ctx context.Context, userInput, userID string) (*ConversationalResponse, error) {
+	if ai.logger != nil {
+		ai.logger.Info("Processing graph-powered AI request", "input", userInput, "user", userID)
+	}
+
+	// Step 1: Combined graph exploration and analysis (single API call)
+	analysis, err := ai.exploreAndAnalyze(ctx, userInput, userID)
+	if err != nil {
+		return nil, fmt.Errorf("graph exploration and analysis failed: %w", err)
+	}
+
+	// Step 2: Combined clarification assessment and response generation (single API call)
+	response, err := ai.generateOptimizedResponse(ctx, userInput, userID, analysis)
+	if err != nil {
+		return nil, fmt.Errorf("response generation failed: %w", err)
+	}
+
+	// Step 3: Store insights back to graph asynchronously to avoid blocking
+	go ai.storeInsightsToGraph(context.Background(), userID, userInput, analysis, response)
+
+	return response, nil
+}
+
+// exploreAndAnalyze gets available agents and analyzes the user request
+func (ai *GraphPoweredAIOrchestrator) exploreAndAnalyze(ctx context.Context, userInput, userID string) (string, error) {
+	// Step 1: Get all available agents and their capabilities (simple and direct)
+	agents, err := ai.getAllAgents(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get agents: %w", err)
+	}
+
+	// Step 2: Analyze the request with agent context
+	systemPrompt := `You are an AI orchestrator. You have access to the following agents and their capabilities:
+
+AVAILABLE_AGENTS:
+` + agents + `
+
+Analyze the user request and determine:
+- Intent: What does the user want to accomplish?
+- Category: What domain/area (deployment, security, monitoring, etc.)?
+- Confidence: How confident are you in understanding the request?
+- Required_Agents: Which agents (if any) would be needed to fulfill this request?
+
+Respond in this format:
+ANALYSIS:
+Intent: [clear intent]
+Category: [domain area]
+Confidence: [0-100 percent]
+Required_Agents: [list specific agents needed]
+Reasoning: [why this analysis]`
+
+	userPrompt := fmt.Sprintf(`User ID: %s
+Request: %s
+
+Analyze this request based on available agents.`, userID, userInput)
+
+	response, err := ai.aiProvider.CallAI(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return "", fmt.Errorf("AI call failed: %w", err)
+	}
+
+	return response, nil
+}
+
+// getAllAgents fetches all agents and their capabilities using AgentService
+func (ai *GraphPoweredAIOrchestrator) getAllAgents(ctx context.Context) (string, error) {
+	// Use proper domain service instead of direct graph access
+	agents, err := ai.agentService.GetAvailableAgents(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get agents from service: %w", err)
+	}
+
+	if len(agents) == 0 {
+		return "No agents currently registered", nil
+	}
+
+	var agentsList strings.Builder
+	for _, agent := range agents {
+		capabilities := "none"
+		if len(agent.Capabilities) > 0 {
+			capNames := make([]string, len(agent.Capabilities))
+			for i, cap := range agent.Capabilities {
+				capNames[i] = cap.Name
+			}
+			capabilities = strings.Join(capNames, ", ")
+		}
+
+		agentsList.WriteString(fmt.Sprintf("Agent: %s | Status: %s | Capabilities: %s\n",
+			agent.Name, string(agent.Status), capabilities))
+	}
+
+	return agentsList.String(), nil
+}
+
+// generateOptimizedResponse combines clarification assessment and response generation
+func (ai *GraphPoweredAIOrchestrator) generateOptimizedResponse(ctx context.Context, userInput, userID string, analysis string) (*ConversationalResponse, error) {
+	systemPrompt := `You are an AI orchestrator that decides whether to ask for clarification or execute a request.
+
+Based on the provided analysis, you must:
+
+1. ASSESS if you need clarification (confidence < 80 percent OR complex multi-step request)
+2. IF clarification needed: Generate a helpful clarification question
+3. IF ready to execute: Provide comprehensive execution plan with agent coordination
+
+Your analysis includes graph context with available agents and capabilities. When generating execution plans, you MUST:
+- Reference specific agents by name that were found in the graph exploration
+- Mention the agent capabilities that are relevant
+- Create realistic agent coordination plans
+
+Respond in this format:
+DECISION: [CLARIFY|EXECUTE]
+CONFIDENCE: [0-100 percent]
+REASONING: [why this decision]
+
+[If CLARIFY]:
+CLARIFICATION: [specific question to ask]
+
+[If EXECUTE]:
+EXECUTION_PLAN:
+- Step 1: [action using specific agent name from graph]
+- Step 2: [action using specific agent name from graph]
+- etc.
+
+AGENT_COORDINATION:
+- Primary Agent: [specific agent name from analysis and why]
+- Supporting Agents: [list specific agent names and roles]
+- Workflow Dependencies: [any sequencing needed]`
+
+	userPrompt := fmt.Sprintf(`User ID: %s
+Original Request: %s
+
+ANALYSIS:
+%s
+
+Based on this analysis, decide whether to clarify or execute.`, userID, userInput, analysis)
+
+	response, err := ai.aiProvider.CallAI(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("AI call failed: %w", err)
+	}
+
+	// Parse the response to determine if clarification is needed
+	if strings.Contains(response, "DECISION: CLARIFY") {
+		clarificationText := ai.extractSection(response, "CLARIFICATION:")
+		return &ConversationalResponse{
+			Message:    clarificationText,
+			Intent:     "clarification",
+			Confidence: 0.5, // Lower confidence when clarification needed
+			Actions: []Action{{
+				Type:        "clarification_needed",
+				Description: "More information required",
+			}},
+			Context: map[string]interface{}{
+				"analysis":            analysis,
+				"user_id":             userID,
+				"needs_clarification": true,
+				"graph_context":       analysis, // Include graph context from exploration
+			},
+		}, nil
+	}
+
+	// Extract execution plan
+	executionPlan := ai.extractSection(response, "EXECUTION_PLAN:")
+	agentCoordination := ai.extractSection(response, "AGENT_COORDINATION:")
+
+	// Parse confidence
+	confidence := 0.85 // Default high confidence for execution
+	if confidenceStr := ai.extractSection(response, "CONFIDENCE:"); confidenceStr != "" {
+		if parsed := ai.parseConfidence(confidenceStr); parsed > 0 {
+			confidence = float64(parsed) / 100.0
+		}
+	}
+
+	finalMessage := fmt.Sprintf("I'll help you with that. Here's my plan:\n\n%s\n\nAgent Coordination:\n%s", executionPlan, agentCoordination)
+
+	// NEW: If this is an execution decision, store the execution plan in the graph
+	var executionPlanID string
+	if strings.Contains(response, "DECISION: EXECUTE") && executionPlan != "" {
+		executionPlanID = ai.storeExecutionPlan(ctx, userID, userInput, executionPlan, agentCoordination, analysis)
+	}
+
+	return &ConversationalResponse{
+		Message:    finalMessage,
+		Answer:     finalMessage,
+		Intent:     ai.extractIntent(analysis),
+		Confidence: confidence,
+		Actions:    ai.parseExecutionActions(executionPlan),
+		Context: map[string]interface{}{
+			"analysis":           analysis,
+			"execution_plan":     executionPlan,
+			"execution_plan_id":  executionPlanID, // NEW: Track execution plan ID
+			"agent_coordination": agentCoordination,
+			"user_id":            userID,
+			"graph_context":      analysis, // Include graph context from exploration
+		},
+	}, nil
+}
+
+// storeExecutionPlan creates execution plans using the proper domain service
+func (ai *GraphPoweredAIOrchestrator) storeExecutionPlan(ctx context.Context, userID, userInput, executionPlan, agentCoordination, analysis string) string {
+	planID := fmt.Sprintf("plan_%s_%d", userID, time.Now().Unix())
+
+	// Parse execution steps from the plan
+	steps := ai.parseExecutionSteps(executionPlan, agentCoordination)
+
+	// Create a proper planning request using domain service
+	request := &planningapp.PlanningRequest{
+		ConversationID: "", // TODO: Get from context if available
+		UserID:         userID,
+		UserRequest:    userInput,
+		Intent:         ai.extractIntent(analysis),
+		Category:       ai.extractCategory(analysis),
+		RequiredAgents: ai.extractRequiredAgents(analysis),
+		Parameters: map[string]interface{}{
+			"execution_plan":     executionPlan,
+			"agent_coordination": agentCoordination,
+			"analysis":           analysis,
+		},
+	}
+
+	// Use the proper domain service instead of direct graph access
+	plan, err := ai.planningService.CreateExecutionPlan(ctx, request)
+	if err != nil {
+		if ai.logger != nil {
+			ai.logger.Error("Failed to create execution plan using planning service", err, "plan_id", planID)
+		}
+		return ""
+	}
+
+	if ai.logger != nil {
+		ai.logger.Info("Execution plan created using planning service", "plan_id", plan.ID, "user_id", userID)
+	}
+
+	return plan.ID
+}
+
+// NEW: parseExecutionSteps parses execution plan into structured steps
+func (ai *GraphPoweredAIOrchestrator) parseExecutionSteps(executionPlan, agentCoordination string) []map[string]interface{} {
+	var steps []map[string]interface{}
+
+	// Extract primary agent from coordination
+	primaryAgent := ai.extractPrimaryAgent(agentCoordination)
+
+	lines := strings.Split(executionPlan, "\n")
+	stepCounter := 1
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "- Step") || strings.HasPrefix(line, "Step") {
+			stepID := fmt.Sprintf("step-%d", stepCounter)
+
+			step := map[string]interface{}{
+				"id":         stepID,
+				"agent_id":   primaryAgent,
+				"status":     "pending",
+				"action":     line,
+				"created_at": time.Now().Format(time.RFC3339),
+			}
+
+			steps = append(steps, step)
+			stepCounter++
+		}
+	}
+
+	// If no structured steps found, create a single step
+	if len(steps) == 0 {
+		steps = append(steps, map[string]interface{}{
+			"id":         "step-1",
+			"agent_id":   primaryAgent,
+			"status":     "pending",
+			"action":     "Execute the plan",
+			"created_at": time.Now().Format(time.RFC3339),
+		})
+	}
+
+	return steps
+}
+
+// NEW: extractPrimaryAgent extracts the primary agent from coordination text
+func (ai *GraphPoweredAIOrchestrator) extractPrimaryAgent(agentCoordination string) string {
+	lines := strings.Split(agentCoordination, "\n")
+	for _, line := range lines {
+		if strings.Contains(strings.ToLower(line), "primary agent:") {
+			parts := strings.Split(line, ":")
+			if len(parts) > 1 {
+				agentID := strings.TrimSpace(parts[1])
+				// Extract just the agent ID (before any explanation)
+				if spaceIdx := strings.Index(agentID, " "); spaceIdx > 0 {
+					agentID = agentID[:spaceIdx]
+				}
+				return agentID
+			}
+		}
+	}
+
+	// Default fallback
+	return "text-processor-001"
+}
+
+// storeInsightsToGraph stores learnings and insights back to graph
+func (ai *GraphPoweredAIOrchestrator) storeInsightsToGraph(ctx context.Context, userID, userInput, analysis string, response *ConversationalResponse) {
+	insightData := map[string]interface{}{
+		"user_id":    userID,
+		"input":      userInput,
+		"analysis":   analysis,
+		"response":   response.Message,
+		"confidence": response.Confidence,
+		"timestamp":  time.Now().Unix(),
+	}
+
+	insightID := fmt.Sprintf("insight_%s_%d", userID, time.Now().Unix())
+	if err := ai.graph.AddNode(ctx, insightID, "insight", insightData); err != nil {
+		if ai.logger != nil {
+			ai.logger.Error("Failed to store insights to graph", err)
+		}
+	}
+}
+
+func (ai *GraphPoweredAIOrchestrator) extractCategory(analysis string) string {
+	category := ai.extractSection(analysis, "Category:")
+	if category == "" {
+		return "general"
+	}
+	return strings.ToLower(strings.ReplaceAll(category, " ", "_"))
+}
+
+func (ai *GraphPoweredAIOrchestrator) extractRequiredAgents(analysis string) []string {
+	agentsStr := ai.extractSection(analysis, "Required_Agents:")
+	if agentsStr == "" {
+		return []string{}
+	}
+
+	// Parse comma-separated agent names
+	agents := strings.Split(agentsStr, ",")
+	result := make([]string, 0, len(agents))
+	for _, agent := range agents {
+		agent = strings.TrimSpace(agent)
+		if agent != "" && agent != "none" && agent != "None" {
+			result = append(result, agent)
+		}
+	}
+	return result
+}
+
+// Simple helper methods for parsing AI responses
+func (ai *GraphPoweredAIOrchestrator) extractSection(text, marker string) string {
+	parts := strings.Split(text, marker)
+	if len(parts) < 2 {
+		return ""
+	}
+
+	section := parts[1]
+	// Find the end of this section (next marker or end of text)
+	nextMarkers := []string{"DECISION:", "CONFIDENCE:", "REASONING:", "CLARIFICATION:", "EXECUTION_PLAN:", "AGENT_COORDINATION:"}
+	for _, nextMarker := range nextMarkers {
+		if idx := strings.Index(section, nextMarker); idx > 0 {
+			section = section[:idx]
+		}
+	}
+
+	return strings.TrimSpace(section)
+}
+
+func (ai *GraphPoweredAIOrchestrator) parseConfidence(confidenceStr string) int {
+	// Simple extraction - look for numbers
+	for i, char := range confidenceStr {
+		if char >= '0' && char <= '9' {
+			end := i
+			for end < len(confidenceStr) && confidenceStr[end] >= '0' && confidenceStr[end] <= '9' {
+				end++
+			}
+			if val := confidenceStr[i:end]; val != "" {
+				var num int
+				if n, err := fmt.Sscanf(val, "%d", &num); n == 1 && err == nil {
+					return num
+				}
+			}
+			break
+		}
+	}
+	return 0
+}
+
+func (ai *GraphPoweredAIOrchestrator) extractIntent(analysis string) string {
+	intent := ai.extractSection(analysis, "Intent:")
+	if intent == "" {
+		return "general_assistance"
+	}
+	return strings.ToLower(strings.ReplaceAll(intent, " ", "_"))
+}
+
+func (ai *GraphPoweredAIOrchestrator) parseExecutionActions(executionPlan string) []Action {
+	var actions []Action
+	lines := strings.Split(executionPlan, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "- Step") || strings.HasPrefix(line, "Step") {
+			actions = append(actions, Action{
+				Type:        "execution_step",
+				Description: line,
+			})
+		}
+	}
+	if len(actions) == 0 {
+		return []Action{{
+			Type:        "execute_plan",
+			Description: "Execute the generated plan",
+		}}
+	}
+	return actions
+}

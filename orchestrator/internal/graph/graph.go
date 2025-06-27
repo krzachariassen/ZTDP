@@ -2,20 +2,28 @@ package graph
 
 import (
 	"context"
-	"fmt"
+
+	"github.com/ztdp/orchestrator/internal/logging"
 )
 
-// Graph defines the interface for graph operations
+// Graph defines a simple interface for basic graph operations
 type Graph interface {
-	// Node operations
+	// Node operations - basic CRUD
 	AddNode(ctx context.Context, nodeType, nodeID string, properties map[string]interface{}) error
 	GetNode(ctx context.Context, nodeType, nodeID string) (map[string]interface{}, error)
 	UpdateNode(ctx context.Context, nodeType, nodeID string, properties map[string]interface{}) error
 	DeleteNode(ctx context.Context, nodeType, nodeID string) error
 	QueryNodes(ctx context.Context, nodeType string, filters map[string]interface{}) ([]map[string]interface{}, error)
 
-	// Graph operations
+	// Edge operations - basic CRUD
+	AddEdge(ctx context.Context, sourceType, sourceID, targetType, targetID, edgeType string, properties map[string]interface{}) error
+	GetEdges(ctx context.Context, nodeType, nodeID string) ([]map[string]interface{}, error)
+	UpdateEdge(ctx context.Context, sourceType, sourceID, targetType, targetID, edgeType string, properties map[string]interface{}) error
+	DeleteEdge(ctx context.Context, sourceType, sourceID, targetType, targetID, edgeType string) error
+
+	// Utility
 	GetStats() map[string]interface{}
+	Close(ctx context.Context) error
 }
 
 // GraphConfig defines configuration for graph backends
@@ -35,23 +43,16 @@ const (
 
 // GraphFactory creates graph instances
 type GraphFactory struct {
-	logger Logger
+	logger logging.Logger
 }
 
 // NewGraphFactory creates a new graph factory
-func NewGraphFactory(logger Logger) *GraphFactory {
+func NewGraphFactory(logger logging.Logger) *GraphFactory {
 	return &GraphFactory{logger: logger}
 }
 
 // CreateGraph creates a graph instance based on configuration
 func (f *GraphFactory) CreateGraph(config GraphConfig) (Graph, error) {
-	switch config.Backend {
-	case GraphBackendEmbedded:
-		return NewEmbeddedGraph(f.logger), nil
-	case GraphBackendNeo4j:
-		ctx := context.Background()
-		return NewNeo4jGraph(ctx, config, f.logger)
-	default:
-		return nil, fmt.Errorf("unsupported graph backend: %s", config.Backend)
-	}
+	ctx := context.Background()
+	return NewNeo4jGraph(ctx, config, f.logger)
 }

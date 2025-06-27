@@ -1,0 +1,268 @@
+package ai
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/ztdp/orchestrator/internal/graph"
+	"github.com/ztdp/orchestrator/internal/logging"
+	"github.com/ztdp/orchestrator/internal/messaging"
+	"github.com/ztdp/orchestrator/internal/types"
+)
+
+// AgentWorkCompletion represents the completion of work by an agent
+type AgentWorkCompletion struct {
+	PlanID  string `json:"plan_id"`
+	StepID  string `json:"step_id"`
+	AgentID string `json:"agent_id"`
+	Status  string `json:"status"`
+	Result  string `json:"result,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// ExecutionEngine handles the execution of AI-generated plans
+type ExecutionEngine struct {
+	graph      graph.Graph
+	messageBus messaging.AIMessageBus
+	logger     logging.Logger
+}
+
+// NewExecutionEngine creates a new execution engine
+func NewExecutionEngine(graph graph.Graph, messageBus messaging.AIMessageBus, logger logging.Logger) *ExecutionEngine {
+	return &ExecutionEngine{
+		graph:      graph,
+		messageBus: messageBus,
+		logger:     logger,
+	}
+}
+
+// ExecutePlan stores the plan in the graph and initiates execution by emitting work events to agents
+func (e *ExecutionEngine) ExecutePlan(ctx context.Context, plan *types.WorkflowExecution) error {
+	if e.logger != nil {
+		userID := ""
+		if plan.Context != nil {
+			if uid, ok := plan.Context["user_id"].(string); ok {
+				userID = uid
+			}
+		}
+		e.logger.Info("Starting execution of plan", "plan_id", plan.ID, "user_id", userID, "steps", len(plan.Steps))
+	}
+
+	// Step 1: Store the execution plan in the graph
+	plan.Status = types.WorkflowStatusRunning
+	plan.StartedAt = time.Now()
+
+	// Initialize all steps as pending
+	for i := range plan.Steps {
+		plan.Steps[i].Status = types.StepStatusPending
+	}
+
+	planData := map[string]interface{}{
+		"id":          plan.ID,
+		"workflow_id": plan.WorkflowID,
+		"status":      plan.Status,
+		"started_at":  plan.StartedAt,
+		"steps":       plan.Steps,
+		"context":     plan.Context,
+	}
+
+	if err := e.graph.AddNode(ctx, "execution_plan", plan.ID, planData); err != nil {
+		return fmt.Errorf("failed to store execution plan in graph: %w", err)
+	}
+
+	// Step 2: Emit work events to agents for each step
+	for _, step := range plan.Steps {
+		workRequest := &messaging.AIToAgentMessage{
+			AgentID:       step.AgentID,
+			Content:       e.createWorkRequestContentFromStep(step),
+			Intent:        "work_request",
+			CorrelationID: fmt.Sprintf("%s-%s", plan.ID, step.StepID),
+			Context: map[string]interface{}{
+				"plan_id": plan.ID,
+				"step_id": step.StepID,
+				"output":  step.Output,
+			},
+		}
+
+		if err := e.messageBus.SendToAgent(ctx, workRequest); err != nil {
+			if e.logger != nil {
+				e.logger.Error("Failed to send work request to agent", err, "agent_id", step.AgentID, "plan_id", plan.ID, "step_id", step.StepID)
+			}
+			// Continue with other steps even if one fails
+			continue
+		}
+
+		if e.logger != nil {
+			e.logger.Info("Work request sent to agent", "agent_id", step.AgentID, "plan_id", plan.ID, "step_id", step.StepID)
+		}
+	}
+
+	return nil
+}
+
+// HandleAgentWorkCompletion updates the graph when agents complete work and aggregates results
+func (e *ExecutionEngine) HandleAgentWorkCompletion(ctx context.Context, completion *AgentWorkCompletion) error {
+	if e.logger != nil {
+		e.logger.Info("Handling agent work completion", "plan_id", completion.PlanID, "step_id", completion.StepID, "agent_id", completion.AgentID, "status", completion.Status)
+	}
+
+	// Step 1: Retrieve the execution plan from the graph
+	planNodes, err := e.graph.QueryNodes(ctx, "execution_plan", map[string]interface{}{"id": completion.PlanID})
+	if err != nil {
+		return fmt.Errorf("failed to query execution plan: %w", err)
+	}
+
+	if len(planNodes) == 0 {
+		return fmt.Errorf("execution plan not found: %s", completion.PlanID)
+	}
+
+	planData := planNodes[0]
+
+	// Step 2: Update the specific step with completion results
+	steps, ok := planData["steps"].([]ExecutionStep)
+	if !ok {
+		// Handle case where steps might be stored as interface{} slice
+		if stepsInterface, ok := planData["steps"].([]interface{}); ok {
+			steps = make([]ExecutionStep, len(stepsInterface))
+			for i, stepInterface := range stepsInterface {
+				if stepMap, ok := stepInterface.(map[string]interface{}); ok {
+					steps[i] = e.mapToExecutionStep(stepMap)
+				}
+			}
+		} else {
+			return fmt.Errorf("invalid steps format in execution plan")
+		}
+	}
+
+	// Find and update the specific step
+	stepFound := false
+	for i, step := range steps {
+		if step.ID == completion.StepID {
+			now := time.Now()
+			steps[i].Status = types.StepStatus(completion.Status)
+			steps[i].Result = completion.Result
+			steps[i].CompletedAt = &now
+			if completion.Error != "" {
+				steps[i].Error = completion.Error
+			}
+			stepFound = true
+			break
+		}
+	}
+
+	if !stepFound {
+		return fmt.Errorf("step not found in execution plan: %s", completion.StepID)
+	}
+
+	// Step 3: Check if all steps are completed
+	allCompleted := true
+	anyFailed := false
+	results := make(map[string]string)
+
+	for _, step := range steps {
+		if step.Status == types.StepStatusCompleted {
+			results[step.ID] = step.Result
+		} else if step.Status == types.StepStatusFailed {
+			anyFailed = true
+		} else {
+			allCompleted = false
+		}
+	}
+
+	// Step 4: Update the plan status and results in the graph
+	updates := map[string]interface{}{
+		"steps": steps,
+	}
+
+	if allCompleted || anyFailed {
+		now := time.Now()
+		updates["completed_at"] = now
+		updates["results"] = results
+
+		if anyFailed {
+			updates["status"] = types.WorkflowStatusFailed
+		} else {
+			updates["status"] = types.WorkflowStatusCompleted
+		}
+
+		// Step 5: Send final result to user when execution is complete
+		// TODO: Implement user notification when SendToUser is available in AIMessageBus
+		if allCompleted && !anyFailed {
+			userID, ok := planData["user_id"].(string)
+			if ok && e.logger != nil {
+				finalResult := e.aggregateResults(results)
+				e.logger.Info("Execution completed successfully",
+					"user_id", userID,
+					"plan_id", completion.PlanID,
+					"result", finalResult,
+				)
+			}
+		}
+	}
+
+	// Update the plan in the graph
+	if err := e.graph.UpdateNode(ctx, "execution_plan", completion.PlanID, updates); err != nil {
+		return fmt.Errorf("failed to update execution plan in graph: %w", err)
+	}
+
+	return nil
+}
+
+// createWorkRequestContent creates the content for work requests sent to agents
+func (e *ExecutionEngine) createWorkRequestContent(step ExecutionStep) string {
+	if content, ok := step.Parameters["content"].(string); ok {
+		return content
+	}
+	if text, ok := step.Parameters["text"].(string); ok {
+		return text
+	}
+	return fmt.Sprintf("Execute %s with parameters: %v", step.Action, step.Parameters)
+}
+
+// mapToExecutionStep converts a map to ExecutionStep struct
+func (e *ExecutionEngine) mapToExecutionStep(stepMap map[string]interface{}) ExecutionStep {
+	step := ExecutionStep{}
+
+	if id, ok := stepMap["id"].(string); ok {
+		step.ID = id
+	}
+	if agentID, ok := stepMap["agent_id"].(string); ok {
+		step.AgentID = agentID
+	}
+	if action, ok := stepMap["action"].(string); ok {
+		step.Action = action
+	}
+	if params, ok := stepMap["parameters"].(map[string]interface{}); ok {
+		step.Parameters = params
+	}
+	if status, ok := stepMap["status"].(string); ok {
+		step.Status = types.StepStatus(status)
+	}
+	if result, ok := stepMap["result"].(string); ok {
+		step.Result = result
+	}
+
+	return step
+}
+
+// aggregateResults combines individual step results into a final response
+func (e *ExecutionEngine) aggregateResults(results map[string]string) string {
+	if len(results) == 0 {
+		return "Execution completed successfully with no results."
+	}
+
+	if len(results) == 1 {
+		for _, result := range results {
+			return result
+		}
+	}
+
+	// Multiple results - combine them
+	finalResult := "Execution completed successfully. Results:\n"
+	for stepID, result := range results {
+		finalResult += fmt.Sprintf("- %s: %s\n", stepID, result)
+	}
+
+	return finalResult
+}

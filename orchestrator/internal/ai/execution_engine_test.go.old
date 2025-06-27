@@ -1,0 +1,246 @@
+package ai
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/ztdp/orchestrator/internal/messaging"
+)
+
+// 🔴 RED: Write failing tests that expose design flaws
+func TestExecutionEngine_ExecutePlan_ShouldStorePlanInGraph(t *testing.T) {
+	// Setup
+	mockGraph := &MockGraph{}
+	mockMessageBus := &MockAIMessageBus{}
+	mockLogger := &MockLogger{}
+
+	engine := NewExecutionEngine(mockGraph, mockMessageBus, mockLogger)
+
+	executionPlan := &ExecutionPlan{
+		ID:     "plan-123",
+		UserID: "user-456",
+		Steps: []ExecutionStep{
+			{ID: "step-1", AgentID: "text-processor-001", Action: "process_text", Parameters: map[string]interface{}{"text": "hello world"}},
+		},
+		Status: ExecutionStatusPlanning,
+	}
+
+	// Mock expectations
+	mockGraph.On("AddNode", mock.Anything, "execution_plan", "plan-123", mock.MatchedBy(func(data map[string]interface{}) bool {
+		return data["id"] == "plan-123" && data["status"] == ExecutionStatusPlanning
+	})).Return(nil)
+
+	// Execute
+	ctx := context.Background()
+	err := engine.ExecutePlan(ctx, executionPlan)
+
+	// Assert
+	assert.NoError(t, err)
+	mockGraph.AssertExpectations(t)
+}
+
+func TestExecutionEngine_ExecutePlan_ShouldEmitWorkEventsToAgents(t *testing.T) {
+	// Setup
+	mockGraph := &MockGraph{}
+	mockMessageBus := &MockAIMessageBus{}
+	mockLogger := &MockLogger{}
+
+	engine := NewExecutionEngine(mockGraph, mockMessageBus, mockLogger)
+
+	executionPlan := &ExecutionPlan{
+		ID:     "plan-123",
+		UserID: "user-456",
+		Steps: []ExecutionStep{
+			{ID: "step-1", AgentID: "text-processor-001", Action: "process_text", Parameters: map[string]interface{}{"text": "hello world"}},
+			{ID: "step-2", AgentID: "deployment-agent-001", Action: "deploy", Parameters: map[string]interface{}{"app": "myapp"}},
+		},
+		Status: ExecutionStatusPlanning,
+	}
+
+	// Mock expectations - should store plan and emit work events
+	mockGraph.On("AddNode", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockMessageBus.On("SendToAgent", mock.Anything, mock.MatchedBy(func(msg *messaging.AIToAgentMessage) bool {
+		return msg.AgentID == "text-processor-001" && msg.Intent == "work_request"
+	})).Return(nil)
+	mockMessageBus.On("SendToAgent", mock.Anything, mock.MatchedBy(func(msg *messaging.AIToAgentMessage) bool {
+		return msg.AgentID == "deployment-agent-001" && msg.Intent == "work_request"
+	})).Return(nil)
+
+	// Execute
+	ctx := context.Background()
+	err := engine.ExecutePlan(ctx, executionPlan)
+
+	// Assert
+	assert.NoError(t, err)
+	mockMessageBus.AssertExpectations(t)
+}
+
+func TestExecutionEngine_HandleAgentWorkCompletion_ShouldUpdateGraphAndAggregateResults(t *testing.T) {
+	// Setup
+	mockGraph := &MockGraph{}
+	mockMessageBus := &MockAIMessageBus{}
+	mockLogger := &MockLogger{}
+
+	engine := NewExecutionEngine(mockGraph, mockMessageBus, mockLogger)
+
+	// Mock existing execution plan in graph
+	planData := map[string]interface{}{
+		"id":     "plan-123",
+		"status": ExecutionStatusExecuting,
+		"steps": []map[string]interface{}{
+			{"id": "step-1", "agent_id": "text-processor-001", "status": ExecutionStepStatusPending},
+			{"id": "step-2", "agent_id": "deployment-agent-001", "status": ExecutionStepStatusPending},
+		},
+	}
+
+	workCompletion := &AgentWorkCompletion{
+		PlanID:  "plan-123",
+		StepID:  "step-1",
+		AgentID: "text-processor-001",
+		Status:  ExecutionStepStatusCompleted,
+		Result:  "Text processed successfully: HELLO WORLD",
+	}
+
+	// Mock expectations
+	mockGraph.On("QueryNodes", mock.Anything, "execution_plan", map[string]interface{}{"id": "plan-123"}).Return([]map[string]interface{}{planData}, nil)
+	mockGraph.On("UpdateNode", mock.Anything, "execution_plan", "plan-123", mock.MatchedBy(func(updates map[string]interface{}) bool {
+		// Should update step status and result
+		return updates["steps"] != nil
+	})).Return(nil)
+
+	// Execute
+	ctx := context.Background()
+	err := engine.HandleAgentWorkCompletion(ctx, workCompletion)
+
+	// Assert
+	assert.NoError(t, err)
+	mockGraph.AssertExpectations(t)
+}
+
+func TestExecutionEngine_HandleAgentWorkCompletion_ShouldReturnFinalResultWhenAllStepsComplete(t *testing.T) {
+	// Setup
+	mockGraph := &MockGraph{}
+	mockMessageBus := &MockAIMessageBus{}
+	mockLogger := &MockLogger{}
+
+	engine := NewExecutionEngine(mockGraph, mockMessageBus, mockLogger)
+
+	// Mock plan with one remaining step
+	planData := map[string]interface{}{
+		"id":      "plan-123",
+		"user_id": "user-456",
+		"status":  ExecutionStatusExecuting,
+		"steps": []map[string]interface{}{
+			{"id": "step-1", "agent_id": "text-processor-001", "status": ExecutionStepStatusCompleted, "result": "Text processed"},
+			{"id": "step-2", "agent_id": "deployment-agent-001", "status": ExecutionStepStatusPending},
+		},
+	}
+
+	// Final step completion
+	workCompletion := &AgentWorkCompletion{
+		PlanID:  "plan-123",
+		StepID:  "step-2",
+		AgentID: "deployment-agent-001",
+		Status:  ExecutionStepStatusCompleted,
+		Result:  "Deployment successful",
+	}
+
+	// Mock expectations
+	mockGraph.On("QueryNodes", mock.Anything, "execution_plan", map[string]interface{}{"id": "plan-123"}).Return([]map[string]interface{}{planData}, nil)
+	mockGraph.On("UpdateNode", mock.Anything, "execution_plan", "plan-123", mock.MatchedBy(func(updates map[string]interface{}) bool {
+		// Should mark plan as completed
+		return updates["status"] == ExecutionStatusCompleted
+	})).Return(nil)
+
+	// Should send final result to user
+	mockMessageBus.On("SendToUser", mock.Anything, mock.MatchedBy(func(msg *messaging.AIToUserMessage) bool {
+		return msg.UserID == "user-456" && msg.Content != ""
+	})).Return(nil)
+
+	// Execute
+	ctx := context.Background()
+	err := engine.HandleAgentWorkCompletion(ctx, workCompletion)
+
+	// Assert
+	assert.NoError(t, err)
+	mockMessageBus.AssertExpectations(t)
+}
+
+// Mock implementations for testing
+type MockGraph struct {
+	mock.Mock
+}
+
+func (m *MockGraph) AddNode(ctx context.Context, nodeType, id string, data map[string]interface{}) error {
+	args := m.Called(ctx, nodeType, id, data)
+	return args.Error(0)
+}
+
+func (m *MockGraph) UpdateNode(ctx context.Context, nodeType, id string, updates map[string]interface{}) error {
+	args := m.Called(ctx, nodeType, id, updates)
+	return args.Error(0)
+}
+
+func (m *MockGraph) QueryNodes(ctx context.Context, nodeType string, filter map[string]interface{}) ([]map[string]interface{}, error) {
+	args := m.Called(ctx, nodeType, filter)
+	return args.Get(0).([]map[string]interface{}), args.Error(1)
+}
+
+func (m *MockGraph) GetStats() map[string]interface{} {
+	args := m.Called()
+	return args.Get(0).(map[string]interface{})
+}
+
+type MockAIMessageBus struct {
+	mock.Mock
+}
+
+func (m *MockAIMessageBus) Subscribe(ctx context.Context, subscriberID string) (<-chan *messaging.Message, error) {
+	args := m.Called(ctx, subscriberID)
+	return args.Get(0).(<-chan *messaging.Message), args.Error(1)
+}
+
+func (m *MockAIMessageBus) SendToAgent(ctx context.Context, message *messaging.AIToAgentMessage) error {
+	args := m.Called(ctx, message)
+	return args.Error(0)
+}
+
+func (m *MockAIMessageBus) SendToUser(ctx context.Context, message *messaging.AIToUserMessage) error {
+	args := m.Called(ctx, message)
+	return args.Error(0)
+}
+
+type MockLogger struct {
+	mock.Mock
+}
+
+func (m *MockLogger) Info(msg string, keysAndValues ...interface{}) {
+	args := make([]interface{}, len(keysAndValues)+1)
+	args[0] = msg
+	copy(args[1:], keysAndValues)
+	m.Called(args...)
+}
+
+func (m *MockLogger) Error(msg string, err error, keysAndValues ...interface{}) {
+	args := make([]interface{}, len(keysAndValues)+2)
+	args[0] = msg
+	args[1] = err
+	copy(args[2:], keysAndValues)
+	m.Called(args...)
+}
+
+func (m *MockLogger) Debug(msg string, keysAndValues ...interface{}) {
+	args := make([]interface{}, len(keysAndValues)+1)
+	args[0] = msg
+	copy(args[1:], keysAndValues)
+	m.Called(args...)
+}
+
+func (m *MockLogger) Warn(msg string, keysAndValues ...interface{}) {
+	args := make([]interface{}, len(keysAndValues)+1)
+	args[0] = msg
+	copy(args[1:], keysAndValues)
+	m.Called(args...)
+}

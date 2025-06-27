@@ -23,6 +23,29 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    tmpfs:
+          - /var/lib/neo4j/run
+
+  # RabbitMQ for robust agent messaging and work routing
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: orchestrator-rabbitmq
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=orchestrator
+      - RABBITMQ_DEFAULT_PASS=orchestrator123
+      # Use default vhost for simplicity
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_logs:/var/log/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Redis for caching (future use)
   redis:
@@ -43,4 +66,6 @@ volumes:
   neo4j_logs:
   neo4j_import:
   neo4j_plugins:
+  rabbitmq_data:
+  rabbitmq_logs:
   redis_data:

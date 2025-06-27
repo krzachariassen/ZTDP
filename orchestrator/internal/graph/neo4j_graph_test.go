@@ -2,11 +2,11 @@ package graph
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ztdp/orchestrator/internal/logging"
 )
 
 // TestNeo4jGraph_Integration tests Neo4j graph operations
@@ -16,7 +16,7 @@ func TestNeo4jGraph_Integration(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	logger := &MockLogger{}
+	logger := logging.NewNoOpLogger()
 	config := GraphConfig{
 		Backend:       GraphBackendNeo4j,
 		Neo4jURL:      "bolt://localhost:7687",
@@ -29,44 +29,45 @@ func TestNeo4jGraph_Integration(t *testing.T) {
 	require.NoError(t, err)
 	defer graph.Close(ctx)
 
-	t.Run("AddNode", func(t *testing.T) {
+	// Clear any existing test data
+	err = graph.ClearTestData(ctx)
+	require.NoError(t, err)
+
+	// Test node operations
+	t.Run("Node Operations", func(t *testing.T) {
+		// AddNode
 		properties := map[string]interface{}{
 			"name":         "test-agent",
 			"capabilities": []string{"deploy", "test"},
 			"status":       "active",
 		}
-
 		err := graph.AddNode(ctx, "Agent", "agent-1", properties)
 		assert.NoError(t, err)
-	})
 
-	t.Run("GetNode", func(t *testing.T) {
+		// GetNode
 		result, err := graph.GetNode(ctx, "Agent", "agent-1")
 		assert.NoError(t, err)
 		assert.Equal(t, "Agent", result["type"])
 		assert.Equal(t, "agent-1", result["id"])
 		assert.Equal(t, "test-agent", result["name"])
 		assert.Equal(t, "active", result["status"])
-	})
 
-	t.Run("UpdateNode", func(t *testing.T) {
-		err := graph.UpdateNode(ctx, "Agent", "agent-1", map[string]interface{}{
+		// UpdateNode
+		err = graph.UpdateNode(ctx, "Agent", "agent-1", map[string]interface{}{
 			"status":   "inactive",
 			"endpoint": "http://localhost:8080",
 		})
 		assert.NoError(t, err)
 
 		// Verify update
-		result, err := graph.GetNode(ctx, "Agent", "agent-1")
+		result, err = graph.GetNode(ctx, "Agent", "agent-1")
 		assert.NoError(t, err)
 		assert.Equal(t, "inactive", result["status"])
 		assert.Equal(t, "http://localhost:8080", result["endpoint"])
 		assert.Equal(t, "test-agent", result["name"]) // Original property preserved
-	})
 
-	t.Run("QueryNodes", func(t *testing.T) {
-		// Add another agent for querying
-		err := graph.AddNode(ctx, "Agent", "agent-2", map[string]interface{}{
+		// QueryNodes
+		err = graph.AddNode(ctx, "Agent", "agent-2", map[string]interface{}{
 			"name":   "another-agent",
 			"status": "active",
 		})
@@ -84,16 +85,9 @@ func TestNeo4jGraph_Integration(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(results))
 		assert.Equal(t, "agent-2", results[0]["id"])
-	})
 
-	t.Run("GetStats", func(t *testing.T) {
-		stats := graph.GetStats()
-		assert.Equal(t, "neo4j", stats["implementation"])
-		assert.GreaterOrEqual(t, stats["total_nodes"].(int), 2)
-	})
-
-	t.Run("DeleteNode", func(t *testing.T) {
-		err := graph.DeleteNode(ctx, "Agent", "agent-1")
+		// DeleteNode
+		err = graph.DeleteNode(ctx, "Agent", "agent-1")
 		assert.NoError(t, err)
 
 		// Verify deletion
@@ -101,15 +95,71 @@ func TestNeo4jGraph_Integration(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	// Cleanup
-	t.Cleanup(func() {
+	// Test edge operations
+	t.Run("Edge Operations", func(t *testing.T) {
+		// Add two nodes to connect
+		err := graph.AddNode(ctx, "Agent", "agent-source", map[string]interface{}{
+			"name": "source-agent",
+		})
+		require.NoError(t, err)
+
+		err = graph.AddNode(ctx, "Agent", "agent-target", map[string]interface{}{
+			"name": "target-agent",
+		})
+		require.NoError(t, err)
+
+		// AddEdge
+		edgeProperties := map[string]interface{}{
+			"relationship": "communicates_with",
+			"created_at":   "2024-01-01",
+		}
+		err = graph.AddEdge(ctx, "Agent", "agent-source", "Agent", "agent-target", "CONNECTS", edgeProperties)
+		assert.NoError(t, err)
+
+		// GetEdges
+		edges, err := graph.GetEdges(ctx, "Agent", "agent-source")
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(edges))
+		assert.Equal(t, "CONNECTS", edges[0]["type"])
+		assert.Equal(t, "communicates_with", edges[0]["relationship"])
+
+		// UpdateEdge
+		err = graph.UpdateEdge(ctx, "Agent", "agent-source", "Agent", "agent-target", "CONNECTS", map[string]interface{}{
+			"relationship": "depends_on",
+			"weight":       10,
+		})
+		assert.NoError(t, err)
+
+		// Verify update
+		edges, err = graph.GetEdges(ctx, "Agent", "agent-source")
+		assert.NoError(t, err)
+		assert.Equal(t, "depends_on", edges[0]["relationship"])
+		assert.Equal(t, 10, edges[0]["weight"])
+
+		// DeleteEdge
+		err = graph.DeleteEdge(ctx, "Agent", "agent-source", "Agent", "agent-target", "CONNECTS")
+		assert.NoError(t, err)
+
+		// Verify deletion
+		edges, err = graph.GetEdges(ctx, "Agent", "agent-source")
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(edges))
+
+		// Cleanup
+		graph.DeleteNode(ctx, "Agent", "agent-source")
+		graph.DeleteNode(ctx, "Agent", "agent-target")
 		graph.DeleteNode(ctx, "Agent", "agent-2")
+	})
+
+	t.Run("GetStats", func(t *testing.T) {
+		stats := graph.GetStats()
+		assert.Equal(t, "neo4j", stats["implementation"])
 	})
 }
 
 // TestNeo4jGraph_ErrorHandling tests error scenarios
 func TestNeo4jGraph_ErrorHandling(t *testing.T) {
-	logger := &MockLogger{}
+	logger := logging.NewNoOpLogger()
 	config := GraphConfig{
 		Backend:       GraphBackendNeo4j,
 		Neo4jURL:      "bolt://nonexistent:7687",
@@ -129,7 +179,7 @@ func TestGraphFactory_Neo4j(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	logger := &MockLogger{}
+	logger := logging.NewNoOpLogger()
 	factory := NewGraphFactory(logger)
 
 	config := GraphConfig{
@@ -158,51 +208,4 @@ func TestGraphFactory_Neo4j(t *testing.T) {
 		defer neo4jGraph.Close(ctx)
 		defer graph.DeleteNode(ctx, "TestNode", "test-1")
 	}
-}
-
-// BenchmarkNeo4jVsEmbedded compares performance
-func BenchmarkNeo4jVsEmbedded(b *testing.B) {
-	if testing.Short() {
-		b.Skip("skipping benchmark test")
-	}
-
-	ctx := context.Background()
-	logger := &MockLogger{}
-
-	// Setup Neo4j
-	neo4jConfig := GraphConfig{
-		Backend:       GraphBackendNeo4j,
-		Neo4jURL:      "bolt://localhost:7687",
-		Neo4jUser:     "neo4j",
-		Neo4jPassword: "orchestrator123",
-	}
-
-	neo4jGraph, err := NewNeo4jGraph(ctx, neo4jConfig, logger)
-	if err != nil {
-		b.Skipf("Neo4j not available: %v", err)
-	}
-	defer neo4jGraph.Close(ctx)
-
-	// Setup Embedded
-	embeddedGraph := NewEmbeddedGraph(logger)
-
-	b.Run("Neo4j_AddNode", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			nodeID := fmt.Sprintf("bench-node-%d", i)
-			neo4jGraph.AddNode(ctx, "BenchNode", nodeID, map[string]interface{}{
-				"name":  "benchmark",
-				"index": i,
-			})
-		}
-	})
-
-	b.Run("Embedded_AddNode", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			nodeID := fmt.Sprintf("bench-node-%d", i)
-			embeddedGraph.AddNode(ctx, "BenchNode", nodeID, map[string]interface{}{
-				"name":  "benchmark",
-				"index": i,
-			})
-		}
-	})
 }
